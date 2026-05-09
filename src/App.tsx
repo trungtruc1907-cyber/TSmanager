@@ -47,8 +47,8 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
-  // Email/Password state
-  const [email, setEmail] = useState('');
+  // Username/Password state
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -85,18 +85,28 @@ export default function App() {
     }
   };
 
-  const handleEmailAuth = async (e: React.FormEvent) => {
+  const handleUsernameAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
+    
+    // Convert username to a dummy email for Firebase Auth
+    const internalEmail = `${username.toLowerCase().trim()}@truongsonsolar.local`;
+    
     try {
       if (isSignUp) {
-        await createUserWithEmailAndPassword(auth, email, password);
+        await createUserWithEmailAndPassword(auth, internalEmail, password);
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        await signInWithEmailAndPassword(auth, internalEmail, password);
       }
     } catch (error: any) {
-      console.error("Email auth failed:", error);
-      setAuthError("Lỗi: Kiểm tra lại email/mật khẩu hoặc đảm bảo Email Auth đã được bật trong Firebase Console.");
+      console.error("Auth failed:", error);
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        setAuthError("Tên đăng nhập hoặc mật khẩu không chính xác.");
+      } else if (error.code === 'auth/email-already-in-use') {
+        setAuthError("Tên đăng nhập này đã tồn tại.");
+      } else {
+        setAuthError("Lỗi hệ thống: " + error.message);
+      }
     }
   };
 
@@ -129,15 +139,15 @@ export default function App() {
               Giải pháp Điện mặt trời Trường Sơn - Chuyên nghiệp & Tận tâm.
             </p>
             
-            <form onSubmit={handleEmailAuth} className="space-y-4 mb-8 text-left">
+            <form onSubmit={handleUsernameAuth} className="space-y-4 mb-8 text-left">
                <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1 ml-1">Email / Username</label>
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1 ml-1">Tên đăng nhập</label>
                   <input 
-                    type="email" 
-                    placeholder="example@mail.com"
+                    type="text" 
+                    placeholder="Nhập username (ví dụ: mrhieu)"
                     className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-amber-400 transition-colors"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
+                    value={username}
+                    onChange={e => setUsername(e.target.value)}
                     required
                   />
                </div>
@@ -151,6 +161,10 @@ export default function App() {
                     onChange={e => setPassword(e.target.value)}
                     required
                   />
+               </div>
+               <div className="bg-amber-400/10 p-3 rounded-lg border border-amber-400/20 mb-2">
+                  <p className="text-[9px] text-amber-200 uppercase font-bold tracking-tighter">Gợi ý tài khoản hệ thống:</p>
+                  <code className="text-white text-[10px] font-mono">user: mrhieu / pass: Truongson@79</code>
                </div>
                {authError && <p className="text-red-400 text-[10px] font-bold uppercase py-1">{authError}</p>}
                <button 
