@@ -286,159 +286,95 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 font-sans overflow-hidden relative">
-      {/* Mobile Overlay */}
-      <AnimatePresence>
-        {isMobileMenuOpen && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setIsMobileMenuOpen(false)}
-            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-40 lg:hidden"
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Sidebar */}
-      <motion.aside 
-        initial={false}
-        animate={{ 
-          width: isSidebarOpen ? 256 : (window.innerWidth < 1024 ? 0 : 80),
-          x: (window.innerWidth < 1024 && !isMobileMenuOpen) ? -280 : 0
-        }}
-        className={cn(
-          "bg-slate-900 text-slate-300 flex flex-col z-50 border-r border-slate-800 fixed lg:relative h-full transition-all duration-300",
-          !isSidebarOpen && window.innerWidth >= 1024 ? "items-center" : ""
-        )}
-      >
-        <div className="p-6 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <div className="w-8 h-8 bg-white rounded flex items-center justify-center text-red-600 font-black shrink-0 shadow-sm">
-              TS
+    <div className="flex flex-col h-screen bg-slate-50 font-sans overflow-hidden relative">
+      {/* Top Header - Mobile and Desktop Optimized */}
+      <header className="h-16 lg:h-20 bg-white border-b border-slate-200 sticky top-0 z-40 px-4 lg:px-8 flex items-center justify-between shadow-sm backdrop-blur-md bg-white/90">
+        <div className="flex items-center gap-3 lg:gap-4">
+          <div className="w-10 h-10 lg:w-12 lg:h-12 bg-slate-900 rounded-xl flex flex-col items-center justify-center shadow-lg border-b-2 border-red-600 shrink-0">
+              <span className="text-xl lg:text-2xl font-black text-white leading-none">TS</span>
+              <span className="text-[5px] font-bold text-blue-400 uppercase tracking-tighter">TRƯỜNG SƠN</span>
+          </div>
+          <div>
+            <h1 className="text-sm lg:text-lg font-black text-slate-900 tracking-tight uppercase leading-none mb-0.5">TRƯỜNG SƠN SOLAR</h1>
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              <p className="text-[8px] lg:text-[10px] text-slate-500 font-bold uppercase tracking-widest leading-none">Smart Management System</p>
             </div>
-            {(isSidebarOpen || isMobileMenuOpen) && (
-              <div className="text-white font-bold text-lg tracking-tight whitespace-nowrap">
-                TRUONGSON
-              </div>
-            )}
           </div>
-          <button 
-            onClick={() => setIsMobileMenuOpen(false)}
-            className="lg:hidden p-2 text-slate-400 hover:text-white"
-          >
-            <X className="h-5 w-5" />
-          </button>
         </div>
 
-        <nav className="flex-1 px-4 space-y-1 mt-4">
-          <div className={cn("text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 px-2", (!isSidebarOpen && !isMobileMenuOpen) && "text-center")}>
-            {(isSidebarOpen || isMobileMenuOpen) ? 'QUẢN LÝ' : '•'}
+        <div className="flex items-center gap-3">
+          <div className="hidden md:flex flex-col items-end mr-4">
+            <span className="text-xs font-black text-slate-900 uppercase">{user.displayName || user.email?.split('@')[0]}</span>
+            <span className="text-[9px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-black uppercase tracking-tighter">{userRole}</span>
           </div>
-          {navigation.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeView === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setActiveView(item.id as View);
-                  if (window.innerWidth < 1024) setIsMobileMenuOpen(false);
-                }}
-                className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 text-sm font-medium",
-                  isActive 
-                    ? "bg-slate-800 text-white"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                )}
-              >
-                <Icon className={cn("h-4 w-4 shrink-0", isActive ? "text-amber-400" : "text-slate-500")} />
-                {(isSidebarOpen || isMobileMenuOpen) && <span>{item.label}</span>}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="p-4 border-t border-slate-800">
-           {(isSidebarOpen || isMobileMenuOpen) && (
-             <div className="flex items-center gap-3 mb-4 px-2">
-                <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-[10px] text-white">
-                  {user?.email?.[0].toUpperCase()}
-                </div>
-                <div className="overflow-hidden">
-                  <p className="text-xs font-semibold text-white truncate">{user?.displayName || user?.email?.split('@')[0]}</p>
-                  <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tighter">Technical Sales</p>
-                </div>
-             </div>
-           )}
-           <button 
-            onClick={() => setSidebarOpen(!isSidebarOpen)}
-            className="w-full hidden lg:flex items-center justify-center p-2 text-slate-500 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
-           >
-            {isSidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-           </button>
-           <button 
+          <button 
             onClick={handleLogout}
-            className="w-full flex items-center justify-center p-2 text-red-400 hover:text-red-500 hover:bg-slate-800 rounded-md transition-colors mt-2"
-           >
-            <LogOut className="h-4 w-4" />
-           </button>
-        </div>
-      </motion.aside>
-
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden relative pt-16 lg:pt-0">
-        {/* Mobile Header */}
-        <header className="fixed top-0 left-0 right-0 h-16 bg-slate-900 flex items-center justify-between px-6 z-30 lg:hidden shadow-lg border-b border-slate-800">
-          <div className="flex items-center gap-3">
-             <div className="w-8 h-8 bg-white rounded flex items-center justify-center text-red-600 font-black shrink-0">TS</div>
-             <span className="text-white font-bold text-sm tracking-tight uppercase">TRUONGSON</span>
-          </div>
-          <button 
-            onClick={() => setIsMobileMenuOpen(true)}
-            className="p-2 text-slate-400 hover:text-white"
+            className="p-2 lg:p-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all border border-transparent hover:border-red-100"
+            title="Đăng xuất"
           >
-            <Menu className="h-6 w-6" />
+            <LogOut className="h-5 w-5" />
           </button>
-        </header>
+        </div>
+      </header>
+      
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Desktop Sidebar - Side Navigation */}
+        <aside className="hidden lg:flex w-72 bg-white border-r border-slate-200 flex-col p-6 space-y-1 shadow-inner h-full">
+            <div className="mb-6 px-4 py-3 bg-slate-50 rounded-2xl border border-slate-100">
+               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Phần mềm ERP v2.0</p>
+               <p className="text-[11px] text-slate-600 font-medium">Xin chào, <span className="font-bold text-slate-900">{user.displayName || user.email?.split('@')[0]}</span></p>
+            </div>
 
-        <header className="h-16 bg-white border-b border-slate-200 px-8 hidden lg:flex items-center justify-between shrink-0 shadow-sm relative z-10 no-print">
-          <div className="flex items-center gap-4">
-            <h1 className="text-lg font-bold text-slate-800 uppercase tracking-tight">
-              {navigation.find(n => n.id === activeView)?.label || 'Dự án'}
-            </h1>
-            {activeView === 'editor' && (
-              <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded uppercase">
-                Đang soạn thảo
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => {
-                setSelectedProjectId(null);
-                setActiveView('editor');
-              }}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md shadow-sm flex items-center gap-2 text-sm font-semibold transition-all active:scale-95"
-            >
-              <Plus className="h-4 w-4" />
-              Tạo Dự án Mới
-            </button>
-          </div>
-        </header>
+            <nav className="space-y-1.5">
+              {navigation.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeView === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveView(item.id as View)}
+                    className={cn(
+                      "w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-sm font-bold uppercase tracking-wide transition-all group relative overflow-hidden",
+                      isActive 
+                        ? "bg-slate-900 text-white shadow-xl translate-x-2" 
+                        : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                    )}
+                  >
+                    <Icon className={cn(
+                      "h-5 w-5 transition-colors",
+                      isActive ? "text-blue-400" : "text-slate-400 group-hover:text-slate-900"
+                    )} />
+                    <span className="relative z-10">{item.label}</span>
+                    {isActive && (
+                      <motion.div 
+                        layoutId="active-pill-desktop"
+                        className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500"
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
 
-        <div className={cn(
-          "flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50/50",
-          activeView === 'editor' && "p-0 md:p-0"
-        )}>
+            <div className="mt-auto pt-6 border-t border-slate-100">
+              <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100/50">
+                <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1">Hệ thống sẵn sàng</p>
+                <p className="text-[10px] text-blue-700 font-medium leading-tight">Mọi dữ liệu đã được đồng bộ hóa với Firestore.</p>
+              </div>
+            </div>
+        </aside>
+
+        {/* Main Content Area */}
+        <main className="flex-1 overflow-y-auto p-4 lg:p-10 pb-28 lg:pb-10 scroll-smooth bg-slate-50/50">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeView + (selectedProjectId || '')}
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-              className="min-h-full"
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
+              className="max-w-7xl mx-auto w-full"
             >
               {activeView === 'dashboard' && <ProjectDashboard onOpenProject={handleOpenProject} />}
               {activeView === 'customers' && <CustomerList onViewProject={handleViewCustomerProject} />}
@@ -458,8 +394,43 @@ export default function App() {
               )}
             </motion.div>
           </AnimatePresence>
+        </main>
+      </div>
+
+      {/* Mobile Bottom Navigation - Floating Professional Design */}
+      <nav className="lg:hidden fixed bottom-6 left-6 right-6 z-50">
+        <div className="bg-slate-900/90 backdrop-blur-2xl border border-white/10 rounded-[2rem] px-4 py-3 shadow-[0_20px_50px_rgba(0,0,0,0.3)] flex items-center justify-around">
+          {navigation.slice(0, 5).map((item) => {
+            const Icon = item.icon;
+            const isActive = activeView === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveView(item.id as View)}
+                className={cn(
+                  "flex flex-col items-center gap-1.5 px-4 py-2 rounded-2xl transition-all relative",
+                  isActive ? "text-white" : "text-slate-500"
+                )}
+              >
+                {isActive && (
+                  <motion.div 
+                    layoutId="mobile-nav-pill"
+                    className="absolute inset-0 bg-blue-600 rounded-2xl -z-10"
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  />
+                )}
+                <Icon className={cn("h-5 w-5", isActive ? "scale-110" : "scale-100")} />
+                <span className="text-[8px] font-black uppercase tracking-tighter">
+                  {item.label === 'Bảng điều khiển' ? 'Home' : item.label.split(' ')[0]}
+                </span>
+              </button>
+            );
+          })}
         </div>
-      </main>
+      </nav>
+
+      {/* Responsive Overlay for Alerts/Modals */}
+      <div className="fixed top-0 pointer-events-none w-full h-full z-[100]" />
     </div>
   );
 }

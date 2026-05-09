@@ -15,6 +15,7 @@ import { Project, Customer, SalesPerson } from '../types';
 import { UserPlus, Search, Phone, Mail, MapPin, Calendar, UserCheck, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface CustomerListProps {
   onViewProject: (customerId: string) => void;
@@ -94,196 +95,248 @@ export default function CustomerList({ onViewProject }: CustomerListProps) {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="space-y-8 pb-10">
+      {/* Module Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 px-2">
         <div>
-          <h2 className="text-xl font-bold text-slate-800 uppercase tracking-tight">Quản lý Khách hàng</h2>
-          <p className="text-xs text-slate-500 font-medium">Theo dõi và quản lý data khách hàng tiềm năng.</p>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase leading-none">Data Khách Hàng</h2>
+          <p className="text-[11px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-2 flex items-center gap-2">
+             <div className="w-1.5 h-1.5 rounded-full bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]" />
+             Quản lý tệp khách hàng tiềm năng
+          </p>
         </div>
         <button 
           onClick={() => setIsAdding(true)}
-          className="bg-blue-600 text-white px-5 py-2 rounded-md flex items-center gap-2 text-sm font-bold shadow-md hover:bg-blue-700 transition-all active:scale-95"
+          className="w-full md:w-auto bg-slate-900 text-white px-8 py-4 rounded-2xl flex items-center justify-center gap-3 text-xs font-black uppercase tracking-widest shadow-xl shadow-slate-200 hover:bg-blue-600 transition-all active:scale-95"
         >
-          <UserPlus className="h-4 w-4" /> Thêm Khách hàng
+          <UserPlus className="h-4 w-4" /> Thêm khách hàng mới
         </button>
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+      {/* Global Search Bar */}
+      <div className="relative group max-w-2xl mx-auto md:mx-0">
+        <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
         <input 
           type="text"
-          placeholder="Tìm kiếm khách hàng..."
-          className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-md text-sm outline-none focus:border-blue-500 transition-all shadow-sm"
+          placeholder="Tìm tên, số điện thoại hoặc khu vực..."
+          className="w-full pl-14 pr-6 py-4.5 bg-white border border-slate-200 rounded-[1.5rem] text-sm font-medium outline-none focus:border-blue-500 transition-all shadow-[0_4px_20px_rgb(0,0,0,0.03)] focus:shadow-[0_10px_30px_rgb(0,0,0,0.06)]"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
+      {/* Responsive Customer Grid/Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filtered.map((c) => (
-          <div key={c.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all group">
-            <div className="flex items-start justify-between mb-4">
-              <div className="h-10 w-10 bg-slate-100 text-slate-600 rounded flex items-center justify-center text-sm font-bold uppercase">
-                {c.name.substring(0, 2)}
+          <motion.div 
+            whileHover={{ y: -5 }}
+            key={c.id} 
+            className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.03)] hover:shadow-[0_20px_40px_rgb(0,0,0,0.06)] transition-all flex flex-col h-full"
+          >
+            <div className="flex items-start justify-between mb-6">
+              <div className="h-12 w-12 bg-blue-50/50 text-blue-600 rounded-2xl flex items-center justify-center text-base font-black border border-blue-100 shadow-sm">
+                {c.name.substring(0, 1)}
               </div>
-              <div className="flex flex-col items-end">
-                <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1 uppercase tracking-wider">
+              <div className="flex flex-col items-end gap-2">
+                <div className="text-[9px] font-black text-slate-400 flex items-center gap-1.5 uppercase tracking-widest bg-slate-50 px-2.5 py-1 rounded-full">
                   <Calendar className="h-3 w-3" />
-                  {c.createdAt?.seconds ? format(c.createdAt.seconds * 1000, 'dd/MM/yyyy', { locale: vi }) : 'Vừa xong'}
+                  {c.createdAt?.seconds ? format(c.createdAt.seconds * 1000, 'dd MMM yyyy', { locale: vi }) : 'Vừa xong'}
                 </div>
-                <div className="mt-1 flex gap-1">
-                   <span className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold uppercase">{getUsageLabel(c.usageType)}</span>
-                   <span className="text-[9px] bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded font-bold uppercase">{getPhaseLabel(c.phaseType)}</span>
+                <div className="flex gap-1.5">
+                   <span className="text-[8px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-black uppercase border border-indigo-100/50">{getUsageLabel(c.usageType).split(' ')[1]}</span>
+                   <span className="text-[8px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md font-black uppercase border border-amber-100/50">{getPhaseLabel(c.phaseType).split(' ')[1]}</span>
                 </div>
               </div>
-            </div>
-            <h3 className="text-base font-bold text-slate-800 mb-4 truncate">{c.name}</h3>
-            
-            <div className="space-y-2">
-              <div className="flex items-center gap-3 text-slate-500">
-                <Phone className="h-3.5 w-3.5 text-slate-400" />
-                <span className="text-xs font-semibold">{c.phone}</span>
-              </div>
-              {c.assignedSalesId && (
-                <div className="flex items-center gap-3 text-blue-600">
-                  <UserCheck className="h-3.5 w-3.5" />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Sale: {salesStaff.find(s => s.id === c.assignedSalesId)?.name || 'N/A'}</span>
-                </div>
-              )}
-              {c.email && (
-                <div className="flex items-center gap-3 text-slate-500">
-                  <Mail className="h-3.5 w-3.5 text-slate-400" />
-                  <span className="text-xs truncate">{c.email}</span>
-                </div>
-              )}
-              {c.address && (
-                <div className="flex items-center gap-3 text-slate-500">
-                  <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                  <span className="text-xs truncate">{c.address}</span>
-                </div>
-              )}
             </div>
 
-            <div className="mt-6 pt-4 border-t border-slate-50 flex gap-2">
+            <div className="space-y-4 flex-1">
+              <h3 className="text-lg font-black text-slate-900 truncate tracking-tight uppercase leading-none">{c.name}</h3>
+              
+              <div className="space-y-3">
+                <div className="flex items-center gap-3.5 group/link">
+                  <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100">
+                    <Phone className="h-3.5 w-3.5 text-slate-400 group-hover/link:text-blue-600 transition-colors" />
+                  </div>
+                  <span className="text-[13px] font-black text-slate-700">{c.phone}</span>
+                </div>
+                
+                {c.assignedSalesId && (
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-8 h-8 rounded-xl bg-blue-50/50 flex items-center justify-center border border-blue-100/50">
+                      <UserCheck className="h-3.5 w-3.5 text-blue-600" />
+                    </div>
+                    <span className="text-[9px] font-black text-blue-800 uppercase tracking-widest">Sale: {salesStaff.find(s => s.id === c.assignedSalesId)?.name || 'N/A'}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3.5">
+                   <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100">
+                     <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                   </div>
+                  <span className="text-[11px] text-slate-500 font-bold leading-tight truncate">{c.address || 'Chưa định vị lắp đặt'}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 pt-5 border-t border-slate-50 flex gap-3">
               <button 
                 onClick={() => onViewProject(c.id)}
-                className="flex-1 text-[11px] font-bold text-blue-600 hover:bg-blue-50 py-2 rounded transition-colors uppercase tracking-wider"
+                className="flex-[2] bg-slate-900 text-white text-[10px] font-black py-4 rounded-2xl transition-all uppercase tracking-widest shadow-lg shadow-slate-200 flex items-center justify-center gap-2 hover:bg-blue-600 active:scale-95"
               >
-                Hồ sơ
+                HỒ SƠ DỰ ÁN
               </button>
-              <button className="flex-1 text-[11px] font-bold text-slate-600 hover:bg-slate-50 py-2 rounded transition-colors uppercase tracking-wider">
-                Liên hệ
+              <button 
+                className="flex-1 bg-slate-50 text-slate-600 hover:bg-slate-100 text-[10px] font-black py-4 rounded-2xl transition-all uppercase tracking-widest border border-slate-100 flex items-center justify-center"
+                onClick={() => window.location.href = `tel:${c.phone}`}
+              >
+                GỌI
               </button>
             </div>
-          </div>
+          </motion.div>
         ))}
       </div>
 
-      {isAdding && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in duration-200 border border-slate-200 overflow-y-auto max-h-[90vh]">
-            <div className="flex justify-between items-center mb-6 border-b pb-4">
-              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-widest">Khách hàng mới</h3>
-              <button onClick={() => setIsAdding(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <form onSubmit={handleAdd} className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Họ và tên *</label>
-                <input 
-                  required
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm outline-none focus:border-blue-500"
-                  value={newCustomer.name}
-                  onChange={e => setNewCustomer({...newCustomer, name: e.target.value})}
-                />
+      {filtered.length === 0 && (
+         <div className="text-center py-20 px-6 bg-white rounded-[3rem] border border-dashed border-slate-200">
+            <Search className="h-12 w-12 text-slate-200 mx-auto mb-4" />
+            <p className="text-slate-400 font-black uppercase text-xs tracking-widest">Không tìm thấy khách hàng phù hợp</p>
+         </div>
+      )}
+
+      {/* Modern Slide-up Sheet for Adding Customer */}
+      <AnimatePresence>
+        {isAdding && (
+          <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsAdding(false)}
+              className="absolute inset-0 bg-slate-950/40 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              className="relative w-full max-w-xl bg-white rounded-t-[2.5rem] md:rounded-[3rem] p-8 md:p-12 shadow-[0_-20px_60px_rgba(0,0,0,0.15)] max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex justify-between items-center mb-10">
+                <div className="space-y-1">
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Thiết lập KH mới</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Hệ thống đồng bộ Firestore</p>
+                </div>
+                <button onClick={() => setIsAdding(false)} className="p-3 bg-slate-50 text-slate-400 hover:text-slate-900 rounded-full transition-colors border border-slate-100">
+                  <X className="h-6 w-6" />
+                </button>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Số điện thoại *</label>
+
+              <form onSubmit={handleAdd} className="space-y-6">
+                <div className="space-y-1.5 group">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2 group-focus-within:text-blue-600 transition-colors">Tên chủ hộ / Công ty *</label>
                   <input 
                     required
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm outline-none focus:border-blue-500"
-                    value={newCustomer.phone}
-                    onChange={e => setNewCustomer({...newCustomer, phone: e.target.value})}
+                    placeholder="VD: Nguyễn Văn A"
+                    className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold placeholder:text-slate-300 outline-none focus:bg-white focus:border-blue-500 transition-all shadow-inner"
+                    value={newCustomer.name}
+                    onChange={e => setNewCustomer({...newCustomer, name: e.target.value})}
                   />
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Email</label>
-                  <input 
-                    type="email"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm outline-none focus:border-blue-500"
-                    value={newCustomer.email}
-                    onChange={e => setNewCustomer({...newCustomer, email: e.target.value})}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Địa chỉ lắp đặt</label>
-                <input 
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm outline-none focus:border-blue-500"
-                  value={newCustomer.address}
-                  onChange={e => setNewCustomer({...newCustomer, address: e.target.value})}
-                />
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Loại điện tiêu thụ</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-1.5 focus-within:scale-[1.02] transition-transform">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2">Số điện thoại *</label>
+                    <input 
+                      required
+                      placeholder="09xx xxx xxx"
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:bg-white focus:border-blue-500 transition-all shadow-inner"
+                      value={newCustomer.phone}
+                      onChange={e => setNewCustomer({...newCustomer, phone: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2">Email cá nhân</label>
+                    <input 
+                      type="email"
+                      placeholder="example@gmail.com"
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:bg-white focus:border-blue-500 transition-all shadow-inner"
+                      value={newCustomer.email}
+                      onChange={e => setNewCustomer({...newCustomer, email: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2">Vị trí lắp đặt</label>
+                  <div className="relative">
+                    <MapPin className="absolute left-6 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300" />
+                    <input 
+                      placeholder="Địa chỉ cụ thể của khách hàng"
+                      className="w-full pl-14 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:bg-white focus:border-blue-500 transition-all shadow-inner"
+                      value={newCustomer.address}
+                      onChange={e => setNewCustomer({...newCustomer, address: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2">Phân loại tiêu thụ</label>
+                    <select 
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:bg-white focus:border-blue-500 appearance-none transition-all shadow-inner"
+                      value={newCustomer.usageType}
+                      onChange={e => setNewCustomer({...newCustomer, usageType: e.target.value as any})}
+                    >
+                      <option value="residential">Điện sinh hoạt</option>
+                      <option value="commercial">Điện kinh doanh</option>
+                      <option value="industrial">Điện sản xuất</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2">Lưới điện hiện có</label>
+                    <select 
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:bg-white focus:border-blue-500 appearance-none transition-all shadow-inner"
+                      value={newCustomer.phaseType}
+                      onChange={e => setNewCustomer({...newCustomer, phaseType: e.target.value as any})}
+                    >
+                      <option value="1phase">Điện 1 pha</option>
+                      <option value="3phase">Điện 3 pha</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2">Sale phụ trách tư vấn</label>
                   <select 
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm outline-none focus:border-blue-500"
-                    value={newCustomer.usageType}
-                    onChange={e => setNewCustomer({...newCustomer, usageType: e.target.value as any})}
+                    className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:bg-white focus:border-blue-500 appearance-none transition-all shadow-inner"
+                    value={newCustomer.assignedSalesId}
+                    onChange={e => setNewCustomer({...newCustomer, assignedSalesId: e.target.value})}
                   >
-                    <option value="residential">Điện sinh hoạt</option>
-                    <option value="commercial">Điện kinh doanh</option>
-                    <option value="industrial">Điện sản xuất</option>
+                    <option value="">-- Chưa bàn giao nhân sự --</option>
+                    {salesStaff.map(s => <option key={s.id} value={s.id}>{s.name.toUpperCase()}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Hệ thống điện</label>
-                  <select 
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm outline-none focus:border-blue-500"
-                    value={newCustomer.phaseType}
-                    onChange={e => setNewCustomer({...newCustomer, phaseType: e.target.value as any})}
+
+                <div className="pt-8 flex gap-4">
+                  <button 
+                    type="button"
+                    onClick={() => setIsAdding(false)}
+                    className="flex-1 px-8 py-5 text-xs font-black bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-2xl transition-all uppercase tracking-[0.2em]"
                   >
-                    <option value="1phase">Điện 1 pha</option>
-                    <option value="3phase">Điện 3 pha</option>
-                  </select>
+                    Hủy bỏ
+                  </button>
+                  <button 
+                    type="submit"
+                    className="flex-[2] px-8 py-5 text-xs font-black bg-slate-900 hover:bg-blue-600 text-white rounded-2xl shadow-xl shadow-slate-200 transition-all uppercase tracking-[0.2em] active:scale-95"
+                  >
+                    Khởi tạo dữ liệu
+                  </button>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sale phụ trách</label>
-                <select 
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm outline-none focus:border-blue-500"
-                  value={newCustomer.assignedSalesId}
-                  onChange={e => setNewCustomer({...newCustomer, assignedSalesId: e.target.value})}
-                >
-                  <option value="">-- Chưa bàn giao --</option>
-                  {salesStaff.map(s => <option key={s.id} value={s.id}>{s.name} ({s.role === 'sales_manager' ? 'Manager' : 'Rep'})</option>)}
-                </select>
-              </div>
-
-              <div className="pt-6 flex gap-3">
-                <button 
-                  type="button"
-                  onClick={() => setIsAdding(false)}
-                  className="flex-1 px-4 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-600 rounded transition-colors uppercase tracking-widest"
-                >
-                  Hủy
-                </button>
-                <button 
-                  type="submit"
-                  className="flex-1 px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded shadow-md transition-colors uppercase tracking-widest"
-                >
-                  Lưu dữ liệu
-                </button>
-              </div>
-            </form>
+              </form>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
     </div>
   );
 }

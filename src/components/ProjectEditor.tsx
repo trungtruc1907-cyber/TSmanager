@@ -16,9 +16,13 @@ import {
   Minus,
   Clock,
   UserCheck,
-  Calendar
+  Calendar,
+  MapPin,
+  Sun,
+  Download
 } from 'lucide-react';
 import { cn, formatCurrency, estimateSystemSize, calculateSolarProduction, getAverageElectricityPrice } from '../lib/utils';
+import { motion } from 'motion/react';
 import { 
   BarChart, 
   Bar, 
@@ -165,551 +169,596 @@ export default function ProjectEditor({ projectId, initialCustomerId, onClose }:
   const currentCustomer = customers.find(c => c.id === project.customerId);
 
   return (
-    <div className="max-w-5xl mx-auto pb-20 px-4 md:px-0">
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-8">
-        <div className="flex items-center justify-between w-full md:w-auto">
-            <button onClick={onClose} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors">
-                <ArrowLeft className="h-5 w-5" /> <span className="hidden sm:inline">Quay lại</span>
+    <div className="max-w-5xl mx-auto pb-32 md:pb-20 px-4 md:px-0">
+      {/* Redesigned Navigation Header */}
+      <div className="flex flex-col gap-6 mb-10 sticky top-0 md:relative z-20 md:z-10 bg-slate-50/80 backdrop-blur-xl py-4 md:py-0">
+        <div className="flex items-center justify-between">
+            <button 
+                onClick={onClose} 
+                className="group flex items-center gap-3 bg-white border border-slate-200 px-4 py-2.5 rounded-2xl shadow-sm hover:bg-slate-900 hover:border-slate-900 transition-all active:scale-95"
+            >
+                <ArrowLeft className="h-5 w-5 text-slate-400 group-hover:text-white transition-colors" /> 
+                <span className="text-[11px] font-black uppercase tracking-widest text-slate-900 group-hover:text-white">Thoát</span>
             </button>
+            
+            <div className="flex items-center gap-1.5 md:gap-3 bg-white/50 p-1.5 rounded-full border border-slate-100 shadow-inner">
+                {[1, 2, 3, 4].map(s => (
+                    <div 
+                        key={s} 
+                        onClick={() => setStep(s)}
+                        className={cn(
+                            "cursor-pointer flex items-center justify-center transition-all duration-500",
+                            step === s ? "w-10 h-7 md:w-16 md:h-2 rounded-full bg-slate-900" : "w-2 h-2 rounded-full",
+                            step > s ? "bg-blue-600 w-2 h-2" : (step < s ? "bg-slate-200" : "")
+                        )} 
+                    >
+                        {step === s && <span className="text-[8px] font-black text-white uppercase hidden md:inline">Step 0{s}</span>}
+                        {step === s && <span className="text-[9px] font-black text-white md:hidden">0{s}</span>}
+                    </div>
+                ))}
+            </div>
+
             <button 
                 onClick={handleSave}
-                className="md:hidden bg-blue-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-lg shadow-blue-200 text-xs"
+                className="bg-slate-900 text-white px-5 py-2.5 rounded-2xl flex items-center gap-2.5 font-black shadow-xl shadow-slate-200 hover:bg-blue-600 transition-all active:scale-95"
             >
-                <Save className="h-4 w-4" /> Lưu
+                <Save className="h-4 w-4" /> 
+                <span className="text-[11px] uppercase tracking-widest hidden sm:inline">Lưu Dự án</span>
+                <span className="text-[11px] uppercase tracking-widest sm:hidden">Lưu</span>
             </button>
         </div>
-        
-        <div className="flex items-center gap-1 md:gap-2">
-            {[1, 2, 3, 4].map(s => (
-                <div 
-                    key={s} 
-                    className={cn(
-                        "h-1.5 w-8 md:h-2 md:w-12 rounded-full transition-all",
-                        step >= s ? "bg-blue-600" : "bg-slate-200"
-                    )} 
-                />
-            ))}
-        </div>
-
-        <button 
-          onClick={handleSave}
-          className="hidden md:flex bg-blue-600 text-white px-6 py-2 rounded-xl items-center gap-2 font-bold shadow-lg shadow-blue-200"
-        >
-          <Save className="h-4 w-4" /> Lưu Dự án
-        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
           {step === 1 && (
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm animate-in slide-in-from-right-4 duration-300">
-              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4 border-b pb-2">Thông tin & Chi phí điện năng</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Chọn khách hàng</label>
-                    <select 
-                      className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-sm outline-none focus:border-blue-500"
-                      value={project.customerId || ''}
-                      onChange={e => setProject({...project, customerId: e.target.value})}
-                    >
-                      <option value="">-- Chọn khách hàng --</option>
-                      {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="bg-white p-6 md:p-10 rounded-[2.5rem] border border-slate-100 shadow-[0_10px_40px_rgb(0,0,0,0.03)] space-y-10"
+            >
+              <div>
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight leading-none mb-2">Phân Tích Nhu Cầu</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Xác định quy mô hệ thống dựa trên hóa đơn điện</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2">Chủ đầu tư / Khách hàng *</label>
+                    <div className="relative">
+                      <User className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300" />
+                      <select 
+                        className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:bg-white focus:border-blue-500 appearance-none transition-all"
+                        value={project.customerId || ''}
+                        onChange={e => setProject({...project, customerId: e.target.value})}
+                      >
+                        <option value="">-- Chọn danh bạ --</option>
+                        {customers.map(c => <option key={c.id} value={c.id}>{c.name.toUpperCase()}</option>)}
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Địa chỉ lắp đặt</label>
-                    <input 
-                      type="text" 
-                      readOnly
-                      className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-sm text-slate-500" 
-                      value={currentCustomer?.address || 'Chưa cập nhật'} 
-                    />
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2">Vị trí triển khai</label>
+                    <div className="relative">
+                      <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300" />
+                      <input 
+                        type="text" 
+                        readOnly
+                        placeholder="Chọn khách hàng để xem địa chỉ"
+                        className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold text-slate-400 outline-none" 
+                        value={currentCustomer?.address || ''} 
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Sale phụ trách</label>
-                    <select 
-                      className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-sm outline-none focus:border-blue-500"
-                      value={project.assignedSalesId || ''}
-                      onChange={e => setProject({...project, assignedSalesId: e.target.value})}
-                    >
-                      <option value="">-- Chưa bàn giao --</option>
-                      {salesStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
+
+                   <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2">Chuyên viên phụ trách</label>
+                    <div className="relative">
+                      <UserCheck className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300" />
+                      <select 
+                        className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:bg-white focus:border-blue-500 appearance-none transition-all"
+                        value={project.assignedSalesId || ''}
+                        onChange={e => setProject({...project, assignedSalesId: e.target.value})}
+                      >
+                        <option value="">-- Cấp độ hệ thống --</option>
+                        {salesStaff.map(s => <option key={s.id} value={s.id}>{s.name.toUpperCase()}</option>)}
+                      </select>
+                    </div>
                   </div>
                 </div>
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 flex flex-col justify-center">
-                  <label className="block text-xs font-semibold text-blue-700 mb-2 uppercase">Tiền điện trung bình/tháng (VND)</label>
-                  <div className="flex items-end gap-2">
+
+                <div className="bg-slate-900 rounded-[2rem] p-8 md:p-10 text-white relative overflow-hidden flex flex-col justify-center min-h-[240px] shadow-2xl shadow-slate-200">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/20 rounded-full blur-3xl -mr-16 -mt-16" />
+                  
+                  <label className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                    <Zap className="h-3 w-3 fill-blue-400" /> Thanh toán điện tb/tháng
+                  </label>
+                  
+                  <div className="flex items-baseline gap-3">
                     <input 
                       type="number"
-                      className="bg-transparent border-b-2 border-blue-200 text-2xl md:text-3xl font-black text-blue-900 tracking-tight outline-none w-full"
+                      placeholder="0"
+                      className="bg-transparent border-b-4 border-white/10 text-4xl md:text-5xl font-black text-white tracking-tighter outline-none w-full placeholder:text-white/5 focus:border-blue-500 transition-colors"
                       value={project.monthlyBill || ''}
                       onChange={e => handleAutoConfig(Number(e.target.value))}
                     />
-                    <span className="text-sm font-normal text-blue-400 italic shrink-0">đ/tháng</span>
+                    <span className="text-sm font-black text-blue-400 uppercase tracking-widest italic shrink-0">VNĐ</span>
                   </div>
-                  <div className="mt-4 pt-4 border-t border-blue-200 flex flex-col gap-2 text-xs text-blue-600 font-medium">
-                    <div className="flex justify-between items-center bg-white/50 p-2 rounded">
-                        <span className="text-blue-400 uppercase font-bold text-[9px]">Loại điện:</span>
-                        <span className="font-bold uppercase">
+
+                  <div className="mt-8 space-y-3">
+                     <div className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5">
+                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Loại điện:</span>
+                        <span className="text-[10px] font-black uppercase text-blue-400">
                             {currentCustomer?.usageType === 'residential' ? 'Sinh hoạt' : 
                              currentCustomer?.usageType === 'commercial' ? 'Kinh doanh' : 
-                             currentCustomer?.usageType === 'industrial' ? 'Sản xuất' : 'N/A'} 
-                            ({currentCustomer?.phaseType === '1phase' ? '1 Pha' : '3 Pha'})
+                             currentCustomer?.usageType === 'industrial' ? 'Sản xuất' : 'Chưa chọn KH'}
                         </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span>Giá điện tb:</span>
-                        <span className="font-bold">~{getAverageElectricityPrice(project.monthlyBill || 0, currentCustomer?.usageType)} đ/kWh</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span>Sản lượng tiêu thụ tb:</span>
-                        <span className="font-bold uppercase">~{Math.round((project.monthlyBill || 0) / getAverageElectricityPrice(project.monthlyBill || 0, currentCustomer?.usageType))} kWh</span>
-                    </div>
+                     </div>
+                     <div className="flex justify-between items-center px-1">
+                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Giá tb / kWh:</span>
+                        <span className="text-[10px] font-black text-white">~{getAverageElectricityPrice(project.monthlyBill || 0, currentCustomer?.usageType)} đ</span>
+                     </div>
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
           )}
 
           {step === 2 && (
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm animate-in slide-in-from-right-4 duration-300">
-              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4 border-b pb-2">Cấu hình Solar System</h2>
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="bg-white p-6 md:p-10 rounded-[2.5rem] border border-slate-100 shadow-[0_10px_40px_rgb(0,0,0,0.03)] space-y-10"
+            >
+              <div>
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight leading-none mb-2">Cấu Hình Kỹ Thuật</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Lựa chọn thiết bị và cân chỉnh quy mô hệ thống</p>
+              </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-2 uppercase">Tấm pin (PV Panels)</label>
-                    <div className="flex items-center gap-3">
-                         <div className="w-10 h-10 bg-slate-100 rounded flex items-center justify-center shrink-0 text-lg">☀️</div>
-                         <select 
-                            className="flex-1 bg-slate-50 border border-slate-200 rounded px-3 py-2 text-sm outline-none focus:border-blue-500"
-                            value={project.panels?.equipmentId}
-                            onChange={e => {
-                                const id = e.target.value;
-                                const p = panels.find(i => i.id === id);
-                                if (p) {
-                                    const newCount = Math.ceil(((project.systemSizeKWp || 0) * 1000) / p.capacity);
-                                    setProject({ ...project, panels: { equipmentId: id, count: newCount } });
-                                }
-                            }}
-                        >
-                            {panels.map(p => <option key={p.id} value={p.id}>{p.brand} {p.model}</option>)}
-                        </select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                <div className="space-y-8">
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2">Tấm pin (PV Panels)</label>
+                    <div className="flex items-center gap-4">
+                         <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center shrink-0 border border-amber-100 shadow-sm transition-transform group-hover:scale-110">
+                            <Sun className="h-6 w-6 text-amber-500" />
+                         </div>
+                         <div className="flex-1 relative">
+                           <select 
+                              className="w-full pl-6 pr-10 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:bg-white focus:border-blue-500 appearance-none transition-all"
+                              value={project.panels?.equipmentId}
+                              onChange={e => {
+                                  const id = e.target.value;
+                                  const p = panels.find(i => i.id === id);
+                                  if (p) {
+                                      const newCount = Math.ceil(((project.systemSizeKWp || 0) * 1000) / p.capacity);
+                                      setProject({ ...project, panels: { equipmentId: id, count: newCount } });
+                                  }
+                              }}
+                           >
+                              {panels.map(p => <option key={p.id} value={p.id}>{p.brand} {p.model}</option>)}
+                           </select>
+                           <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300 pointer-events-none rotate-90" />
+                         </div>
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-2 uppercase">Biến tần (Inverter)</label>
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-slate-100 rounded flex items-center justify-center shrink-0 text-lg">⚡</div>
-                        <select 
-                            className="flex-1 bg-slate-50 border border-slate-200 rounded px-3 py-2 text-sm outline-none focus:border-blue-500"
-                            value={project.inverters?.equipmentId}
-                            onChange={e => {
-                                const newProj = {...project, inverters: {...project.inverters!, equipmentId: e.target.value}};
-                                setProject({...newProj, ...calculateFinancials(newProj)});
-                            }}
-                        >
-                            {inverters.map(i => <option key={i.id} value={i.id}>{i.brand} {i.model}</option>)}
-                        </select>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2">Biến tần (Inverter)</label>
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center shrink-0 border border-indigo-100 shadow-sm">
+                           <Zap className="h-6 w-6 text-indigo-500" />
+                        </div>
+                        <div className="flex-1 relative">
+                          <select 
+                              className="w-full pl-6 pr-10 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:bg-white focus:border-blue-500 appearance-none transition-all"
+                              value={project.inverters?.equipmentId}
+                              onChange={e => {
+                                  const newProj = {...project, inverters: {...project.inverters!, equipmentId: e.target.value}};
+                                  setProject({...newProj, ...calculateFinancials(newProj)});
+                              }}
+                          >
+                              {inverters.map(i => <option key={i.id} value={i.id}>{i.brand} {i.model}</option>)}
+                          </select>
+                          <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300 pointer-events-none rotate-90" />
+                        </div>
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-2 uppercase">Pin lưu trữ (Battery / ESS)</label>
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-slate-100 rounded flex items-center justify-center shrink-0 text-lg">🔋</div>
-                        <select 
-                            className="flex-1 bg-slate-50 border border-slate-200 rounded px-3 py-2 text-sm outline-none focus:border-blue-500"
-                            value={project.batteries?.equipmentId || ''}
-                            onChange={e => {
-                                const newId = e.target.value;
-                                const newProj = {...project, batteries: { equipmentId: newId, count: newId ? Math.max(1, project.batteries?.count || 1) : 0 }};
-                                setProject({...newProj, ...calculateFinancials(newProj)});
-                            }}
-                        >
-                            <option value="">-- Không sử dụng lưu trữ --</option>
-                            {batteries.map(b => <option key={b.id} value={b.id}>{b.brand} {b.model} ({b.capacity}kWh)</option>)}
-                        </select>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2">Pin lưu trữ (Battery / ESS)</label>
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 bg-green-50 rounded-2xl flex items-center justify-center shrink-0 border border-green-100 shadow-sm">
+                           <Coins className="h-6 w-6 text-green-500" />
+                        </div>
+                        <div className="flex-1 relative">
+                          <select 
+                              className="w-full pl-6 pr-10 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:bg-white focus:border-blue-500 appearance-none transition-all"
+                              value={project.batteries?.equipmentId || ''}
+                              onChange={e => {
+                                  const newId = e.target.value;
+                                  const newProj = {...project, batteries: { equipmentId: newId, count: newId ? Math.max(1, project.batteries?.count || 1) : 0 }};
+                                  setProject({...newProj, ...calculateFinancials(newProj)});
+                              }}
+                          >
+                              <option value="">-- Không sử dụng lưu trữ --</option>
+                              {batteries.map(b => <option key={b.id} value={b.id}>{b.brand} {b.model} ({b.capacity}kWh)</option>)}
+                          </select>
+                          <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300 pointer-events-none rotate-90" />
+                        </div>
                     </div>
                   </div>
                 </div>
 
-                  <div className="grid grid-cols-2 gap-4 md:grid-cols-2 lg:grid-cols-1">
-                    <div className="p-4 bg-slate-900 rounded-xl text-white">
-                      <p className="text-[10px] uppercase opacity-60 font-bold mb-1">Công suất lắp đặt</p>
-                      <p className="text-2xl md:text-3xl font-bold text-amber-400">{project.systemSizeKWp} <span className="text-sm font-normal opacity-60">kWp</span></p>
+                <div className="space-y-6">
+                  <div className="p-8 bg-slate-900 rounded-[2.5rem] text-white shadow-2xl shadow-slate-200 group">
+                    <p className="text-[10px] uppercase opacity-40 font-black tracking-widest mb-2">Công suất đề xuất</p>
+                    <div className="flex items-baseline gap-2 group-hover:scale-105 transition-transform origin-left">
+                       <span className="text-4xl md:text-5xl font-black text-amber-400 tracking-tighter">{project.systemSizeKWp}</span>
+                       <span className="text-sm font-black opacity-40 uppercase tracking-widest">kWp</span>
                     </div>
-                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                      <p className="text-[10px] uppercase text-slate-400 font-bold mb-1">Số lượng tấm pin</p>
-                      <div className="flex items-center justify-between">
-                           <span className="text-lg md:text-xl font-bold text-slate-800">{project.panels?.count} Tấm</span>
-                           <div className="flex gap-1">
-                              <button onClick={() => {
-                                  const newProj = {...project, panels: {...project.panels!, count: Math.max(0, (project.panels?.count || 0) - 1)}};
-                                  setProject({...newProj, ...calculateFinancials(newProj)});
-                              }} className="w-6 h-6 flex items-center justify-center rounded bg-white border border-slate-200 shadow-sm text-slate-600 hover:bg-slate-50"><Minus className="h-3 w-3"/></button>
-                              <button onClick={() => {
-                                  const newProj = {...project, panels: {...project.panels!, count: (project.panels?.count || 0) + 1}};
-                                  setProject({...newProj, ...calculateFinancials(newProj)});
-                              }} className="w-6 h-6 flex items-center justify-center rounded bg-white border border-slate-200 shadow-sm text-slate-600 hover:bg-slate-50"><Plus className="h-3 w-3"/></button>
-                           </div>
-                      </div>
+                  </div>
+
+                  <div className="p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100">
+                    <p className="text-[10px] uppercase text-slate-400 font-black tracking-widest mb-4">Số lượng tấm pin mặt trời</p>
+                    <div className="flex items-center justify-between">
+                         <span className="text-2xl font-black text-slate-800 tracking-tight">{project.panels?.count} <small className="text-xs opacity-40">TẤM</small></span>
+                         <div className="flex gap-2">
+                            <button 
+                              onClick={() => {
+                                const newProj = {...project, panels: {...project.panels!, count: Math.max(0, (project.panels?.count || 0) - 1)}};
+                                setProject({...newProj, ...calculateFinancials(newProj)});
+                              }} 
+                              className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 shadow-sm text-slate-600 hover:bg-slate-900 hover:text-white transition-all active:scale-95"
+                            >
+                                <Minus className="h-4 w-4"/>
+                            </button>
+                            <button 
+                              onClick={() => {
+                                const newProj = {...project, panels: {...project.panels!, count: (project.panels?.count || 0) + 1}};
+                                setProject({...newProj, ...calculateFinancials(newProj)});
+                              }} 
+                              className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 shadow-sm text-slate-600 hover:bg-slate-900 hover:text-white transition-all active:scale-95"
+                            >
+                                <Plus className="h-4 w-4"/>
+                            </button>
+                         </div>
                     </div>
-                    
-                    {project.batteries?.equipmentId && (
-                      <div className="col-span-2 md:col-span-1 p-4 bg-slate-50 rounded-xl border border-slate-100 animate-in fade-in slide-in-from-top-2">
-                          <p className="text-[10px] uppercase text-slate-400 font-bold mb-1">Số lượng bộ lưu trữ</p>
-                          <div className="flex items-center justify-between">
-                              <span className="text-lg md:text-xl font-bold text-slate-800">{project.batteries?.count} Bộ</span>
-                              <div className="flex gap-1">
-                                  <button onClick={() => {
+                  </div>
+                  
+                  {project.batteries?.equipmentId && (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100"
+                    >
+                        <p className="text-[10px] uppercase text-slate-400 font-black tracking-widest mb-4">Số lượng Module lưu trữ</p>
+                        <div className="flex items-center justify-between">
+                            <span className="text-2xl font-black text-slate-800 tracking-tight">{project.batteries?.count} <small className="text-xs opacity-40">BỘ</small></span>
+                            <div className="flex gap-2">
+                                <button 
+                                  onClick={() => {
                                       const newProj = {...project, batteries: {...project.batteries!, count: Math.max(1, (project.batteries?.count || 1) - 1)}};
                                       setProject({...newProj, ...calculateFinancials(newProj)});
-                                  }} className="w-6 h-6 flex items-center justify-center rounded bg-white border border-slate-200 shadow-sm text-slate-600 hover:bg-slate-50"><Minus className="h-3 w-3"/></button>
-                                  <button onClick={() => {
+                                  }} 
+                                  className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 shadow-sm text-slate-600 hover:bg-slate-900 hover:text-white transition-all active:scale-95"
+                                >
+                                    <Minus className="h-4 w-4"/>
+                                </button>
+                                <button 
+                                  onClick={() => {
                                       const newProj = {...project, batteries: {...project.batteries!, count: (project.batteries?.count || 1) + 1}};
                                       setProject({...newProj, ...calculateFinancials(newProj)});
-                                  }} className="w-6 h-6 flex items-center justify-center rounded bg-white border border-slate-200 shadow-sm text-slate-600 hover:bg-slate-50"><Plus className="h-3 w-3"/></button>
-                              </div>
-                          </div>
-                      </div>
-                    )}
-                  </div>
+                                  }} 
+                                  className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 shadow-sm text-slate-600 hover:bg-slate-900 hover:text-white transition-all active:scale-95"
+                                >
+                                    <Plus className="h-4 w-4"/>
+                                </button>
+                            </div>
+                        </div>
+                    </motion.div>
+                  )}
+                </div>
               </div>
-            </div>
+            </motion.div>
           )}
 
           {step === 3 && (
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm animate-in slide-in-from-right-4 duration-300">
-              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4 border-b pb-2">Phân tích Phương án Đầu tư</h2>
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="bg-white p-6 md:p-10 rounded-[2.5rem] border border-slate-100 shadow-[0_10px_40px_rgb(0,0,0,0.03)] space-y-10"
+            >
+              <div>
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight leading-none mb-2">Hiệu Quả Tài Chính</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Phân tích dòng tiền và thời gian hoàn vốn dự kiến</p>
+              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                   <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Tổng mức đầu tư</p>
-                   <p className="text-lg font-bold text-slate-900">{formatCurrency(project.totalCost || 0)}</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="p-8 bg-slate-50 rounded-[2rem] border border-slate-100 group">
+                   <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-3">Tổng giá trị đầu tư</p>
+                   <p className="text-2xl font-black text-slate-900 group-hover:text-blue-600 transition-colors uppercase">{formatCurrency(project.totalCost || 0)}</p>
                 </div>
-                <div className="p-4 bg-green-50 rounded-xl border border-green-100">
-                   <p className="text-[10px] text-green-700 uppercase font-bold mb-1">Tiết kiệm hàng năm</p>
-                   <p className="text-lg font-bold text-green-900">{formatCurrency((project.annualProduction || 0) * 2500)}</p>
+                <div className="p-8 bg-green-50 rounded-[2rem] border border-green-100 group">
+                   <p className="text-[10px] text-green-600 uppercase font-black tracking-widest mb-3">Tiết kiệm / Năm</p>
+                   <p className="text-2xl font-black text-green-900 group-hover:scale-105 transition-transform origin-left uppercase">{formatCurrency((project.annualProduction || 0) * 2500)}</p>
                 </div>
-                <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
-                   <p className="text-[10px] text-amber-700 uppercase font-bold mb-1">Hoàn vốn dự kiến</p>
-                   <p className="text-lg font-bold text-amber-900">{project.paybackYears} Năm</p>
+                <div className="p-8 bg-amber-50 rounded-[2rem] border border-amber-100 group">
+                   <p className="text-[10px] text-amber-600 uppercase font-black tracking-widest mb-3">Hoàn vốn (ROI)</p>
+                   <p className="text-2xl font-black text-amber-900 group-hover:scale-105 transition-transform origin-left uppercase">~ {project.paybackYears} NĂM</p>
                 </div>
               </div>
 
-              <div className="h-48 mt-4 bg-slate-50/50 rounded-xl p-4 border border-slate-100">
-                <p className="text-[10px] uppercase text-slate-400 font-bold mb-4">Biểu đồ dòng tiền lũy kế (20 năm)</p>
-                <div className="h-[calc(100%-20px)]">
-                    <ResponsiveContainer width="100%" height="100%">
+              <div className="bg-slate-900 rounded-[2.5rem] p-8 md:p-12 text-white relative overflow-hidden shadow-2xl">
+                <div className="flex flex-col md:flex-row items-center justify-between mb-10 gap-4">
+                  <div>
+                    <h4 className="text-sm font-black uppercase tracking-[0.2em] text-blue-400">Dòng tiền lũy kế</h4>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Dự phóng tăng trưởng trong 20 năm</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">Lợi nhuận dương</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       <div className="w-2 h-2 rounded-full bg-red-500" />
+                       <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">Đang hoàn vốn</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="h-64 relative z-10">
+                  <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={Array.from({length: 20}, (_, i) => ({
                         year: i + 1,
                         benefit: Math.round(((project.annualProduction || 0) * 2500 * (i + 1)) - (project.totalCost || 0))
                     }))}>
-                        <XAxis dataKey="year" fontSize={8} axisLine={false} tickLine={false} />
+                        <XAxis 
+                          dataKey="year" 
+                          fontSize={10} 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{fill: 'rgba(255,255,255,0.2)', fontWeight: 900}}
+                        />
                         <YAxis hide />
-                        <Tooltip cursor={{fill: '#f1f5f9'}} content={({ active, payload }) => {
+                        <Tooltip 
+                          cursor={{fill: 'rgba(255,255,255,0.05)'}} 
+                          content={({ active, payload }) => {
                             if (active && payload && payload.length) {
                                 return (
-                                    <div className="bg-slate-900 text-white text-[10px] px-2 py-1 rounded shadow-xl">
+                                    <div className="bg-white text-slate-900 text-[10px] px-3 py-2 rounded-xl shadow-2xl font-black uppercase border border-slate-100">
                                         Năm {payload[0].payload.year}: {formatCurrency(payload[0].value as number)}
                                     </div>
                                 );
                             }
                             return null;
                         }} />
-                        <Bar dataKey="benefit">
+                        <Bar dataKey="benefit" radius={[4, 4, 0, 0]}>
                         {Array.from({length: 20}).map((_, i) => (
-                            <Cell key={i} fill={((project.annualProduction || 0) * 2500 * (i + 1)) >= (project.totalCost || 0) ? '#10b981' : '#f43f5e'} />
+                            <Cell 
+                              key={i} 
+                              fill={((project.annualProduction || 0) * 2500 * (i + 1)) >= (project.totalCost || 0) ? '#10b981' : '#f43f5e'} 
+                              fillOpacity={0.8}
+                            />
                         ))}
                         </Bar>
                     </BarChart>
-                    </ResponsiveContainer>
+                  </ResponsiveContainer>
                 </div>
+
+                {/* Abstract Glass Element */}
+                <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-blue-600/5 rounded-full blur-3xl pointer-events-none" />
               </div>
-            </div>
+            </motion.div>
           )}
 
           {step === 4 && (
-            <div className="proposal-container bg-white rounded-xl shadow-2xl p-0 overflow-hidden animate-in fade-in zoom-in duration-500 border border-slate-200">
-               {/* Proposal Header */}
-               <div className="bg-slate-900 md:p-12 p-6 text-white relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl -mr-32 -mt-32" />
-                  <div className="relative z-10 flex flex-col md:flex-row justify-between items-start gap-8">
-                    <div className="flex items-center gap-6">
-                      <div className="w-16 h-16 bg-white rounded-2xl flex flex-col items-center justify-center shadow-2xl border-b-4 border-red-600 shrink-0">
-                          <span className="text-2xl font-black text-red-600 leading-none">TS</span>
-                          <span className="text-[6px] font-bold text-blue-600 uppercase tracking-tighter">TRƯỜNG SƠN</span>
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="space-y-8"
+            >
+              <div className="bg-white p-8 md:p-12 rounded-[2.5rem] border border-slate-100 shadow-[0_10px_40px_rgb(0,0,0,0.03)] proposal-print relative overflow-hidden">
+                {/* Proposal Header Brand */}
+                <div className="flex flex-col md:flex-row justify-between items-start mb-16 gap-8 border-b border-slate-100 pb-12 relative z-10">
+                   <div className="space-y-4">
+                      <div className="bg-slate-900 text-white w-16 h-16 rounded-2xl flex flex-col items-center justify-center font-black shadow-xl shadow-slate-200">
+                          <span className="text-2xl leading-none">SE</span>
+                          <span className="text-[6px] tracking-tighter uppercase opacity-40">Solar</span>
                       </div>
                       <div>
-                        <div className="text-2xl font-black text-white tracking-tighter mb-1 uppercase">TRƯỜNG SƠN SOLAR</div>
-                        <div className="flex items-center gap-2">
-                            <span className="h-px w-8 bg-blue-500" />
-                            <p className="text-blue-400 text-[10px] uppercase tracking-[0.2em] font-bold">Proposal No: #TS-{Math.random().toString(36).substring(7).toUpperCase()}</p>
-                        </div>
+                        <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Hồ Sơ Chào Giá</h1>
+                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Giải pháp năng lượng xanh Trường Sơn Solar</p>
                       </div>
-                    </div>
-                    <div className="text-left md:text-right space-y-1">
-                      <p className="text-xs font-black uppercase tracking-widest text-white">CÔNG TY ĐIỆN MẶT TRỜI TRƯỜNG SƠN</p>
-                      <p className="text-[10px] text-slate-400 font-medium">Bình Dương | TP. Hồ Chí Minh | Đồng Nai</p>
-                      <p className="text-[10px] text-blue-400 font-bold">Hotline: 09xx xxx xxx • truongsonsolar.vn</p>
-                    </div>
-                  </div>
-               </div>
+                   </div>
+                   <div className="text-right space-y-1">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mã hiệu dự án</p>
+                      <p className="font-black text-slate-900 uppercase">#TS-{project.id.slice(0, 8)}</p>
+                      <p className="text-[10px] border-t border-slate-100 pt-1 mt-2 text-slate-400 font-bold uppercase tracking-widest italic">{new Date().toLocaleDateString('vi-VN')}</p>
+                   </div>
+                </div>
 
-               <div className="p-6 md:p-12">
-                  {/* Customer Block */}
-                  <div className="flex flex-col md:flex-row justify-between gap-8 mb-12 border-b border-slate-100 pb-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-16 mb-16">
+                   <div className="space-y-6">
+                      <h4 className="text-xs font-black text-blue-600 uppercase tracking-[0.2em] border-l-4 border-blue-600 pl-4">Khách hàng & Hiện trạng</h4>
+                      <div className="space-y-3 bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                         <div className="flex justify-between items-center group">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Đại diện:</span>
+                            <span className="text-sm font-black text-slate-800 uppercase">{currentCustomer?.name}</span>
+                         </div>
+                         <div className="flex justify-between items-center group">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Địa chỉ:</span>
+                            <span className="text-sm font-black text-slate-800 uppercase text-right max-w-[200px]">{currentCustomer?.address}</span>
+                         </div>
+                         <div className="flex justify-between items-center group">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Loại hình:</span>
+                            <span className="text-sm font-black text-slate-800 uppercase">{currentCustomer?.usageType === 'residential' ? 'SINH HOẠT' : 'KINH DOANH'}</span>
+                         </div>
+                      </div>
+                   </div>
+
+                   <div className="space-y-6">
+                      <h4 className="text-xs font-black text-blue-600 uppercase tracking-[0.2em] border-l-4 border-blue-600 pl-4">Thông số kỹ thuật</h4>
+                      <div className="space-y-3 bg-slate-50 p-6 rounded-3xl border border-slate-100 font-black">
+                         <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Công suất:</span>
+                            <span className="text-sm text-slate-800 uppercase">{project.systemSizeKWp} kWp</span>
+                         </div>
+                         <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tấm pin:</span>
+                            <span className="text-[11px] text-slate-800 uppercase text-right max-w-[170px] leading-tight">
+                                {panels.find(p => p.id === project.panels?.equipmentId)?.brand} ({project.panels?.count} tấm)
+                            </span>
+                         </div>
+                         <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Biến tần:</span>
+                            <span className="text-[11px] text-slate-800 uppercase">
+                                {inverters.find(i => i.id === project.inverters?.equipmentId)?.brand}
+                            </span>
+                         </div>
+                      </div>
+                   </div>
+                </div>
+
+                <div className="overflow-hidden rounded-[2rem] border border-slate-100 mb-16">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-slate-900 text-white">
+                        <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest">Hạng mục chi tiết</th>
+                        <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-center">SL</th>
+                        <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-right">Thành tiền</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      <tr>
+                        <td className="px-8 py-6">
+                           <p className="text-sm font-black text-slate-900 uppercase leading-none mb-1">{panels.find(p => p.id === project.panels?.equipmentId)?.brand} PV Modules</p>
+                           <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest italic">Công nghệ Mono-Half Cell hiệu suất cao</p>
+                        </td>
+                        <td className="px-8 py-6 text-center font-black text-slate-600">{project.panels?.count}</td>
+                        <td className="px-8 py-6 text-right font-black text-slate-900 uppercase">Trọn gói</td>
+                      </tr>
+                      <tr>
+                        <td className="px-8 py-6">
+                           <p className="text-sm font-black text-slate-900 uppercase leading-none mb-1">{inverters.find(i => i.id === project.inverters?.equipmentId)?.brand} Inverter</p>
+                           <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest italic">Chuyển đổi DC/AC thông minh, tích hợp WIFI</p>
+                        </td>
+                        <td className="px-8 py-6 text-center font-black text-slate-600">01</td>
+                        <td className="px-8 py-6 text-right font-black text-slate-900 uppercase">Trọn gói</td>
+                      </tr>
+                      {project.batteries?.equipmentId && (
+                        <tr>
+                            <td className="px-8 py-6">
+                            <p className="text-sm font-black text-slate-900 uppercase leading-none mb-1">Energy Storage (Lưu trữ)</p>
+                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest italic">Pin Lithium LiFePO4 thế hệ mới</p>
+                            </td>
+                            <td className="px-8 py-6 text-center font-black text-slate-600">{project.batteries?.count}</td>
+                            <td className="px-8 py-6 text-right font-black text-slate-900 uppercase">Trọn gói</td>
+                        </tr>
+                      )}
+                      <tr>
+                        <td className="px-8 py-6">
+                           <p className="text-sm font-black text-slate-900 uppercase leading-none mb-1">Phụ kiện & Thi công</p>
+                           <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest italic">Hệ khung rail nhôm, cáp DC, AC, tủ điện & nhân công</p>
+                        </td>
+                        <td className="px-8 py-6 text-center font-black text-slate-600">Trọn bộ</td>
+                        <td className="px-8 py-6 text-right font-black text-slate-900 uppercase">Trọn gói</td>
+                      </tr>
+                      <tr className="bg-slate-50/80">
+                         <td colSpan={2} className="px-8 py-10 text-right text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Giá trị đầu tư sau thuế</td>
+                         <td className="px-8 py-10 text-right text-3xl font-black text-blue-600 uppercase tracking-tighter">{formatCurrency(project.totalCost || 0)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="p-10 bg-slate-900 rounded-[2.5rem] text-white flex flex-col md:flex-row items-center justify-between gap-8 relative overflow-hidden">
+                   <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl -mr-32 -mt-32" />
+                   <div className="space-y-4 relative z-10">
+                      <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Phê duyệt bản thảo</p>
+                      <div className="h-20 w-40 border-b border-white/10" />
                       <div>
-                          <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4">THÔNG TIN KHÁCH HÀNG</h3>
-                          <p className="text-2xl font-black text-slate-900 tracking-tight mb-2 uppercase">{currentCustomer?.name}</p>
-                          <div className="space-y-1 text-slate-500">
-                             <div className="flex items-center gap-2 text-xs">
-                                <span className="w-4 h-4 rounded-full bg-slate-100 flex items-center justify-center text-[8px] text-slate-400">🏠</span>
-                                <span>{currentCustomer?.address}</span>
-                             </div>
-                             <div className="flex items-center gap-2 text-xs">
-                                <span className="w-4 h-4 rounded-full bg-slate-100 flex items-center justify-center text-[8px] text-slate-400">📞</span>
-                                <span>{currentCustomer?.phone}</span>
-                             </div>
-                          </div>
+                        <p className="text-[11px] font-black text-white uppercase tracking-tight">{salesStaff.find(s => s.id === project.assignedSalesId)?.name || 'Chuyên viên kỹ thuật'}</p>
+                        <p className="text-[8px] text-blue-400 font-bold uppercase tracking-widest">Trường Sơn Solar Group</p>
                       </div>
-                      <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 md:w-64">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase mb-4">Ngày ban hành</p>
-                          <div className="flex items-center gap-3">
-                              <Calendar className="h-4 w-4 text-blue-600" />
-                              <span className="text-sm font-black text-slate-800">{new Date().toLocaleDateString('vi-VN')}</span>
-                          </div>
-                      </div>
-                  </div>
+                   </div>
+                   <div className="flex-1 max-w-sm text-[9px] text-slate-400 text-center md:text-right font-black uppercase leading-relaxed tracking-widest opacity-60">
+                      Văn bản này được tạo tự động bởi hệ thống SE-CRM. Giá trị thực tế phụ thuộc vào khảo sát hiện trạng và điều kiện thi công tại công trình.
+                   </div>
+                </div>
+              </div>
 
-                  {/* Section 1: Needs */}
-                  <section className="mb-12">
-                    <h2 className="flex items-center gap-3 text-sm font-black text-slate-900 uppercase tracking-widest mb-6">
-                        <span className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center text-[10px]">I</span>
-                        Hiện trạng & Nhu cầu Năng lượng
-                    </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="p-4 bg-white border border-slate-200 rounded-xl">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Loại hình sử dụng</p>
-                            <p className="font-black text-slate-800 uppercase">
-                                {currentCustomer?.usageType === 'residential' ? 'Sinh hoạt' : 
-                                 currentCustomer?.usageType === 'commercial' ? 'Kinh doanh' : 'Sản xuất'}
-                            </p>
-                        </div>
-                        <div className="p-4 bg-white border border-slate-200 rounded-xl">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Chi phí điện tb/tháng</p>
-                            <p className="font-black text-slate-800">{formatCurrency(project.monthlyBill || 0)}</p>
-                        </div>
-                        <div className="p-4 bg-white border border-slate-200 rounded-xl">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Hệ thống khuyến nghị</p>
-                            <p className="font-black text-blue-600">{project.systemSizeKWp} kWp</p>
-                        </div>
-                    </div>
-                  </section>
-
-                  {/* Section 2: Technical Detail */}
-                  <section className="mb-12">
-                    <h2 className="flex items-center gap-3 text-sm font-black text-slate-900 uppercase tracking-widest mb-6">
-                        <span className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center text-[10px]">II</span>
-                        Cấu hình Kỹ thuật & Báo giá Chi tiết
-                    </h2>
-                    <div className="overflow-hidden border border-slate-100 rounded-2xl shadow-sm">
-                        <table className="w-full text-sm">
-                            <thead className="bg-slate-900 text-white text-[10px] uppercase font-bold tracking-widest">
-                                <tr>
-                                    <th className="px-6 py-4 text-left">Hạng mục Thiết bị</th>
-                                    <th className="px-4 py-4 text-center">Số lượng</th>
-                                    <th className="px-6 py-4 text-right">Đơn giá</th>
-                                    <th className="px-6 py-4 text-right">Thành tiền</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {/* Panels */}
-                                {(() => {
-                                    const p = catalog.find(e => e.id === project.panels?.equipmentId);
-                                    if (!p) return null;
-                                    return (
-                                        <tr className="hover:bg-slate-50/50 transition-colors">
-                                            <td className="px-6 py-4">
-                                                <p className="font-black text-slate-800 uppercase text-[11px]">Tấm pin năng lượng mặt trời</p>
-                                                <p className="text-[11px] text-slate-500">{p.brand} {p.model} - {p.capacity}Wp</p>
-                                            </td>
-                                            <td className="px-4 py-4 text-center font-bold text-slate-700">{project.panels?.count}</td>
-                                            <td className="px-6 py-4 text-right text-slate-500">{formatCurrency(p.unitPrice)}</td>
-                                            <td className="px-6 py-4 text-right font-black text-slate-900">{formatCurrency((project.panels?.count || 0) * p.unitPrice)}</td>
-                                        </tr>
-                                    );
-                                })()}
-                                {/* Inverters */}
-                                {(() => {
-                                    const inv = catalog.find(e => e.id === project.inverters?.equipmentId);
-                                    if (!inv) return null;
-                                    return (
-                                        <tr className="hover:bg-slate-50/50 transition-colors">
-                                            <td className="px-6 py-4">
-                                                <p className="font-black text-slate-800 uppercase text-[11px] font-bold">Biến tần (Inverter)</p>
-                                                <p className="text-[11px] text-slate-500">{inv.brand} {inv.model} - {inv.capacity}kW</p>
-                                            </td>
-                                            <td className="px-4 py-4 text-center font-bold text-slate-700">{project.inverters?.count}</td>
-                                            <td className="px-6 py-4 text-right text-slate-500">{formatCurrency(inv.unitPrice)}</td>
-                                            <td className="px-6 py-4 text-right font-black text-slate-900">{formatCurrency((project.inverters?.count || 0) * inv.unitPrice)}</td>
-                                        </tr>
-                                    );
-                                })()}
-                                {/* Batteries */}
-                                {(() => {
-                                    const bat = catalog.find(e => e.id === project.batteries?.equipmentId);
-                                    if (!bat) return null;
-                                    return (
-                                        <tr className="hover:bg-slate-50/50 transition-colors">
-                                            <td className="px-6 py-4">
-                                                <p className="font-black text-slate-800 uppercase text-[11px] font-bold">Pin lưu trữ (Lithium ESS)</p>
-                                                <p className="text-[11px] text-slate-500">{bat.brand} {bat.model} - {bat.capacity}kWh</p>
-                                            </td>
-                                            <td className="px-4 py-4 text-center font-bold text-slate-700">{project.batteries?.count}</td>
-                                            <td className="px-6 py-4 text-right text-slate-500">{formatCurrency(bat.unitPrice)}</td>
-                                            <td className="px-6 py-4 text-right font-black text-slate-900">{formatCurrency((project.batteries?.count || 0) * bat.unitPrice)}</td>
-                                        </tr>
-                                    );
-                                })()}
-                                {/* Others */}
-                                <tr className="hover:bg-slate-50/50 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <p className="font-black text-slate-800 uppercase text-[11px] font-bold">Vật tư phụ & Thi công Trọn gói</p>
-                                        <p className="text-[11px] text-slate-500 font-medium italic">Hệ khung, dây dẫn, tủ điện, chống sét & nhân công</p>
-                                    </td>
-                                    <td className="px-4 py-4 text-center font-bold text-slate-700">1</td>
-                                    <td className="px-6 py-4 text-right text-slate-500">{formatCurrency((project.systemSizeKWp || 0) * 5000000)}</td>
-                                    <td className="px-6 py-4 text-right font-black text-slate-900">{formatCurrency((project.systemSizeKWp || 0) * 5000000)}</td>
-                                </tr>
-                                {/* Total */}
-                                <tr className="bg-slate-900 text-white font-black">
-                                    <td colSpan={3} className="px-6 py-6 text-right uppercase tracking-widest text-[11px]">TỔNG GIÁ TRỊ ĐẦU TƯ (TRỌN GÓI)</td>
-                                    <td className="px-6 py-6 text-right text-xl">{formatCurrency(project.totalCost || 0)}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div className="mt-4 flex justify-end">
-                        <div className="bg-amber-400 text-slate-900 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                           <ShieldCheck className="h-4 w-4" /> Bảo hành thiết bị chính hãng 12 - 25 năm
-                        </div>
-                    </div>
-                  </section>
-
-                  {/* Section 3: Financial Analysis */}
-                  <section className="mb-12">
-                    <h2 className="flex items-center gap-3 text-sm font-black text-slate-900 uppercase tracking-widest mb-6">
-                        <span className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center text-[10px]">III</span>
-                        Phân tích Hiệu quả Tài chính
-                    </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-6">
-                            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
-                                <span className="text-xs font-bold text-slate-500 uppercase">Sản lượng điện/năm dự kiến:</span>
-                                <span className="text-xl font-black text-slate-800">{project.annualProduction} <small className="text-[10px] opacity-60">kWh</small></span>
-                            </div>
-                            <div className="flex items-center justify-between p-4 bg-green-50 rounded-xl text-green-900">
-                                <span className="text-xs font-bold uppercase">Ước tính tiết kiệm/năm:</span>
-                                <span className="text-xl font-black">{formatCurrency((project.annualProduction || 0) * getAverageElectricityPrice(project.monthlyBill || 0, currentCustomer?.usageType))}</span>
-                            </div>
-                            <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl text-blue-900">
-                                <span className="text-xs font-bold uppercase">Thời gian hoàn vốn (ROI):</span>
-                                <span className="text-xl font-black">{project.paybackYears} <small className="text-[10px] opacity-60">NĂM</small></span>
-                            </div>
-                        </div>
-                        <div className="p-6 bg-slate-900 rounded-2xl text-white">
-                            <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-4 italic">Lời giải cho bài toán năng lượng:</p>
-                            <div className="space-y-4">
-                                <p className="text-xs leading-relaxed text-slate-300">
-                                    Với công suất <span className="text-blue-400 font-bold">{project.systemSizeKWp} kWp</span>, hệ thống sẽ cắt giảm các bậc giá điện cao nhất, 
-                                    giúp tối ưu hóa lợi nhuận đầu tư ngay từ tháng đầu tiên.
-                                </p>
-                                <div className="p-4 border border-white/10 rounded-xl bg-white/5">
-                                    <p className="text-[10px] font-bold text-blue-400 uppercase mb-2">Giá trị tiết kiệm sau 20 năm:</p>
-                                    <p className="text-2xl font-black">{formatCurrency((project.annualProduction || 0) * 20 * 2500)}</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                  </section>
-               </div>
-               
-               <div className="px-12 pb-12 pt-8 border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6">
-                  <div className="text-[10px] text-slate-400 max-w-md">
-                     <p className="font-bold mb-1 uppercase">Ghi chú & Pháp lý:</p>
-                     <p>* Báo giá có giá trị trong vòng 15 ngày. Giá trị thực tế có thể thay đổi nhẹ tùy theo điều kiện mái và vị trí lắp đặt thực tế.</p>
-                     <p>* Trường Sơn Solar cam kết cung cấp thiết bị chính hãng và hỗ trợ pháp lý đấu nối đầy đủ cho khách hàng.</p>
-                  </div>
-                  <div className="text-center md:text-right">
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 italic">Đại diện kinh doanh</p>
-                    <div className="flex items-center gap-3 justify-end">
-                        <div className="text-right">
-                            <p className="text-sm font-black text-slate-900 uppercase">{salesStaff.find(s => s.id === project.assignedSalesId)?.name || 'Admin User'}</p>
-                            <p className="text-[10px] text-blue-600 font-bold uppercase tracking-tighter">Technical Specialist</p>
-                        </div>
-                        <div className="w-10 h-10 rounded-full bg-slate-200" />
-                    </div>
-                  </div>
-               </div>
-            </div>
+              <div className="flex flex-col sm:flex-row gap-4 no-print sm:justify-center">
+                  <button 
+                    onClick={() => window.print()}
+                    className="flex-1 max-w-xs bg-slate-900 text-white rounded-[2rem] py-5 font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-2xl shadow-slate-200 active:scale-95 transition-all mx-auto sm:mx-0"
+                  >
+                    <Download className="h-4 w-4" /> Xuất File In
+                  </button>
+                  <button 
+                    onClick={handleSave}
+                    className="flex-1 max-w-xs bg-white border border-slate-200 text-slate-900 rounded-[2rem] py-5 font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-sm active:scale-95 transition-all mx-auto sm:mx-0"
+                  >
+                    <Save className="h-4 w-4" /> Lưu Dự Án
+                  </button>
+              </div>
+            </motion.div>
           )}
         </div>
 
-        {/* Sidebar Summary */}
-        <div className="space-y-6 no-print">
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm sticky top-6">
-            <h4 className="font-bold text-xs uppercase tracking-widest text-slate-400 mb-6 border-b pb-4">
-                Các bước thiết kế
-            </h4>
-            <div className="space-y-2">
+        {/* Professional Sidebar Summary */}
+        <div className="space-y-6 no-print hidden lg:block">
+          <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-[0_10px_40px_rgb(0,0,0,0.02)] sticky top-24">
+            <div className="mb-10">
+                <h4 className="font-black text-[10px] uppercase tracking-[0.3em] text-slate-400 mb-2">Lộ trình thiết kế</h4>
+                <div className="h-1 w-12 bg-blue-600 rounded-full" />
+            </div>
+
+            <div className="space-y-4">
               {[
-                { s: 1, label: 'Thông tin & Nhu cầu', sub: currentCustomer?.name },
-                { s: 2, label: 'Cấu hình Kỹ thuật', sub: `${project.systemSizeKWp} kWp` },
-                { s: 3, label: 'Phân tích Tài chính', sub: `${project.paybackYears} năm` },
-                { s: 4, label: 'Xuất văn bản Proposal', sub: 'PDF / Preview' },
+                { s: 1, label: 'Nhu cầu', sub: currentCustomer?.name || 'CHƯA CHỌN', icon: <User className="h-4 w-4" /> },
+                { s: 2, label: 'Kỹ thuật', sub: `${project.systemSizeKWp} kWp`, icon: <Zap className="h-4 w-4" /> },
+                { s: 3, label: 'Tài chính', sub: `${project.paybackYears} năm`, icon: <Coins className="h-4 w-4" /> },
+                { s: 4, label: 'Văn bản', sub: 'Proposal', icon: <FileText className="h-4 w-4" /> },
               ].map(item => (
                 <button
                   key={item.s}
                   onClick={() => setStep(item.s)}
                   className={cn(
-                    "w-full text-left px-4 py-3 rounded-md transition-all text-sm",
-                    step === item.s ? "bg-slate-800 text-white shadow-md" : "bg-slate-50 text-slate-500 hover:bg-slate-100"
+                    "w-full group flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300",
+                    step === item.s 
+                      ? "bg-slate-900 text-white shadow-2xl shadow-slate-200" 
+                      : "bg-transparent text-slate-500 hover:bg-slate-50 border border-transparent hover:border-slate-100"
                   )}
                 >
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-[9px] font-bold opacity-60 uppercase tracking-tighter">BƯỚC 0{item.s}</span>
-                    {step > item.s && <ShieldCheck className="h-3 w-3 text-green-500" />}
+                  <div className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center transition-colors",
+                    step === item.s ? "bg-white/10" : "bg-slate-100 group-hover:bg-white"
+                  )}>
+                    {item.icon}
                   </div>
-                  <div className="font-bold truncate">{item.label}</div>
+                  <div className="text-left">
+                    <p className="text-[10px] font-black uppercase tracking-widest leading-none mb-1">{item.label}</p>
+                    <p className={cn("text-[9px] font-bold uppercase tracking-tighter opacity-40 truncate max-w-[100px]", step === item.s && "opacity-60")}>
+                        {item.sub}
+                    </p>
+                  </div>
                 </button>
               ))}
             </div>
-            
-            <div className="mt-8 pt-6 border-t border-slate-100 space-y-3">
-              {step < 4 ? (
-                <button 
-                  onClick={() => setStep(prev => prev + 1)}
-                  className="w-full py-3 bg-blue-600 text-white rounded-md font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all active:scale-95 shadow-md"
-                >
-                  Giai đoạn tiếp theo <ChevronRight className="h-4 w-4" />
-                </button>
-              ) : (
-                <button 
-                  onClick={() => {
-                    window.focus();
-                    window.print();
-                  }}
-                  className="w-full py-3 bg-slate-900 text-white rounded-md font-bold text-sm flex items-center justify-center gap-2 hover:bg-black transition-all active:scale-95 shadow-md shadow-slate-200"
-                >
-                  <FileText className="h-4 w-4 text-amber-400" /> In Proposal (PDF)
-                </button>
-              )}
+
+            <div className="mt-10 pt-10 border-t border-slate-50">
+               <div className="flex items-center gap-4 opacity-40 grayscale group hover:grayscale-0 hover:opacity-100 transition-all cursor-default">
+                  <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center">
+                    <ShieldCheck className="h-5 w-5 text-slate-600" />
+                  </div>
+                  <p className="text-[8px] font-black uppercase tracking-widest leading-tight">
+                    Powered by<br/><span className="text-[10px] text-blue-600">SE-CRM Engine</span>
+                  </p>
+               </div>
             </div>
           </div>
         </div>

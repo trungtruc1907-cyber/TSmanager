@@ -13,6 +13,7 @@ import {
   UserCheck
 } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
+import { motion } from 'motion/react';
 
 interface Props {
   onOpenProject: (id: string) => void;
@@ -74,16 +75,30 @@ export default function ProjectDashboard({ onOpenProject, showAll }: Props) {
   const totalValue = projects.reduce((acc, p) => acc + (p.totalCost || 0), 0);
 
   return (
-    <div className="space-y-8">
-      {/* Stats Overview */}
+    <div className="space-y-8 pb-10">
+      {/* Page Header */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Bảng Điều Khiển</h2>
+          <p className="text-[11px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1">Hệ thống phân tích dữ liệu Solar</p>
+        </div>
+        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+           <Clock className="h-3.5 w-3.5" />
+           Cập nhật: {new Date().toLocaleTimeString('vi-VN')}
+        </div>
+      </div>
+
+      {/* Stats Overview - Premium Bento Design */}
       {!showAll && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
           <StatCard 
             label="Tổng công suất" 
             value={`${totalCapacity.toFixed(1)} kWp`} 
             icon={<Sun className="h-5 w-5" />}
             color="bg-slate-900 border-slate-800"
-            textColor="text-amber-400"
+            textColor="text-white"
+            iconColor="text-amber-400"
+            trend="+12% tháng này"
           />
           <StatCard 
             label="Giá trị dự án" 
@@ -91,89 +106,107 @@ export default function ProjectDashboard({ onOpenProject, showAll }: Props) {
             icon={<TrendingUp className="h-5 w-5" />}
             color="bg-white border-slate-200"
             textColor="text-slate-900"
+            iconColor="text-blue-600"
+            trend="Đã chốt {projects.filter(p => p.status === 'contract').length} HĐ"
           />
           <StatCard 
-            label="Hoàn vốn trung bình" 
-            value="4.5 năm" 
+            label="Thời gian hoàn vốn" 
+            value="~ 4.5 Năm" 
             icon={<Wallet className="h-5 w-5" />}
             color="bg-white border-slate-200"
             textColor="text-slate-900"
+            iconColor="text-green-600"
+            trend="Hiệu suất cao"
           />
           <StatCard 
-            label="Dự án đang chạy" 
+            label="Dự án thực hiện" 
             value={projects.length.toString()} 
-            icon={<Clock className="h-5 w-5" />}
+            icon={<CheckCircle2 className="h-5 w-5" />}
             color="bg-white border-slate-200"
             textColor="text-slate-900"
+            iconColor="text-indigo-600"
+            trend="Đang triển khai"
           />
         </div>
       )}
 
-      {/* Projects List */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="font-bold text-xs uppercase tracking-widest text-slate-400">
-            {showAll ? 'Danh sách Toàn bộ Dự án' : 'Dự án Gần đây'}
-          </h3>
-          <button className="text-blue-600 text-[10px] uppercase font-bold tracking-wider hover:underline">
-            Tất cả báo cáo
-          </button>
+      {/* Projects Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between px-2">
+            <div className="flex items-center gap-2">
+              <div className="w-1 h-4 bg-red-600 rounded-full" />
+              <h3 className="font-black text-xs uppercase tracking-widest text-slate-900">
+                {showAll ? 'Tất cả dự án hiện có' : 'Dự án mới cập nhật'}
+              </h3>
+            </div>
+            <button className="text-blue-600 text-[10px] uppercase font-black tracking-widest border-b-2 border-transparent hover:border-blue-600 transition-all">
+              Xuất báo cáo PDF
+            </button>
         </div>
         
-        <div className="hidden md:block overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden md:block bg-white rounded-3xl border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-slate-50/50 text-slate-500 text-[10px] uppercase tracking-widest font-bold">
-                <th className="px-6 py-3">Khách hàng / Địa điểm</th>
-                <th className="px-6 py-3">Sale phụ trách</th>
-                <th className="px-6 py-3">Trạng thái</th>
-                <th className="px-6 py-3">Hệ thống</th>
-                <th className="px-6 py-3">Giá trị</th>
-                <th className="px-6 py-3 text-right">Hành động</th>
+              <tr className="bg-slate-50/50 text-slate-400 text-[10px] uppercase tracking-[0.2em] font-black border-b border-slate-100">
+                <th className="px-8 py-5">Chủ đầu tư / Khu vực</th>
+                <th className="px-8 py-5">Tư vấn viên</th>
+                <th className="px-8 py-5">Quy trình</th>
+                <th className="px-8 py-5">Cấu hình</th>
+                <th className="px-8 py-5">Vốn đầu tư</th>
+                <th className="px-8 py-5 text-right">Tác vụ</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-50">
               {projects.map((project) => {
                 const customer = customers[project.customerId];
                 const status = getStatusInfo(project.status);
                 const salesRep = salesStaff.find(s => s.id === project.assignedSalesId || s.id === customer?.assignedSalesId);
+                const StatusIcon = status.icon;
                 return (
-                  <tr key={project.id} className="hover:bg-slate-50/50 transition-colors group">
-                    <td className="px-6 py-4">
+                  <tr key={project.id} className="hover:bg-slate-50/50 transition-all group">
+                    <td className="px-8 py-6">
                       <div>
-                        <div className="font-bold text-sm text-slate-800">{customer?.name || 'Ẩn danh'}</div>
-                        <div className="text-[11px] text-slate-400 font-medium">{customer?.address || 'Chưa có địa chỉ'}</div>
+                        <div className="font-black text-sm text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight">{customer?.name || 'KH VÃNG LAI'}</div>
+                        <div className="text-[11px] text-slate-400 font-bold uppercase tracking-tighter flex items-center gap-1 mt-0.5">
+                           <ArrowUpRight className="h-3 w-3" />
+                           {customer?.address || 'Khu vực chưa xác định'}
+                        </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-8 py-6">
                       {salesRep ? (
-                        <div className="flex items-center gap-2 text-blue-600">
-                          <UserCheck className="h-3.5 w-3.5" />
-                          <span className="text-[10px] font-bold uppercase">{salesRep.name}</span>
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center text-[10px] font-black text-blue-600 border border-blue-100">
+                            {salesRep.name[0]}
+                          </div>
+                          <span className="text-[11px] font-black text-slate-700 uppercase">{salesRep.name}</span>
                         </div>
                       ) : (
-                        <span className="text-[10px] text-slate-300 font-bold uppercase tracking-wider italic">Chưa bàn giao</span>
+                        <span className="text-[10px] text-slate-300 font-black uppercase italic tracking-widest bg-slate-50 px-2 py-1 rounded-md">Pending</span>
                       )}
                     </td>
-                    <td className="px-6 py-4">
-                      <span className={cn("px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider", status.color)}>
+                    <td className="px-8 py-6">
+                      <div className={cn("inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm border", status.color, status.color.replace('bg-', 'border-').replace('100', '200'))}>
+                        <StatusIcon className="h-3 w-3" />
                         {status.label}
-                      </span>
+                      </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-xs text-slate-700">{project.systemSizeKWp} kWp</div>
-                      <div className="text-[10px] text-slate-400 uppercase font-medium">{project.panels?.count || 0} PV Panels</div>
+                    <td className="px-8 py-6">
+                      <div className="font-black text-xs text-slate-900">{project.systemSizeKWp} kWp</div>
+                      <div className="text-[10px] text-slate-400 uppercase font-black tracking-tighter">{project.panels?.count || 0} Tấm Pin</div>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-sm text-slate-900">{formatCurrency(project.totalCost || 0)}</div>
-                      <div className="text-[10px] text-green-600 font-bold uppercase">ROI: 22.4%</div>
+                    <td className="px-8 py-6">
+                      <div className="font-black text-sm text-slate-900">{formatCurrency(project.totalCost || 0)}</div>
+                      <div className="text-[9px] text-green-600 font-black uppercase tracking-tighter">NPV Dương • 22.4%</div>
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-8 py-6 text-right">
                       <button 
                         onClick={() => onOpenProject(project.id)}
-                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-900 hover:text-white text-slate-600 text-[10px] font-bold uppercase rounded transition-all"
+                        className="p-2.5 bg-slate-900 text-white rounded-xl hover:bg-blue-600 transition-all shadow-lg active:scale-95"
+                        title="Xem chi tiết"
                       >
-                        Chi tiết
+                        <ArrowUpRight className="h-4 w-4" />
                       </button>
                     </td>
                   </tr>
@@ -181,8 +214,11 @@ export default function ProjectDashboard({ onOpenProject, showAll }: Props) {
               })}
               {projects.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400 text-xs font-medium italic">
-                    Chưa có dự án nào được tạo.
+                  <td colSpan={6} className="px-8 py-20 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                       <Clock className="h-10 w-10 text-slate-200" />
+                       <p className="text-slate-400 text-xs font-black uppercase tracking-[0.3em]">Hệ thống đang trống</p>
+                    </div>
                   </td>
                 </tr>
               )}
@@ -190,46 +226,76 @@ export default function ProjectDashboard({ onOpenProject, showAll }: Props) {
           </table>
         </div>
 
-        {/* Mobile View */}
-        <div className="md:hidden divide-y divide-slate-100">
+        {/* Professional Mobile Project Cards */}
+        <div className="md:hidden space-y-4">
           {projects.map((project) => {
             const customer = customers[project.customerId];
             const status = getStatusInfo(project.status);
+            const StatusIcon = status.icon;
             return (
-              <div key={project.id} className="p-4 space-y-3">
+              <motion.div 
+                whileTap={{ scale: 0.98 }}
+                key={project.id} 
+                onClick={() => onOpenProject(project.id)}
+                className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm active:shadow-inner transition-all space-y-4 relative overflow-hidden group"
+              >
                 <div className="flex justify-between items-start">
-                  <div>
-                    <div className="font-bold text-sm text-slate-800">{customer?.name || 'Ẩn danh'}</div>
-                    <div className="text-[10px] text-slate-400 font-medium">{customer?.address || 'Chưa địa chỉ'}</div>
+                  <div className="space-y-1">
+                    <div className="font-black text-sm text-slate-900 uppercase tracking-tight leading-tight">{customer?.name || 'KHÁCH VÃNG LAI'}</div>
+                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter flex items-center gap-1">
+                      <ArrowUpRight className="h-2.5 w-2.5" />
+                      {customer?.address || 'Khu vực chưa định vị'}
+                    </div>
                   </div>
-                  <span className={cn("px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider", status.color)}>
+                  <div className={cn("px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm", status.color)}>
+                    <StatusIcon className="h-2.5 w-2.5" />
                     {status.label}
-                  </span>
+                  </div>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-2 text-[11px]">
-                  <div className="bg-slate-50 p-2 rounded">
-                    <p className="text-slate-400 font-bold uppercase text-[8px] mb-1">Hệ thống</p>
-                    <p className="font-bold text-slate-800">{project.systemSizeKWp} kWp</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-50/80 p-3 rounded-2xl border border-slate-100 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-sm">
+                      <Sun className="h-4 w-4 text-amber-500" />
+                    </div>
+                    <div>
+                      <p className="text-slate-400 font-black uppercase text-[8px] tracking-tighter">Công suất</p>
+                      <p className="font-black text-xs text-slate-800 leading-none mt-0.5">{project.systemSizeKWp} kWp</p>
+                    </div>
                   </div>
-                  <div className="bg-slate-50 p-2 rounded">
-                    <p className="text-slate-400 font-bold uppercase text-[8px] mb-1">Giá trị</p>
-                    <p className="font-bold text-slate-800">{formatCurrency(project.totalCost || 0)}</p>
+                  <div className="bg-slate-50/80 p-3 rounded-2xl border border-slate-100 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-sm">
+                      <Wallet className="h-4 w-4 text-green-500" />
+                    </div>
+                    <div>
+                      <p className="text-slate-400 font-black uppercase text-[8px] tracking-tighter">Đầu tư</p>
+                      <p className="font-black text-xs text-slate-800 leading-none mt-0.5">{formatCurrency(project.totalCost || 0)}</p>
+                    </div>
                   </div>
                 </div>
 
-                <button 
-                  onClick={() => onOpenProject(project.id)}
-                  className="w-full py-2 bg-slate-900 text-white text-[10px] font-bold uppercase rounded-lg shadow-sm"
-                >
-                  Xem chi tiết Dự án
-                </button>
-              </div>
+                <div className="pt-2 flex items-center justify-between border-t border-slate-100">
+                   <div className="flex -space-x-2">
+                      {[1, 2].map(i => (
+                        <div key={i} className="w-6 h-6 rounded-full bg-slate-200 border-2 border-white flex items-center justify-center text-[8px] font-black text-slate-500 uppercase">
+                          {i === 1 ? 'S' : 'M'}
+                        </div>
+                      ))}
+                      <div className="w-6 h-6 rounded-full bg-slate-900 border-2 border-white flex items-center justify-center text-[7px] font-black text-white px-1">
+                        +2
+                      </div>
+                   </div>
+                   <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-1">
+                      Chi tiết <ArrowUpRight className="h-3 w-3" />
+                   </span>
+                </div>
+              </motion.div>
             );
           })}
           {projects.length === 0 && (
-            <div className="px-6 py-12 text-center text-slate-400 text-xs font-medium italic uppercase tracking-widest">
-              Không tìm thấy dự án
+            <div className="py-20 text-center space-y-2">
+               <Clock className="mx-auto h-8 w-8 text-slate-200" />
+               <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em]">Hệ thống rỗng</p>
             </div>
           )}
         </div>
@@ -238,15 +304,29 @@ export default function ProjectDashboard({ onOpenProject, showAll }: Props) {
   );
 }
 
-function StatCard({ label, value, icon, color, textColor }: { label: string, value: string, icon: React.ReactNode, color: string, textColor: string }) {
+function StatCard({ label, value, icon, color, textColor, iconColor, trend }: { label: string, value: string, icon: React.ReactNode, color: string, textColor: string, iconColor?: string, trend?: string }) {
   return (
-    <div className={cn("p-5 rounded-xl border shadow-sm", color)}>
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-[10px] font-bold uppercase tracking-widest opacity-60">{label}</span>
-        <div className={cn("opacity-40", textColor)}>{icon}</div>
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className={cn("p-6 rounded-[2rem] border shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group", color)}
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className={cn("p-3 rounded-2xl bg-slate-50/10 backdrop-blur-md shadow-sm border border-white/5 transition-transform group-hover:scale-110", iconColor || textColor)}>
+           {icon}
+        </div>
+        {trend && (
+           <span className="text-[8px] font-black uppercase tracking-widest opacity-40 px-2 py-0.5 bg-slate-500/10 rounded-full">{trend}</span>
+        )}
       </div>
-      <div className={cn("text-xl font-black tracking-tight", textColor)}>{value}</div>
-    </div>
+      <div className="space-y-0.5">
+        <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40">{label}</span>
+        <div className={cn("text-2xl font-black tracking-tight", textColor)}>{value}</div>
+      </div>
+      
+      {/* Abstract Design Element */}
+      <div className="absolute -right-4 -bottom-4 w-20 h-20 bg-white/5 rounded-full blur-2xl group-hover:bg-white/10 transition-colors" />
+    </motion.div>
   );
 }
 
