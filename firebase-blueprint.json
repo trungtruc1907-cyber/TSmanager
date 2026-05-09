@@ -1,0 +1,103 @@
+{
+  "entities": {
+    "Customer": {
+      "title": "Customer",
+      "description": "Customer lead or existing client information.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "address": { "type": "string" },
+        "usageType": { "type": "string", "enum": ["residential", "commercial", "industrial"] },
+        "phaseType": { "type": "string", "enum": ["1phase", "3phase"] },
+        "assignedSalesId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "phone"]
+    },
+    "SalesPerson": {
+      "title": "Sales Person",
+      "description": "Company sales staff member.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string", "enum": ["sales_rep", "sales_manager"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email"]
+    },
+    "Equipment": {
+      "title": "Equipment",
+      "description": "Solar panels, inverters, and branding information.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["panel", "inverter", "battery", "mounting", "accessory", "other"] },
+        "brand": { "type": "string" },
+        "model": { "type": "string" },
+        "capacity": { "type": "number", "description": "Wattage for panels, kW for inverters" },
+        "unitPrice": { "type": "number" },
+        "specifications": { "type": "object" }
+      },
+      "required": ["type", "brand", "model", "unitPrice"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "A solar project containing configuration, financial analysis, and status.",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "status": { "type": "string", "enum": ["lead", "survey", "proposal", "contract", "installation", "completed"] },
+        "monthlyBill": { "type": "number", "description": "Average monthly electricity bill in VND" },
+        "systemSizeKWp": { "type": "number" },
+        "assignedSalesId": { "type": "string" },
+        "panels": { "type": "object", "properties": { "equipmentId": { "type": "string" }, "count": { "type": "number" } } },
+        "inverters": { "type": "object", "properties": { "equipmentId": { "type": "string" }, "count": { "type": "number" } } },
+        "batteries": { "type": "object", "properties": { "equipmentId": { "type": "string" }, "count": { "type": "number" } } },
+        "totalCost": { "type": "number" },
+        "annualProduction": { "type": "number", "description": "Estimated kWh per year" },
+        "paybackYears": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customerId", "status"]
+    },
+    "SalesTask": {
+      "title": "Sales Task",
+      "description": "Activities assigned to sales staff for a project.",
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "assignedSalesId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "completed"] }
+      },
+      "required": ["projectId", "title"]
+    }
+  },
+  "firestore": {
+    "customers": {
+      "schema": "Customer",
+      "description": "Collection of customer leads."
+    },
+    "equipment": {
+      "schema": "Equipment",
+      "description": "Catalog of available solar equipment."
+    },
+    "projects": {
+      "schema": "Project",
+      "description": "Collection of solar installation projects."
+    },
+    "sales": {
+      "schema": "SalesPerson",
+      "description": "Company sales staff."
+    },
+    "salesTasks": {
+      "schema": "SalesTask",
+      "description": "Tasks for sales staff."
+    }
+  }
+}

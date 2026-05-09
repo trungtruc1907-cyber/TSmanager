@@ -1,0 +1,106 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // --- HELPERS ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function incoming() {
+      return request.resource.data;
+    }
+    
+    function existing() {
+      return resource.data;
+    }
+    
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // --- VALIDATION BLUEPRINTS ---
+    
+    function isValidCustomer(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 200
+          && data.phone is string && data.phone.size() >= 10 && data.phone.size() <= 20
+          && (!('usageType' in data) || data.usageType in ['residential', 'commercial', 'industrial'])
+          && (!('phaseType' in data) || data.phaseType in ['1phase', '3phase'])
+          && (!('email' in data) || data.email is string)
+          && (!('assignedSalesId' in data) || isValidId(data.assignedSalesId));
+    }
+
+    function isValidEquipment(data) {
+      return data.brand is string && data.brand.size() > 0
+          && data.model is string && data.model.size() > 0
+          && data.type in ['panel', 'inverter', 'battery', 'mounting', 'accessory', 'other']
+          && data.unitPrice is number && data.unitPrice >= 0;
+    }
+
+    function isValidProject(data) {
+      return isValidId(data.customerId)
+          && data.status in ['lead', 'survey', 'proposal', 'contract', 'installation', 'completed']
+          && data.systemSizeKWp is number
+          && (!('assignedSalesId' in data) || isValidId(data.assignedSalesId))
+          && (!('totalCost' in data) || data.totalCost is number)
+          && (!('annualProduction' in data) || data.annualProduction is number)
+          && (!('paybackYears' in data) || data.paybackYears is number)
+          && (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function isValidSalesPerson(data) {
+      return data.name is string && data.name.size() > 0
+          && data.email is string && data.email.size() > 0
+          && data.role in ['sales_rep', 'sales_manager']
+          && (!('phone' in data) || data.phone is string);
+    }
+
+    function isValidSalesTask(data) {
+      return isValidId(data.projectId)
+          && data.title is string && data.title.size() > 0
+          && data.status in ['pending', 'completed']
+          && (!('description' in data) || data.description is string)
+          && (!('assignedSalesId' in data) || isValidId(data.assignedSalesId));
+    }
+
+    // --- RULES ---
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    match /customers/{customerId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidCustomer(incoming());
+      allow update: if isSignedIn() && isValidCustomer(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    match /equipment/{equipmentId} {
+      allow read: if true; // Catalog open to view
+      allow write: if isSignedIn() && isValidEquipment(incoming());
+    }
+
+    match /projects/{projectId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidProject(incoming());
+      allow update: if isSignedIn() && isValidProject(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    match /sales/{salesId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidSalesPerson(incoming());
+      allow update: if isSignedIn() && isValidSalesPerson(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    match /salesTasks/{taskId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidSalesTask(incoming());
+      allow update: if isSignedIn() && isValidSalesTask(incoming());
+      allow delete: if isSignedIn();
+    }
+  }
+}
