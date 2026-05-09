@@ -1,12 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, onSnapshot, query, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Customer, SalesPerson } from '../types';
-import { UserPlus, Search, Phone, Mail, MapPin, Calendar, UserCheck } from 'lucide-react';
+import { 
+  collection, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  addDoc, 
+  serverTimestamp,
+  where,
+  getDocs,
+  limit
+} from 'firebase/firestore';
+import { Project, Customer, SalesPerson } from '../types';
+import { UserPlus, Search, Phone, Mail, MapPin, Calendar, UserCheck, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 
-export default function CustomerList() {
+interface CustomerListProps {
+  onViewProject: (customerId: string) => void;
+}
+
+export default function CustomerList({ onViewProject }: CustomerListProps) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [salesStaff, setSalesStaff] = useState<SalesPerson[]>([]);
   const [search, setSearch] = useState('');
@@ -151,7 +165,10 @@ export default function CustomerList() {
             </div>
 
             <div className="mt-6 pt-4 border-t border-slate-50 flex gap-2">
-              <button className="flex-1 text-[11px] font-bold text-blue-600 hover:bg-blue-50 py-2 rounded transition-colors uppercase tracking-wider">
+              <button 
+                onClick={() => onViewProject(c.id)}
+                className="flex-1 text-[11px] font-bold text-blue-600 hover:bg-blue-50 py-2 rounded transition-colors uppercase tracking-wider"
+              >
                 Hồ sơ
               </button>
               <button className="flex-1 text-[11px] font-bold text-slate-600 hover:bg-slate-50 py-2 rounded transition-colors uppercase tracking-wider">
@@ -269,8 +286,4 @@ export default function CustomerList() {
       )}
     </div>
   );
-}
-
-function X({ className }: { className?: string }) {
-    return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
 }

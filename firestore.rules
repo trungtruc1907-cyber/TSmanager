@@ -63,11 +63,32 @@ service cloud.firestore {
           && (!('assignedSalesId' in data) || isValidId(data.assignedSalesId));
     }
 
+    function isValidUser(data) {
+      return data.username is string && data.username.size() > 0
+          && data.email is string && data.email.size() > 0
+          && data.role in ['admin', 'manager', 'sales_rep']
+          && data.status in ['active', 'inactive']
+          && (!('displayName' in data) || data.displayName is string);
+    }
+
+    function isAdmin() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     // --- RULES ---
 
     // Default deny
     match /{document=**} {
       allow read, write: if false;
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(incoming());
+      allow update: if isSignedIn() && (
+        (request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['lastLogin', 'displayName', 'username', 'updatedAt'])) ||
+        isAdmin()
+      ) && isValidUser(incoming());
     }
 
     match /customers/{customerId} {

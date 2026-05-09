@@ -76,6 +76,21 @@
         "status": { "type": "string", "enum": ["pending", "completed"] }
       },
       "required": ["projectId", "title"]
+    },
+    "AppUser": {
+      "title": "App User",
+      "description": "User profile with role and status.",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "manager", "sales_rep"] },
+        "displayName": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastLogin": { "type": "string", "format": "date-time" }
+      },
+      "required": ["username", "email", "role", "status"]
     }
   },
   "firestore": {
@@ -98,6 +113,10 @@
     "salesTasks": {
       "schema": "SalesTask",
       "description": "Tasks for sales staff."
+    },
+    "users": {
+        "schema": "AppUser",
+        "description": "Application user profiles and permissions."
     }
   }
 }

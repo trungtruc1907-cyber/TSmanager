@@ -15,10 +15,11 @@ import {
   Menu, 
   X,
   LayoutDashboard,
-  LogOut
+  LogOut,
+  UserCog
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { db, auth } from './lib/firebase';
+import { db, auth, handleFirestoreError, OperationType } from './lib/firebase';
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
@@ -28,7 +29,9 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword
 } from 'firebase/auth';
+import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { cn } from './lib/utils';
+import { UserRole } from './types';
 
 // Components
 import CustomerList from './components/CustomerList';
@@ -36,8 +39,9 @@ import ProjectDashboard from './components/ProjectDashboard';
 import CatalogManager from './components/CatalogManager';
 import ProjectEditor from './components/ProjectEditor';
 import SalesManagement from './components/SalesManagement';
+import UserManagement from './components/UserManagement';
 
-type View = 'dashboard' | 'customers' | 'projects' | 'catalog' | 'sales' | 'editor';
+type View = 'dashboard' | 'customers' | 'projects' | 'catalog' | 'sales' | 'editor' | 'users';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -46,6 +50,8 @@ export default function App() {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [targetCustomerId, setTargetCustomerId] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<UserRole>('sales_rep');
 
   // Username/Password state
   const [username, setUsername] = useState('');
@@ -54,10 +60,40 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
-    return onAuthStateChanged(auth, (u) => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       setAuthLoading(false);
+      
+      if (u) {
+        try {
+          const userRef = doc(db, 'users', u.uid);
+          const userDoc = await getDoc(userRef);
+          
+          if (!userDoc.exists()) {
+            const username = u.email?.split('@')[0] || 'unknown';
+            const role: UserRole = username === 'mrhieu' ? 'admin' : 'sales_rep';
+            
+            await setDoc(userRef, {
+              username,
+              email: u.email,
+              role,
+              displayName: username.toUpperCase(),
+              createdAt: serverTimestamp(),
+              lastLogin: serverTimestamp(),
+              status: 'active'
+            });
+            setUserRole(role);
+          } else {
+            const data = userDoc.data();
+            setUserRole(data.role || 'sales_rep');
+            await setDoc(userRef, { lastLogin: serverTimestamp() }, { merge: true });
+          }
+        } catch (error) {
+          console.error("User sync error:", error);
+        }
+      }
     });
+    return () => unsub();
   }, []);
 
   useEffect(() => {
@@ -217,11 +253,36 @@ export default function App() {
     { id: 'projects', label: 'Công trình', icon: Sun },
     { id: 'sales', label: 'Quản lý Sale', icon: ClipboardList },
     { id: 'catalog', label: 'Danh mục TB', icon: Settings },
+    ...(userRole === 'admin' ? [{ id: 'users', label: 'Quản lý User', icon: UserCog }] : []),
   ];
 
   const handleOpenProject = (id: string) => {
     setSelectedProjectId(id);
     setActiveView('editor');
+  };
+
+  const handleViewCustomerProject = async (customerId: string) => {
+    try {
+      const q = query(
+        collection(db, 'projects'), 
+        where('customerId', '==', customerId),
+        limit(1)
+      );
+      const snapshot = await getDocs(q);
+      
+      if (!snapshot.empty) {
+        // Open existing project
+        setTargetCustomerId(null);
+        handleOpenProject(snapshot.docs[0].id);
+      } else {
+        setTargetCustomerId(customerId);
+        setSelectedProjectId(null);
+        setActiveView('editor');
+      }
+    } catch (error) {
+      console.error("Error finding customer project:", error);
+      setActiveView('projects');
+    }
   };
 
   return (
@@ -380,14 +441,19 @@ export default function App() {
               className="min-h-full"
             >
               {activeView === 'dashboard' && <ProjectDashboard onOpenProject={handleOpenProject} />}
-              {activeView === 'customers' && <CustomerList />}
+              {activeView === 'customers' && <CustomerList onViewProject={handleViewCustomerProject} />}
               {activeView === 'projects' && <ProjectDashboard onOpenProject={handleOpenProject} showAll />}
               {activeView === 'catalog' && <CatalogManager />}
               {activeView === 'sales' && <SalesManagement />}
+              {activeView === 'users' && <UserManagement />}
               {activeView === 'editor' && (
                 <ProjectEditor 
                   projectId={selectedProjectId} 
-                  onClose={() => setActiveView('dashboard')} 
+                  initialCustomerId={targetCustomerId}
+                  onClose={() => {
+                    setActiveView('dashboard');
+                    setTargetCustomerId(null);
+                  }} 
                 />
               )}
             </motion.div>

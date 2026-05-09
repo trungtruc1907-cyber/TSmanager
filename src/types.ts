@@ -57,6 +57,19 @@ export interface Project {
   updatedAt: any;
 }
 
+export type UserRole = 'admin' | 'sales_rep' | 'manager';
+
+export interface AppUser {
+  id: string;
+  username: string;
+  email: string;
+  role: UserRole;
+  displayName: string;
+  createdAt: any;
+  lastLogin?: any;
+  status: 'active' | 'inactive';
+}
+
 export interface SalesTask {
   id: string;
   projectId: string;

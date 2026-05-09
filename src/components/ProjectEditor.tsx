@@ -15,7 +15,8 @@ import {
   Plus,
   Minus,
   Clock,
-  UserCheck
+  UserCheck,
+  Calendar
 } from 'lucide-react';
 import { cn, formatCurrency, estimateSystemSize, calculateSolarProduction, getAverageElectricityPrice } from '../lib/utils';
 import { 
@@ -31,10 +32,11 @@ import {
 
 interface Props {
   projectId: string | null;
+  initialCustomerId?: string | null;
   onClose: () => void;
 }
 
-export default function ProjectEditor({ projectId, onClose }: Props) {
+export default function ProjectEditor({ projectId, initialCustomerId, onClose }: Props) {
   const [step, setStep] = useState(1);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [catalog, setCatalog] = useState<Equipment[]>([]);
@@ -44,6 +46,7 @@ export default function ProjectEditor({ projectId, onClose }: Props) {
   // Form State
   const [project, setProject] = useState<Partial<Project>>({
     status: 'lead',
+    customerId: initialCustomerId || '',
     monthlyBill: 0,
     systemSizeKWp: 0,
     panels: { equipmentId: '', count: 0 },
@@ -434,111 +437,225 @@ export default function ProjectEditor({ projectId, onClose }: Props) {
           {step === 4 && (
             <div className="proposal-container bg-white rounded-xl shadow-2xl p-0 overflow-hidden animate-in fade-in zoom-in duration-500 border border-slate-200">
                {/* Proposal Header */}
-               <div className="bg-slate-900 p-4 md:p-8 text-white flex flex-col md:flex-row justify-between items-start gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 md:w-12 md:h-12 bg-white rounded-xl flex flex-col items-center justify-center shadow-lg border border-blue-500/30 shrink-0">
-                        <span className="text-lg md:text-xl font-black text-red-600 leading-none">TS</span>
-                        <span className="text-[4px] md:text-[5px] font-bold text-blue-600 uppercase tracking-tighter">TRƯỜNG SƠN</span>
+               <div className="bg-slate-900 md:p-12 p-6 text-white relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl -mr-32 -mt-32" />
+                  <div className="relative z-10 flex flex-col md:flex-row justify-between items-start gap-8">
+                    <div className="flex items-center gap-6">
+                      <div className="w-16 h-16 bg-white rounded-2xl flex flex-col items-center justify-center shadow-2xl border-b-4 border-red-600 shrink-0">
+                          <span className="text-2xl font-black text-red-600 leading-none">TS</span>
+                          <span className="text-[6px] font-bold text-blue-600 uppercase tracking-tighter">TRƯỜNG SƠN</span>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-black text-white tracking-tighter mb-1 uppercase">TRƯỜNG SƠN SOLAR</div>
+                        <div className="flex items-center gap-2">
+                            <span className="h-px w-8 bg-blue-500" />
+                            <p className="text-blue-400 text-[10px] uppercase tracking-[0.2em] font-bold">Proposal No: #TS-{Math.random().toString(36).substring(7).toUpperCase()}</p>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-lg md:text-xl font-black text-white tracking-tight">TRUONGSONSOLAR</div>
-                      <p className="text-blue-400 text-[9px] md:text-[10px] uppercase tracking-widest font-bold">Proposal: #TS-{Math.random().toString(36).substring(7).toUpperCase()}</p>
+                    <div className="text-left md:text-right space-y-1">
+                      <p className="text-xs font-black uppercase tracking-widest text-white">CÔNG TY ĐIỆN MẶT TRỜI TRƯỜNG SƠN</p>
+                      <p className="text-[10px] text-slate-400 font-medium">Bình Dương | TP. Hồ Chí Minh | Đồng Nai</p>
+                      <p className="text-[10px] text-blue-400 font-bold">Hotline: 09xx xxx xxx • truongsonsolar.vn</p>
                     </div>
-                  </div>
-                  <div className="text-left md:text-right">
-                    <p className="text-[10px] md:text-xs font-bold uppercase tracking-wide">TRƯỜNG SƠN SOLAR</p>
-                    <p className="text-[9px] md:text-[10px] text-slate-400">truongsonsolar.vn</p>
                   </div>
                </div>
 
-               <div className="p-4 md:p-8">
-                  <div className="mb-6 md:mb-8">
-                    <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight uppercase border-b-4 border-blue-600 inline-block pb-2 mb-4">Báo giá Dự án</h2>
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-2 text-wrap break-words overflow-hidden">
-                        <div>
-                            <p className="text-[10px] md:text-xs text-slate-500 font-semibold uppercase">Khách hàng</p>
-                            <p className="text-base md:text-lg font-bold text-slate-800">{currentCustomer?.name}</p>
-                            <p className="text-[10px] md:text-[11px] text-slate-500">{currentCustomer?.address}</p>
-                        </div>
-                        <div className="text-left md:text-right shrink-0">
-                            <p className="text-[10px] md:text-xs text-slate-500 font-semibold uppercase">Ngày báo giá</p>
-                            <p className="text-xs md:text-sm font-bold text-slate-800">{new Date().toLocaleDateString('vi-VN')}</p>
-                        </div>
-                    </div>
+               <div className="p-6 md:p-12">
+                  {/* Customer Block */}
+                  <div className="flex flex-col md:flex-row justify-between gap-8 mb-12 border-b border-slate-100 pb-8">
+                      <div>
+                          <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4">THÔNG TIN KHÁCH HÀNG</h3>
+                          <p className="text-2xl font-black text-slate-900 tracking-tight mb-2 uppercase">{currentCustomer?.name}</p>
+                          <div className="space-y-1 text-slate-500">
+                             <div className="flex items-center gap-2 text-xs">
+                                <span className="w-4 h-4 rounded-full bg-slate-100 flex items-center justify-center text-[8px] text-slate-400">🏠</span>
+                                <span>{currentCustomer?.address}</span>
+                             </div>
+                             <div className="flex items-center gap-2 text-xs">
+                                <span className="w-4 h-4 rounded-full bg-slate-100 flex items-center justify-center text-[8px] text-slate-400">📞</span>
+                                <span>{currentCustomer?.phone}</span>
+                             </div>
+                          </div>
+                      </div>
+                      <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 md:w-64">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase mb-4">Ngày ban hành</p>
+                          <div className="flex items-center gap-3">
+                              <Calendar className="h-4 w-4 text-blue-600" />
+                              <span className="text-sm font-black text-slate-800">{new Date().toLocaleDateString('vi-VN')}</span>
+                          </div>
+                      </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 mb-8 md:mb-10">
-                    <div className="space-y-4">
-                        <h4 className="text-[10px] md:text-[11px] font-bold text-red-600 uppercase tracking-wider mb-2">Cấu hình Hệ thống</h4>
-                        <div className="space-y-2 md:space-y-3 font-medium">
-                            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                <div className="text-lg">☀️</div>
-                                <div>
-                                    <p className="text-[10px] font-bold text-slate-800 uppercase leading-none mb-1">Tấm pin PV</p>
-                                    <p className="text-[10px] md:text-[11px] text-slate-500 leading-tight">
-                                      {project.panels?.count}x {catalog.find(e => e.id === project.panels?.equipmentId)?.brand || 'N/A'} {catalog.find(e => e.id === project.panels?.equipmentId)?.model || ''}
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                <div className="text-lg">⚡</div>
-                                <div>
-                                    <p className="text-[10px] font-bold text-slate-800 uppercase leading-none mb-1">Inverter</p>
-                                    <p className="text-[10px] md:text-[11px] text-slate-500 leading-tight">
-                                      {catalog.find(e => e.id === project.inverters?.equipmentId)?.brand || 'N/A'} {catalog.find(e => e.id === project.inverters?.equipmentId)?.model || ''}
-                                    </p>
-                                </div>
-                            </div>
-                            {project.batteries?.equipmentId && (
-                                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100 transition-all font-medium">
-                                    <div className="text-lg">🔋</div>
-                                    <div>
-                                        <p className="text-[10px] font-bold text-slate-800 uppercase leading-none mb-1">Pin lưu trữ</p>
-                                        <p className="text-[10px] md:text-[11px] text-slate-500 leading-tight">
-                                          {project.batteries.count}x {catalog.find(e => e.id === project.batteries?.equipmentId)?.brand || 'N/A'} {catalog.find(e => e.id === project.batteries?.equipmentId)?.model || ''}
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
+                  {/* Section 1: Needs */}
+                  <section className="mb-12">
+                    <h2 className="flex items-center gap-3 text-sm font-black text-slate-900 uppercase tracking-widest mb-6">
+                        <span className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center text-[10px]">I</span>
+                        Hiện trạng & Nhu cầu Năng lượng
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="p-4 bg-white border border-slate-200 rounded-xl">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Loại hình sử dụng</p>
+                            <p className="font-black text-slate-800 uppercase">
+                                {currentCustomer?.usageType === 'residential' ? 'Sinh hoạt' : 
+                                 currentCustomer?.usageType === 'commercial' ? 'Kinh doanh' : 'Sản xuất'}
+                            </p>
+                        </div>
+                        <div className="p-4 bg-white border border-slate-200 rounded-xl">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Chi phí điện tb/tháng</p>
+                            <p className="font-black text-slate-800">{formatCurrency(project.monthlyBill || 0)}</p>
+                        </div>
+                        <div className="p-4 bg-white border border-slate-200 rounded-xl">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Hệ thống khuyến nghị</p>
+                            <p className="font-black text-blue-600">{project.systemSizeKWp} kWp</p>
                         </div>
                     </div>
+                  </section>
 
-                    <div className="space-y-4">
-                        <h4 className="text-[10px] md:text-[11px] font-bold text-red-600 uppercase tracking-wider mb-2">Hiệu quả vận hành</h4>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
-                                <p className="text-[8px] md:text-[9px] font-bold text-blue-600 uppercase">Công suất</p>
-                                <p className="text-base md:text-lg font-black text-blue-800">{project.systemSizeKWp} kWp</p>
-                            </div>
-                            <div className="p-3 bg-green-50 border border-green-100 rounded-lg">
-                                <p className="text-[8px] md:text-[9px] font-bold text-green-600 uppercase">Tiết kiệm/Năm</p>
-                                <p className="text-[11px] md:text-sm font-black text-green-800">{formatCurrency((project.annualProduction || 0) * getAverageElectricityPrice(project.monthlyBill || 0, currentCustomer?.usageType))}</p>
-                            </div>
-                        </div>
-                        <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg flex items-center justify-between">
-                            <div>
-                                <p className="text-[8px] md:text-[9px] font-bold text-blue-600 uppercase">Hoàn vốn</p>
-                                <p className="text-base md:text-lg font-black text-blue-800">{project.paybackYears} Năm</p>
-                            </div>
-                            <Clock className="text-blue-500 h-5 w-5 md:h-6 md:w-6 opacity-40 shrink-0" />
+                  {/* Section 2: Technical Detail */}
+                  <section className="mb-12">
+                    <h2 className="flex items-center gap-3 text-sm font-black text-slate-900 uppercase tracking-widest mb-6">
+                        <span className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center text-[10px]">II</span>
+                        Cấu hình Kỹ thuật & Báo giá Chi tiết
+                    </h2>
+                    <div className="overflow-hidden border border-slate-100 rounded-2xl shadow-sm">
+                        <table className="w-full text-sm">
+                            <thead className="bg-slate-900 text-white text-[10px] uppercase font-bold tracking-widest">
+                                <tr>
+                                    <th className="px-6 py-4 text-left">Hạng mục Thiết bị</th>
+                                    <th className="px-4 py-4 text-center">Số lượng</th>
+                                    <th className="px-6 py-4 text-right">Đơn giá</th>
+                                    <th className="px-6 py-4 text-right">Thành tiền</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {/* Panels */}
+                                {(() => {
+                                    const p = catalog.find(e => e.id === project.panels?.equipmentId);
+                                    if (!p) return null;
+                                    return (
+                                        <tr className="hover:bg-slate-50/50 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <p className="font-black text-slate-800 uppercase text-[11px]">Tấm pin năng lượng mặt trời</p>
+                                                <p className="text-[11px] text-slate-500">{p.brand} {p.model} - {p.capacity}Wp</p>
+                                            </td>
+                                            <td className="px-4 py-4 text-center font-bold text-slate-700">{project.panels?.count}</td>
+                                            <td className="px-6 py-4 text-right text-slate-500">{formatCurrency(p.unitPrice)}</td>
+                                            <td className="px-6 py-4 text-right font-black text-slate-900">{formatCurrency((project.panels?.count || 0) * p.unitPrice)}</td>
+                                        </tr>
+                                    );
+                                })()}
+                                {/* Inverters */}
+                                {(() => {
+                                    const inv = catalog.find(e => e.id === project.inverters?.equipmentId);
+                                    if (!inv) return null;
+                                    return (
+                                        <tr className="hover:bg-slate-50/50 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <p className="font-black text-slate-800 uppercase text-[11px] font-bold">Biến tần (Inverter)</p>
+                                                <p className="text-[11px] text-slate-500">{inv.brand} {inv.model} - {inv.capacity}kW</p>
+                                            </td>
+                                            <td className="px-4 py-4 text-center font-bold text-slate-700">{project.inverters?.count}</td>
+                                            <td className="px-6 py-4 text-right text-slate-500">{formatCurrency(inv.unitPrice)}</td>
+                                            <td className="px-6 py-4 text-right font-black text-slate-900">{formatCurrency((project.inverters?.count || 0) * inv.unitPrice)}</td>
+                                        </tr>
+                                    );
+                                })()}
+                                {/* Batteries */}
+                                {(() => {
+                                    const bat = catalog.find(e => e.id === project.batteries?.equipmentId);
+                                    if (!bat) return null;
+                                    return (
+                                        <tr className="hover:bg-slate-50/50 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <p className="font-black text-slate-800 uppercase text-[11px] font-bold">Pin lưu trữ (Lithium ESS)</p>
+                                                <p className="text-[11px] text-slate-500">{bat.brand} {bat.model} - {bat.capacity}kWh</p>
+                                            </td>
+                                            <td className="px-4 py-4 text-center font-bold text-slate-700">{project.batteries?.count}</td>
+                                            <td className="px-6 py-4 text-right text-slate-500">{formatCurrency(bat.unitPrice)}</td>
+                                            <td className="px-6 py-4 text-right font-black text-slate-900">{formatCurrency((project.batteries?.count || 0) * bat.unitPrice)}</td>
+                                        </tr>
+                                    );
+                                })()}
+                                {/* Others */}
+                                <tr className="hover:bg-slate-50/50 transition-colors">
+                                    <td className="px-6 py-4">
+                                        <p className="font-black text-slate-800 uppercase text-[11px] font-bold">Vật tư phụ & Thi công Trọn gói</p>
+                                        <p className="text-[11px] text-slate-500 font-medium italic">Hệ khung, dây dẫn, tủ điện, chống sét & nhân công</p>
+                                    </td>
+                                    <td className="px-4 py-4 text-center font-bold text-slate-700">1</td>
+                                    <td className="px-6 py-4 text-right text-slate-500">{formatCurrency((project.systemSizeKWp || 0) * 5000000)}</td>
+                                    <td className="px-6 py-4 text-right font-black text-slate-900">{formatCurrency((project.systemSizeKWp || 0) * 5000000)}</td>
+                                </tr>
+                                {/* Total */}
+                                <tr className="bg-slate-900 text-white font-black">
+                                    <td colSpan={3} className="px-6 py-6 text-right uppercase tracking-widest text-[11px]">TỔNG GIÁ TRỊ ĐẦU TƯ (TRỌN GÓI)</td>
+                                    <td className="px-6 py-6 text-right text-xl">{formatCurrency(project.totalCost || 0)}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className="mt-4 flex justify-end">
+                        <div className="bg-amber-400 text-slate-900 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                           <ShieldCheck className="h-4 w-4" /> Bảo hành thiết bị chính hãng 12 - 25 năm
                         </div>
                     </div>
-                  </div>
+                  </section>
 
-                  <div className="bg-slate-900 text-white p-4 md:p-6 rounded-xl flex flex-col md:flex-row justify-between items-center gap-4 shadow-lg border-b-4 border-red-600">
-                    <div className="text-center md:text-left">
-                        <p className="text-slate-400 text-[8px] md:text-[10px] uppercase font-bold tracking-widest mb-1">Tổng giá trị đầu tư Trọn gói</p>
-                        <p className="text-2xl md:text-3xl font-black text-white">{formatCurrency(project.totalCost || 0)}</p>
+                  {/* Section 3: Financial Analysis */}
+                  <section className="mb-12">
+                    <h2 className="flex items-center gap-3 text-sm font-black text-slate-900 uppercase tracking-widest mb-6">
+                        <span className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center text-[10px]">III</span>
+                        Phân tích Hiệu quả Tài chính
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-6">
+                            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+                                <span className="text-xs font-bold text-slate-500 uppercase">Sản lượng điện/năm dự kiến:</span>
+                                <span className="text-xl font-black text-slate-800">{project.annualProduction} <small className="text-[10px] opacity-60">kWh</small></span>
+                            </div>
+                            <div className="flex items-center justify-between p-4 bg-green-50 rounded-xl text-green-900">
+                                <span className="text-xs font-bold uppercase">Ước tính tiết kiệm/năm:</span>
+                                <span className="text-xl font-black">{formatCurrency((project.annualProduction || 0) * getAverageElectricityPrice(project.monthlyBill || 0, currentCustomer?.usageType))}</span>
+                            </div>
+                            <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl text-blue-900">
+                                <span className="text-xs font-bold uppercase">Thời gian hoàn vốn (ROI):</span>
+                                <span className="text-xl font-black">{project.paybackYears} <small className="text-[10px] opacity-60">NĂM</small></span>
+                            </div>
+                        </div>
+                        <div className="p-6 bg-slate-900 rounded-2xl text-white">
+                            <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-4 italic">Lời giải cho bài toán năng lượng:</p>
+                            <div className="space-y-4">
+                                <p className="text-xs leading-relaxed text-slate-300">
+                                    Với công suất <span className="text-blue-400 font-bold">{project.systemSizeKWp} kWp</span>, hệ thống sẽ cắt giảm các bậc giá điện cao nhất, 
+                                    giúp tối ưu hóa lợi nhuận đầu tư ngay từ tháng đầu tiên.
+                                </p>
+                                <div className="p-4 border border-white/10 rounded-xl bg-white/5">
+                                    <p className="text-[10px] font-bold text-blue-400 uppercase mb-2">Giá trị tiết kiệm sau 20 năm:</p>
+                                    <p className="text-2xl font-black">{formatCurrency((project.annualProduction || 0) * 20 * 2500)}</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div className="text-[8px] md:text-[10px] text-blue-400 font-bold border border-blue-400/30 px-3 py-1 rounded uppercase">
-                        Bao gồm VAT & thi công
-                    </div>
-                  </div>
+                  </section>
                </div>
                
-               <div className="px-8 pb-8 flex justify-between text-[10px] text-slate-400">
-                  <p>* Báo giá có giá trị trong vòng 15 ngày kể từ ngày ban hành.</p>
-                  <p>Phụ trách kinh doanh: {salesStaff.find(s => s.id === project.assignedSalesId)?.name || 'Admin User'}</p>
+               <div className="px-12 pb-12 pt-8 border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6">
+                  <div className="text-[10px] text-slate-400 max-w-md">
+                     <p className="font-bold mb-1 uppercase">Ghi chú & Pháp lý:</p>
+                     <p>* Báo giá có giá trị trong vòng 15 ngày. Giá trị thực tế có thể thay đổi nhẹ tùy theo điều kiện mái và vị trí lắp đặt thực tế.</p>
+                     <p>* Trường Sơn Solar cam kết cung cấp thiết bị chính hãng và hỗ trợ pháp lý đấu nối đầy đủ cho khách hàng.</p>
+                  </div>
+                  <div className="text-center md:text-right">
+                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 italic">Đại diện kinh doanh</p>
+                    <div className="flex items-center gap-3 justify-end">
+                        <div className="text-right">
+                            <p className="text-sm font-black text-slate-900 uppercase">{salesStaff.find(s => s.id === project.assignedSalesId)?.name || 'Admin User'}</p>
+                            <p className="text-[10px] text-blue-600 font-bold uppercase tracking-tighter">Technical Specialist</p>
+                        </div>
+                        <div className="w-10 h-10 rounded-full bg-slate-200" />
+                    </div>
+                  </div>
                </div>
             </div>
           )}
