@@ -174,8 +174,8 @@ export default function App() {
               <span className="text-3xl md:text-4xl font-black text-red-600 leading-none">TS</span>
               <span className="text-[7px] md:text-[8px] font-bold text-blue-600 uppercase tracking-tighter mt-1 whitespace-nowrap">Solar Trường Sơn</span>
             </div>
-            <h1 className="text-2xl md:text-3xl font-extrabold text-white mb-2 tracking-tight">TRUONGSONSOLAR</h1>
-            <p className="text-slate-400 text-xs md:text-sm font-medium mb-6 md:mb-10 leading-relaxed">
+            <h1 className="text-2xl md:text-5xl font-extrabold text-white mb-2 tracking-tight">TRUONGSONSOLAR</h1>
+            <p className="text-slate-400 text-sm md:text-base font-medium mb-6 md:mb-10 leading-relaxed uppercase tracking-widest opacity-80">
               Giải pháp Điện mặt trời Trường Sơn - Chuyên nghiệp & Tận tâm.
             </p>
             

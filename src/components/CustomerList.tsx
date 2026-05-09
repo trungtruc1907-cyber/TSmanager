@@ -99,8 +99,8 @@ export default function CustomerList({ onViewProject }: CustomerListProps) {
       {/* Module Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 px-2">
         <div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase leading-none">Data Khách Hàng</h2>
-          <div className="text-[11px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-2 flex items-center gap-2">
+          <h2 className="text-2xl md:text-4xl font-black text-slate-900 tracking-tight uppercase leading-none">Data Khách Hàng</h2>
+          <div className="text-[10px] md:text-xs text-slate-500 font-bold uppercase tracking-[0.2em] mt-3 flex items-center gap-2">
              <div className="w-1.5 h-1.5 rounded-full bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]" />
              Quản lý tệp khách hàng tiềm năng
           </div>

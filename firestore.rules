@@ -27,32 +27,44 @@ service cloud.firestore {
           && (!('usageType' in data) || data.usageType in ['residential', 'commercial', 'industrial'])
           && (!('phaseType' in data) || data.phaseType in ['1phase', '3phase'])
           && (!('email' in data) || data.email is string)
-          && (!('assignedSalesId' in data) || isValidId(data.assignedSalesId));
+          && (!('address' in data) || data.address is string)
+          && (!('assignedSalesId' in data) || isValidId(data.assignedSalesId) || data.assignedSalesId == "")
+          && (!('createdAt' in data) || data.createdAt is timestamp)
+          && (!('id' in data) || data.id is string);
     }
 
     function isValidEquipment(data) {
       return data.brand is string && data.brand.size() > 0
           && data.model is string && data.model.size() > 0
           && data.type in ['panel', 'inverter', 'battery', 'mounting', 'accessory', 'other']
-          && data.unitPrice is number && data.unitPrice >= 0;
+          && data.unitPrice is number && data.unitPrice >= 0
+          && (!('capacity' in data) || data.capacity is number)
+          && (!('id' in data) || data.id is string);
     }
 
     function isValidProject(data) {
       return isValidId(data.customerId)
           && data.status in ['lead', 'survey', 'proposal', 'contract', 'installation', 'completed']
-          && data.systemSizeKWp is number
-          && (!('assignedSalesId' in data) || isValidId(data.assignedSalesId))
+          && (data.systemSizeKWp is number || (data.systemSizeKWp is string && (data.systemSizeKWp == "" || data.systemSizeKWp == "0")))
+          && (!('monthlyBill' in data) || data.monthlyBill is number)
+          && (!('assignedSalesId' in data) || isValidId(data.assignedSalesId) || data.assignedSalesId == "")
           && (!('totalCost' in data) || data.totalCost is number)
           && (!('annualProduction' in data) || data.annualProduction is number)
           && (!('paybackYears' in data) || data.paybackYears is number)
-          && (!('updatedAt' in data) || data.updatedAt is timestamp);
+          && (!('panels' in data) || (data.panels.equipmentId is string && data.panels.count is number))
+          && (!('inverters' in data) || (data.inverters.equipmentId is string && data.inverters.count is number))
+          && (!('batteries' in data) || (data.batteries.equipmentId is string && data.batteries.count is number))
+          && (!('updatedAt' in data) || data.updatedAt is timestamp)
+          && (!('id' in data) || data.id is string);
     }
 
     function isValidSalesPerson(data) {
       return data.name is string && data.name.size() > 0
           && data.email is string && data.email.size() > 0
           && data.role in ['sales_rep', 'sales_manager']
-          && (!('phone' in data) || data.phone is string);
+          && (!('phone' in data) || data.phone is string)
+          && (!('id' in data) || data.id is string)
+          && (!('createdAt' in data) || data.createdAt is timestamp);
     }
 
     function isValidSalesTask(data) {
@@ -60,7 +72,9 @@ service cloud.firestore {
           && data.title is string && data.title.size() > 0
           && data.status in ['pending', 'completed']
           && (!('description' in data) || data.description is string)
-          && (!('assignedSalesId' in data) || isValidId(data.assignedSalesId));
+          && (!('assignedSalesId' in data) || isValidId(data.assignedSalesId) || data.assignedSalesId == "")
+          && (!('id' in data) || data.id is string)
+          && (!('createdAt' in data) || data.createdAt is timestamp);
     }
 
     function isValidUser(data) {
@@ -68,11 +82,15 @@ service cloud.firestore {
           && data.email is string && data.email.size() > 0
           && data.role in ['admin', 'manager', 'sales_rep']
           && data.status in ['active', 'inactive']
-          && (!('displayName' in data) || data.displayName is string);
+          && (!('displayName' in data) || data.displayName is string)
+          && (!('createdAt' in data) || data.createdAt is timestamp)
+          && (!('lastLogin' in data) || data.lastLogin is timestamp)
+          && (!('updatedAt' in data) || data.updatedAt is timestamp)
+          && (!('id' in data) || data.id is string);
     }
 
     function isAdmin() {
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     // --- RULES ---
@@ -80,6 +98,10 @@ service cloud.firestore {
     // Default deny
     match /{document=**} {
       allow read, write: if false;
+    }
+
+    match /_connection_test_/{docId} {
+      allow read: if true;
     }
 
     match /users/{userId} {

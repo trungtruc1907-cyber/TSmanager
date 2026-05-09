@@ -79,8 +79,8 @@ export default function ProjectDashboard({ onOpenProject, showAll }: Props) {
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Bảng Điều Khiển</h2>
-          <p className="text-[11px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1">Hệ thống phân tích dữ liệu Solar</p>
+          <h2 className="text-2xl md:text-4xl font-black text-slate-900 tracking-tight uppercase leading-none">Bảng Điều Khiển</h2>
+          <p className="text-[10px] md:text-sm text-slate-500 font-bold uppercase tracking-[0.2em] mt-2">Hệ thống phân tích dữ liệu Solar</p>
         </div>
         <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
            <Clock className="h-3.5 w-3.5" />
@@ -319,9 +319,9 @@ function StatCard({ label, value, icon, color, textColor, iconColor, trend }: { 
            <span className="text-[8px] font-black uppercase tracking-widest opacity-40 px-2 py-0.5 bg-slate-500/10 rounded-full">{trend}</span>
         )}
       </div>
-      <div className="space-y-0.5">
-        <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40">{label}</span>
-        <div className={cn("text-2xl font-black tracking-tight", textColor)}>{value}</div>
+      <div className="space-y-1">
+        <span className="text-[10px] md:text-xs font-black uppercase tracking-[0.2em] opacity-40">{label}</span>
+        <div className={cn("text-2xl md:text-3xl font-black tracking-tight", textColor)}>{value}</div>
       </div>
       
       {/* Abstract Design Element */}

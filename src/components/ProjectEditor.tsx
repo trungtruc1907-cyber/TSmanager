@@ -219,8 +219,8 @@ export default function ProjectEditor({ projectId, initialCustomerId, onClose }:
               className="bg-white p-6 md:p-10 rounded-[2.5rem] border border-slate-100 shadow-[0_10px_40px_rgb(0,0,0,0.03)] space-y-10"
             >
               <div>
-                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight leading-none mb-2">Phân Tích Nhu Cầu</h3>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Xác định quy mô hệ thống dựa trên hóa đơn điện</p>
+                <h3 className="text-xl md:text-3xl font-black text-slate-900 uppercase tracking-tight leading-none mb-3">Phân Tích Nhu Cầu</h3>
+                <p className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest">Xác định quy mô hệ thống dựa trên hóa đơn điện</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
@@ -270,37 +270,69 @@ export default function ProjectEditor({ projectId, initialCustomerId, onClose }:
                   </div>
                 </div>
 
-                <div className="bg-slate-900 rounded-[2rem] p-8 md:p-10 text-white relative overflow-hidden flex flex-col justify-center min-h-[240px] shadow-2xl shadow-slate-200">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/20 rounded-full blur-3xl -mr-16 -mt-16" />
-                  
-                  <label className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                    <Zap className="h-3 w-3 fill-blue-400" /> Thanh toán điện tb/tháng
-                  </label>
-                  
-                  <div className="flex items-baseline gap-3">
-                    <input 
-                      type="number"
-                      placeholder="0"
-                      className="bg-transparent border-b-4 border-white/10 text-4xl md:text-5xl font-black text-white tracking-tighter outline-none w-full placeholder:text-white/5 focus:border-blue-500 transition-colors"
-                      value={project.monthlyBill || ''}
-                      onChange={e => handleAutoConfig(Number(e.target.value))}
-                    />
-                    <span className="text-sm font-black text-blue-400 uppercase tracking-widest italic shrink-0">VNĐ</span>
-                  </div>
+                <div className="bg-white rounded-[2.5rem] p-8 md:p-10 border border-slate-200 shadow-[0_10px_30px_rgba(0,0,0,0.02)] flex flex-col justify-center min-h-[340px]">
+                  <div className="space-y-8">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-6">
+                      <div className="flex items-center gap-3">
+                         <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                            <Zap className="h-5 w-5 text-blue-600 fill-blue-600" />
+                         </div>
+                         <div>
+                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block">
+                             Chỉ số tài chính
+                           </label>
+                           <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight">Hóa đơn điện trung bình</h4>
+                         </div>
+                      </div>
+                      <div className="px-3 py-1 bg-blue-600 text-[9px] font-black text-white uppercase rounded-full shadow-lg shadow-blue-100">
+                        Auto Config
+                      </div>
+                    </div>
+ 
+                    <div className="space-y-4">
+                      <div className="relative max-w-[280px] mx-auto">
+                        <input 
+                          type="number"
+                          placeholder="0"
+                          className="w-full bg-slate-50 border-2 border-slate-100 px-6 py-5 rounded-2xl text-3xl font-black text-slate-900 tracking-tighter outline-none focus:border-blue-600 focus:bg-white transition-all text-center"
+                          value={project.monthlyBill || ''}
+                          onChange={e => handleAutoConfig(Number(e.target.value))}
+                        />
+                        <div className="absolute right-6 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest italic pointer-events-none">
+                          VNĐ
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="h-px w-8 bg-slate-100" />
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Tương ứng tiêu thụ</p>
+                        <div className="h-px w-8 bg-slate-100" />
+                      </div>
 
-                  <div className="mt-8 space-y-3">
-                     <div className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5">
-                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Loại điện:</span>
-                        <span className="text-[10px] font-black uppercase text-blue-400">
-                            {currentCustomer?.usageType === 'residential' ? 'Sinh hoạt' : 
-                             currentCustomer?.usageType === 'commercial' ? 'Kinh doanh' : 
-                             currentCustomer?.usageType === 'industrial' ? 'Sản xuất' : 'Chưa chọn KH'}
+                      <div className="text-center">
+                        <span className="text-4xl font-black text-blue-600 tracking-tighter">
+                          {Math.round((project.monthlyBill || 0) / getAverageElectricityPrice(project.monthlyBill || 0, currentCustomer?.usageType))}
                         </span>
-                     </div>
-                     <div className="flex justify-between items-center px-1">
-                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Giá tb / kWh:</span>
-                        <span className="text-[10px] font-black text-white">~{getAverageElectricityPrice(project.monthlyBill || 0, currentCustomer?.usageType)} đ</span>
-                     </div>
+                        <span className="text-sm font-black text-slate-400 ml-2 uppercase tracking-widest">kWh / Tháng</span>
+                      </div>
+                    </div>
+ 
+                    <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-6">
+                       <div className="space-y-1">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Phụ tải</span>
+                          <p className="text-[11px] font-black text-slate-800 uppercase truncate">
+                              {currentCustomer?.usageType === 'residential' ? 'Sinh hoạt' : 
+                               currentCustomer?.usageType === 'commercial' ? 'Kinh doanh' : 
+                               currentCustomer?.usageType === 'industrial' ? 'Sản xuất' : 'N/A'}
+                          </p>
+                       </div>
+                       <div className="space-y-1 text-right">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Đơn giá</span>
+                          <p className="text-[11px] font-black text-slate-800">
+                            ~{getAverageElectricityPrice(project.monthlyBill || 0, currentCustomer?.usageType).toLocaleString('vi-VN')} đ/kWh
+                          </p>
+                       </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -314,8 +346,8 @@ export default function ProjectEditor({ projectId, initialCustomerId, onClose }:
               className="bg-white p-6 md:p-10 rounded-[2.5rem] border border-slate-100 shadow-[0_10px_40px_rgb(0,0,0,0.03)] space-y-10"
             >
               <div>
-                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight leading-none mb-2">Cấu Hình Kỹ Thuật</h3>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Lựa chọn thiết bị và cân chỉnh quy mô hệ thống</p>
+                <h3 className="text-xl md:text-3xl font-black text-slate-900 uppercase tracking-tight leading-none mb-3">Cấu Hình Kỹ Thuật</h3>
+                <p className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest">Lựa chọn thiết bị và cân chỉnh quy mô hệ thống</p>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
@@ -473,8 +505,8 @@ export default function ProjectEditor({ projectId, initialCustomerId, onClose }:
               className="bg-white p-6 md:p-10 rounded-[2.5rem] border border-slate-100 shadow-[0_10px_40px_rgb(0,0,0,0.03)] space-y-10"
             >
               <div>
-                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight leading-none mb-2">Hiệu Quả Tài Chính</h3>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Phân tích dòng tiền và thời gian hoàn vốn dự kiến</p>
+                <h3 className="text-xl md:text-3xl font-black text-slate-900 uppercase tracking-tight leading-none mb-3">Hiệu Quả Tài Chính</h3>
+                <p className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest">Phân tích dòng tiền và thời gian hoàn vốn dự kiến</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -561,7 +593,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, onClose }:
               animate={{ opacity: 1, x: 0 }}
               className="space-y-8"
             >
-              <div className="bg-white p-8 md:p-12 rounded-[1rem] border border-slate-200 proposal-print relative shadow-sm">
+              <div className="bg-white p-8 md:p-12 rounded-[1rem] border border-slate-200 proposal-print relative shadow-sm break-after-page mb-8">
                 {/* Header Section */}
                 <div className="flex items-start gap-6 border-b border-slate-100 pb-8 mb-8">
                   <div className="w-24 h-24 shrink-0 flex items-center justify-center border border-slate-100 rounded-xl bg-white p-2">
@@ -611,7 +643,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, onClose }:
                   <div className="bg-white border border-slate-100 rounded-2xl p-6 text-center shadow-sm">
                     <p className="text-sm font-bold text-slate-500 mb-2 uppercase tracking-tight">Lưu trữ (nếu có)</p>
                     <p className="text-2xl font-black text-[#2e7d32]">
-                      {project.batteries?.equipmentId ? `${batteries.find(b => b.id === project.batteries?.equipmentId)?.capacity || 0 * (project.batteries?.count || 1)}KWH` : 'KHÔNG'}
+                      {project.batteries?.equipmentId ? `${(batteries.find(b => b.id === project.batteries?.equipmentId)?.capacity || 0) * (project.batteries?.count || 1)}KWH` : 'KHÔNG'}
                     </p>
                   </div>
                 </div>
@@ -658,6 +690,110 @@ export default function ProjectEditor({ projectId, initialCustomerId, onClose }:
                    <p className="text-sm text-slate-700 leading-relaxed font-serif">
                      báo giá trên được tạo bởi công cụ AI - Trí tuệ nhân tạo được phát triển bởi đội ngũ kỹ sư của Trường Sơn Solar dựa trên dữ liệu sản lượng bức xạ tại địa điểm khách hàng cung cấp
                    </p>
+                </div>
+              </div>
+
+              {/* Second Page: Formal Quote Table */}
+              <div className="bg-white p-12 proposal-print relative shadow-sm border border-slate-200 min-h-[1050px]">
+                <div className="text-center mb-12">
+                  <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">BÁO GIÁ HỆ THỐNG ĐIỆN NĂNG LƯỢNG MẶT TRỜI</h2>
+                  <div className="w-40 h-1 bg-slate-900 mx-auto mt-4" />
+                </div>
+
+                <div className="space-y-4 mb-12 text-lg font-serif">
+                  <div className="flex border-b border-dotted border-slate-300 pb-1">
+                    <span className="w-48 shrink-0">Khách hàng:</span>
+                    <span className="font-bold">{currentCustomer?.name}</span>
+                  </div>
+                  <div className="flex border-b border-dotted border-slate-300 pb-1">
+                    <span className="w-48 shrink-0">Địa chỉ lắp đặt:</span>
+                    <span className="">{currentCustomer?.address}</span>
+                  </div>
+                  <div className="flex border-b border-dotted border-slate-300 pb-1">
+                    <span className="w-48 shrink-0">Số Điện Thoại:</span>
+                    <span className="">{currentCustomer?.phone}</span>
+                  </div>
+                  <div className="flex border-b border-dotted border-slate-300 pb-1">
+                    <span className="w-48 shrink-0">Ngày Báo Giá:</span>
+                    <span className="">{new Date().toLocaleDateString('vi-VN')}</span>
+                  </div>
+                  <div className="flex border-b border-dotted border-slate-300 pb-1">
+                    <span className="w-48 shrink-0">Công Suất DC (KWp):</span>
+                    <span className="font-bold">{project.systemSizeKWp}</span>
+                  </div>
+                  <div className="flex border-b border-dotted border-slate-300 pb-1">
+                    <span className="w-48 shrink-0">Công Suất AC (KW):</span>
+                    <span className="font-bold">{project.systemSizeKWp}</span>
+                  </div>
+                </div>
+
+                <table className="w-full border-collapse border border-slate-900 text-base">
+                  <thead>
+                    <tr className="bg-slate-50">
+                      <th className="border border-slate-900 px-4 py-3 text-center w-16">STT</th>
+                      <th className="border border-slate-900 px-6 py-3 text-left">Các hạng mục</th>
+                      <th className="border border-slate-900 px-6 py-3 text-center">Giá (VNĐ)</th>
+                      <th className="border border-slate-900 px-6 py-3 text-left">Ghi Chú</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="border border-slate-900 px-4 py-4 text-center font-bold">A</td>
+                      <td className="border border-slate-900 px-6 py-4 font-bold">Thiết bị chính</td>
+                      <td className="border border-slate-900 px-6 py-4 text-right">
+                        {formatCurrency((project.totalCost || 0) / 1.08 * 0.75)}
+                      </td>
+                      <td className="border border-slate-900 px-6 py-4 text-slate-500 italic">Pin & Inverter</td>
+                    </tr>
+                    <tr>
+                      <td className="border border-slate-900 px-4 py-4 text-center font-bold">B</td>
+                      <td className="border border-slate-900 px-6 py-4 font-bold">Vật tư phụ và thi công</td>
+                      <td className="border border-slate-900 px-6 py-4 text-right">
+                        {formatCurrency((project.totalCost || 0) / 1.08 * 0.20)}
+                      </td>
+                      <td className="border border-slate-900 px-6 py-4 text-slate-500 italic">Khung nhôm & nhân công</td>
+                    </tr>
+                    <tr>
+                      <td className="border border-slate-900 px-4 py-4 text-center font-bold">C</td>
+                      <td className="border border- slate-900 px-6 py-4 font-bold">Vận chuyển và chi phí phụ khác</td>
+                      <td className="border border-slate-900 px-6 py-4 text-right">
+                        {formatCurrency((project.totalCost || 0) / 1.08 * 0.05)}
+                      </td>
+                      <td className="border border-slate-900 px-6 py-4 text-slate-500 italic">VC xây lắp</td>
+                    </tr>
+                    <tr className="bg-slate-50">
+                      <td colSpan={2} className="border border-slate-900 px-6 py-4 font-bold">Tổng cộng (Chưa bao gồm VAT)</td>
+                      <td className="border border-slate-900 px-6 py-4 text-right font-bold">
+                        {formatCurrency((project.totalCost || 0) / 1.08)}
+                      </td>
+                      <td className="border border-slate-900 px-6 py-4"></td>
+                    </tr>
+                    <tr>
+                      <td colSpan={2} className="border border-slate-900 px-6 py-4 font-bold">Thuế (8%)</td>
+                      <td className="border border-slate-900 px-6 py-4 text-right font-bold">
+                        {formatCurrency((project.totalCost || 0) - (project.totalCost || 0) / 1.08)}
+                      </td>
+                      <td className="border border-slate-900 px-6 py-4"></td>
+                    </tr>
+                    <tr className="bg-slate-100">
+                      <td colSpan={2} className="border border-slate-900 px-6 py-4 font-black uppercase text-lg">Tổng tiền</td>
+                      <td className="border border-slate-900 px-6 py-4 text-right font-black text-xl text-blue-700">
+                        {formatCurrency(project.totalCost || 0)}
+                      </td>
+                      <td className="border border-slate-900 px-6 py-4"></td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <div className="mt-16 grid grid-cols-2 text-center font-serif">
+                  <div className="space-y-24">
+                    <p className="font-bold">ĐẠI DIỆN KHÁCH HÀNG</p>
+                    <p className="text-slate-400 italic">(Ký và ghi rõ họ tên)</p>
+                  </div>
+                  <div className="space-y-24">
+                    <p className="font-bold uppercase leading-tight">CÔNG TY CỔ PHẦN ĐẦU TƯ TM TRƯỜNG SƠN</p>
+                    <p className="font-bold">{salesStaff.find(s => s.id === project.assignedSalesId)?.name || 'CHUYÊN VIÊN KỸ THUẬT'}</p>
+                  </div>
                 </div>
               </div>
 
