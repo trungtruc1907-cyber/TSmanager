@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { Project, Customer, SalesPerson } from '../types';
 import { 
@@ -31,18 +31,31 @@ export default function ProjectDashboard({ onOpenProject, showAll }: Props) {
       
     return onSnapshot(q, (snapshot) => {
       setProjects(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Project)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'projects');
     });
   }, [showAll]);
 
   useEffect(() => {
-    onSnapshot(collection(db, 'sales'), (s) => setSalesStaff(s.docs.map(d => ({ id: d.id, ...d.data() } as SalesPerson))));
-    return onSnapshot(collection(db, 'customers'), (snapshot) => {
+    onSnapshot(collection(db, 'sales'), (s) => {
+      setSalesStaff(s.docs.map(d => ({ id: d.id, ...d.data() } as SalesPerson)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'sales');
+    });
+
+    const unsubCust = onSnapshot(collection(db, 'customers'), (snapshot) => {
       const data: Record<string, Customer> = {};
       snapshot.docs.forEach(doc => {
         data[doc.id] = { id: doc.id, ...doc.data() } as Customer;
       });
       setCustomers(data);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'customers');
     });
+
+    return () => {
+      unsubCust();
+    };
   }, []);
 
   const getStatusInfo = (status: string) => {

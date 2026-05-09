@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, doc, getDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
 import { Project, Customer, Equipment, ProjectStatus, SalesPerson } from '../types';
 import { 
@@ -55,9 +55,15 @@ export default function ProjectEditor({ projectId, onClose }: Props) {
   });
 
   useEffect(() => {
-    onSnapshot(collection(db, 'customers'), (s) => setCustomers(s.docs.map(d => ({ id: d.id, ...d.data() } as Customer))));
-    onSnapshot(collection(db, 'equipment'), (s) => setCatalog(s.docs.map(d => ({ id: d.id, ...d.data() } as Equipment))));
-    onSnapshot(query(collection(db, 'sales'), orderBy('name')), (s) => setSalesStaff(s.docs.map(d => ({ id: d.id, ...d.data() } as SalesPerson))));
+    onSnapshot(collection(db, 'customers'), (s) => setCustomers(s.docs.map(d => ({ id: d.id, ...d.data() } as Customer))), (error) => {
+      handleFirestoreError(error, OperationType.GET, 'customers');
+    });
+    onSnapshot(collection(db, 'equipment'), (s) => setCatalog(s.docs.map(d => ({ id: d.id, ...d.data() } as Equipment))), (error) => {
+      handleFirestoreError(error, OperationType.GET, 'equipment');
+    });
+    onSnapshot(query(collection(db, 'sales'), orderBy('name')), (s) => setSalesStaff(s.docs.map(d => ({ id: d.id, ...d.data() } as SalesPerson))), (error) => {
+      handleFirestoreError(error, OperationType.GET, 'sales');
+    });
 
     if (projectId) {
       getDoc(doc(db, 'projects', projectId)).then(s => {

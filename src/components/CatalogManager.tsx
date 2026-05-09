@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, query, orderBy, updateDoc } from 'firebase/firestore';
 import { Equipment } from '../types';
 import { Plus, Trash2, Edit2, Package, Cpu, Battery, Box, X } from 'lucide-react';
@@ -28,6 +28,8 @@ export default function CatalogManager() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setEquipment(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Equipment)));
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'equipment');
     });
     return () => unsubscribe();
   }, []);

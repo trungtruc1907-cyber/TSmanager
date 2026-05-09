@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, onSnapshot, query, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Customer, SalesPerson } from '../types';
 import { UserPlus, Search, Phone, Mail, MapPin, Calendar, UserCheck } from 'lucide-react';
@@ -25,11 +25,15 @@ export default function CustomerList() {
     const qCust = query(collection(db, 'customers'), orderBy('createdAt', 'desc'));
     const unsubCust = onSnapshot(qCust, (snapshot) => {
       setCustomers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'customers');
     });
 
     const qSales = query(collection(db, 'sales'), orderBy('name'));
     const unsubSales = onSnapshot(qSales, (snapshot) => {
       setSalesStaff(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SalesPerson)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'sales');
     });
 
     return () => {

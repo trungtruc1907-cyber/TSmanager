@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, onSnapshot, query, orderBy, updateDoc, doc, addDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { Project, SalesTask, Customer, SalesPerson } from '../types';
 import { 
@@ -37,13 +37,30 @@ export default function SalesManagement() {
   const [newStaff, setNewStaff] = useState({ name: '', email: '', phone: '', role: 'sales_rep' as any });
 
   useEffect(() => {
-    onSnapshot(collection(db, 'salesTasks'), (s) => setTasks(s.docs.map(d => ({ id: d.id, ...d.data() } as SalesTask))));
-    onSnapshot(collection(db, 'projects'), (s) => setProjects(s.docs.map(d => ({ id: d.id, ...d.data() } as Project))));
-    onSnapshot(collection(db, 'sales'), (s) => setSalesStaff(s.docs.map(d => ({ id: d.id, ...d.data() } as SalesPerson))));
+    onSnapshot(collection(db, 'salesTasks'), (s) => {
+      setTasks(s.docs.map(d => ({ id: d.id, ...d.data() } as SalesTask)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'salesTasks');
+    });
+
+    onSnapshot(collection(db, 'projects'), (s) => {
+      setProjects(s.docs.map(d => ({ id: d.id, ...d.data() } as Project)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'projects');
+    });
+
+    onSnapshot(collection(db, 'sales'), (s) => {
+      setSalesStaff(s.docs.map(d => ({ id: d.id, ...d.data() } as SalesPerson)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'sales');
+    });
+
     onSnapshot(collection(db, 'customers'), (s) => {
       const data: Record<string, Customer> = {};
       s.docs.forEach(doc => data[doc.id] = { id: doc.id, ...doc.data() } as Customer);
       setCustomers(data);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'customers');
     });
   }, []);
 

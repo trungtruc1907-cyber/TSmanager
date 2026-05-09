@@ -104,6 +104,10 @@ export default function App() {
         setAuthError("Tên đăng nhập hoặc mật khẩu không chính xác.");
       } else if (error.code === 'auth/email-already-in-use') {
         setAuthError("Tên đăng nhập này đã tồn tại.");
+      } else if (error.code === 'auth/operation-not-allowed') {
+        setAuthError("LỖI: Bạn cần bật 'Email/Password' trong Firebase Console > Authentication > Sign-in method.");
+      } else if (error.code === 'auth/unauthorized-domain') {
+        setAuthError("LỖI: Tên miền này chưa được cấp phép trong Firebase Console > Authentication > Settings > Authorized domains.");
       } else {
         setAuthError("Lỗi hệ thống: " + error.message);
       }
