@@ -45,27 +45,40 @@
     padding: 0 !important;
   }
 
-  /* Force hide EVERYTHING that isn't the proposal */
-  body > *:not(.proposal-container),
-  div:not(.proposal-container),
-  section, aside, header, nav, footer,
-  .no-print, button, form, .sticky, [role="dialog"], [role="presentation"] {
+  /* Hide specific UI elements that shouldn't be printed */
+  aside, nav, header, footer, .no-print, button, form, .sticky, [role="dialog"], [role="presentation"], .lucide {
     display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
   }
 
-  /* Specifically allow the printable container and all its parents up to body to be visible */
-  .proposal-container,
-  .proposal-container * {
+  /* Make the entire app container transparent for printing */
+  html, body, #root, #root div, main, .max-w-7xl, .proposal-container {
     display: block !important;
     visibility: visible !important;
-    opacity: 1 !important;
-    height: auto !important;
-    float: none !important;
     position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    float: none !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Restore visibility for printable items and their children */
+  .proposal-container,
+  .proposal-container * {
+    visibility: visible !important;
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+
+  /* Ensure background and colors are printed */
+  .proposal-print {
+    background-color: white !important;
+    color: black !important;
   }
 
   /* Restore table layouts */

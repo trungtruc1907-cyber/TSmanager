@@ -710,7 +710,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
               className="space-y-8"
             >
             <div className="proposal-container">
-              <div className="bg-white p-8 md:p-12 rounded-[1rem] border border-slate-200 proposal-print shadow-sm break-after-page mb-10 overflow-hidden">
+              <div className="bg-white p-8 md:p-12 rounded-[1rem] border border-slate-200 proposal-print shadow-sm break-after-page mb-10">
                 {/* Header Section */}
                 <div className="flex items-start gap-6 border-b border-slate-100 pb-8 mb-8">
                   <div className="w-24 h-24 shrink-0 flex items-center justify-center border border-slate-100 rounded-xl bg-white p-2">
