@@ -723,77 +723,77 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
             >
               <div className="proposal-container flex flex-col gap-10">
                 {/* PAGE 1: COVER PAGE */}
-                <div className="bg-white proposal-print shadow-sm break-after-page min-h-[1050px] flex flex-col relative overflow-hidden font-display">
+                <div className="bg-white proposal-print shadow-sm break-after-page min-h-[1050px] max-h-[1050px] flex flex-col relative overflow-hidden font-display">
                   {/* Modern Background Accents */}
                   <div className="absolute top-0 right-0 w-2/3 h-full bg-slate-50/50 -skew-x-12 translate-x-1/4 z-0" />
                   <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-600/5 rounded-full blur-[120px]" />
                   <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-amber-600/5 rounded-full blur-[120px]" />
                   
-                  <div className="relative z-10 p-16 md:p-24 flex flex-col h-full flex-1">
-                    <div className="flex justify-between items-start mb-32">
-                      <Logo className="w-40 h-40" />
+                  <div className="relative z-10 p-12 md:p-16 flex flex-col h-full flex-1">
+                    <div className="flex justify-between items-start mb-16">
+                      <Logo className="w-32 h-32" />
                       <div className="text-right">
-                        <h1 className="text-2xl font-extrabold text-slate-950 leading-tight uppercase tracking-tight">CÔNG TY CỔ PHẦN ĐẦU TƯ<br/> THƯƠNG MẠI TRƯỜNG SƠN</h1>
-                        <p className="text-[11px] font-black text-blue-600 uppercase tracking-[0.3em] mt-3">Giải pháp Năng lượng Xanh chuyên nghiệp</p>
-                        <div className="h-1 w-24 bg-blue-600 ml-auto mt-4" />
+                        <h1 className="text-xl font-extrabold text-slate-950 leading-tight uppercase tracking-tight">CÔNG TY CỔ PHẦN ĐẦU TƯ<br/> THƯƠNG MẠI TRƯỜNG SƠN</h1>
+                        <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mt-2">Giải pháp Năng lượng Xanh chuyên nghiệp</p>
+                        <div className="h-1 w-20 bg-blue-600 ml-auto mt-3" />
                       </div>
                     </div>
 
                     <div className="mt-auto mb-auto max-w-3xl">
-                      <div className="inline-flex items-center gap-3 px-4 py-2 bg-slate-900 rounded-full mb-8">
+                      <div className="inline-flex items-center gap-3 px-4 py-2 bg-slate-900 rounded-full mb-6">
                         <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-                        <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Hồ sơ giải pháp kỹ thuật • 2026</span>
+                        <span className="text-[9px] font-black text-white uppercase tracking-[0.2em]">Hồ sơ giải pháp kỹ thuật • 2026</span>
                       </div>
                       
-                      <h3 className="text-7xl font-extrabold text-slate-950 leading-[0.95] mb-10 tracking-tighter">
+                      <h3 className="text-5xl md:text-6xl font-extrabold text-slate-950 leading-[0.95] mb-8 tracking-tighter">
                         BÁO GIÁ HỆ THỐNG<br/>
                         ĐIỆN NĂNG LƯỢNG<br/>
                         MẶT TRỜI <span className="text-blue-600">HYBRID</span>
                       </h3>
                       
-                      <div className="flex items-center gap-6 mb-16">
+                      <div className="flex items-center gap-6 mb-12">
                          <div className="h-px flex-1 bg-slate-200" />
                          <Sun className="h-6 w-6 text-amber-500" />
                          <div className="h-px flex-1 bg-slate-200" />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-16">
-                        <div className="space-y-5">
-                          <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest leading-none">Khách hàng / Chủ đầu tư</p>
-                          <div className="border-l-[6px] border-slate-950 pl-6">
-                            <p className="text-3xl font-extrabold text-slate-950 uppercase tracking-tight">{currentCustomer?.name}</p>
-                            <p className="text-sm font-medium text-slate-500 mt-1">{currentCustomer?.address}</p>
+                      <div className="grid grid-cols-2 gap-10">
+                        <div className="space-y-4">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Khách hàng / Chủ đầu tư</p>
+                          <div className="border-l-[4px] border-slate-950 pl-5">
+                            <p className="text-2xl font-extrabold text-slate-950 uppercase tracking-tight">{currentCustomer?.name}</p>
+                            <p className="text-xs font-medium text-slate-500 mt-1">{currentCustomer?.address}</p>
                           </div>
                         </div>
-                        <div className="space-y-5">
-                          <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest leading-none">Quy mô hệ thống</p>
-                          <div className="border-l-[6px] border-blue-600 pl-6">
-                            <p className="text-3xl font-extrabold text-slate-950 tracking-tight">{project.systemSizeKWp} kWp</p>
-                            <p className="text-sm font-medium text-slate-500 mt-1">Lưu trữ Lithium thông minh</p>
+                        <div className="space-y-4">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Quy mô hệ thống</p>
+                          <div className="border-l-[4px] border-blue-600 pl-5">
+                            <p className="text-2xl font-extrabold text-slate-950 tracking-tight">{project.systemSizeKWp} kWp</p>
+                            <p className="text-xs font-medium text-slate-500 mt-1">Lưu trữ Lithium thông minh</p>
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="mt-auto pt-12 border-t border-slate-100 flex justify-between items-end">
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-3 text-slate-600 font-bold text-sm">
-                          <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-blue-600">
-                             <MapPin className="h-4 w-4" />
+                    <div className="mt-auto pt-8 border-t border-slate-100 flex justify-between items-end">
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3 text-slate-600 font-bold text-xs">
+                          <div className="w-7 h-7 rounded-lg bg-slate-50 flex items-center justify-center text-blue-600">
+                             <MapPin className="h-3.5 w-3.5" />
                           </div>
                           <span>Thanh Hóa, Việt Nam</span>
                         </div>
-                        <div className="flex items-center gap-3 text-slate-600 font-bold text-sm">
-                          <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-blue-600">
-                             <Calendar className="h-4 w-4" />
+                        <div className="flex items-center gap-3 text-slate-600 font-bold text-xs">
+                          <div className="w-7 h-7 rounded-lg bg-slate-50 flex items-center justify-center text-blue-600">
+                             <Calendar className="h-3.5 w-3.5" />
                           </div>
                           <span>Ngày lập: {new Date().toLocaleDateString('vi-VN')}</span>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2">TRƯỜNG SƠN SOLAR</p>
-                        <p className="text-lg font-extrabold text-slate-950 tracking-tight">www.truongsonsolar.vn</p>
-                        <p className="text-[10px] font-bold text-slate-400 mt-1 italic">Professional Clean Energy Solutions</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-1">TRƯỜNG SƠN SOLAR</p>
+                        <p className="text-base font-extrabold text-slate-950 tracking-tight">www.truongsonsolar.vn</p>
+                        <p className="text-[9px] font-bold text-slate-400 mt-0.5 italic">Professional Clean Energy Solutions</p>
                       </div>
                     </div>
                   </div>
