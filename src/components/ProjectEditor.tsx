@@ -50,6 +50,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [catalog, setCatalog] = useState<Equipment[]>([]);
   const [salesStaff, setSalesStaff] = useState<AppUser[]>([]);
+  const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   // Form State
@@ -76,6 +77,11 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
     });
     onSnapshot(query(collection(db, 'users'), orderBy('displayName')), (s) => setSalesStaff(s.docs.map(d => ({ id: d.id, ...d.data() } as AppUser))), (error) => {
       handleFirestoreError(error, OperationType.GET, 'users');
+    });
+    onSnapshot(doc(db, 'settings', 'general'), (s) => {
+      if (s.exists()) setSettings(s.data());
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'settings/general');
     });
 
     if (projectId) {
@@ -174,10 +180,10 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
     if (!currentCustomer) return;
 
     const data = [
-      ['CÔNG TY CỔ PHẦN ĐẦU TƯ TM TRƯỜNG SƠN'],
-      ['Địa chỉ: Số 151 Thôi Hữu, MB 1413, P. Đông Vệ, TP. Thanh Hóa'],
-      ['VP: 368 Nguyễn Thiếp (Đường 39m mới) - P. Đông Vệ - TP Thanh Hóa'],
-      ['Website: www.truongsonsolar.vn'],
+      [settings?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ TM TRƯỜNG SƠN'],
+      [`Địa chỉ: ${settings?.address || 'Số 151 Thôi Hữu, MB 1413, P. Đông Vệ, TP. Thanh Hóa'}`],
+      [`Website: ${settings?.website || 'www.truongsonsolar.vn'}`],
+      [`Hotline: ${settings?.phone || '0912.345.678'}`],
       [''],
       ['BÁO GIÁ HỆ THỐNG ĐIỆN NĂNG LƯỢNG MẶT TRỜI'],
       ['Số: BG-' + new Date().getTime().toString().slice(-6)],
@@ -733,8 +739,12 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                     <div className="flex justify-between items-start mb-16">
                       <Logo className="w-32 h-32" />
                       <div className="text-right">
-                        <h1 className="text-xl font-extrabold text-slate-950 leading-tight uppercase tracking-tight">CÔNG TY CỔ PHẦN ĐẦU TƯ<br/> THƯƠNG MẠI TRƯỜNG SƠN</h1>
-                        <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mt-2">Giải pháp Năng lượng Xanh chuyên nghiệp</p>
+                        <h1 className="text-xl font-extrabold text-slate-950 leading-tight uppercase tracking-tight">
+                          {settings?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ TM TRƯỜNG SƠN'}
+                        </h1>
+                        <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mt-2">
+                          {settings?.companyTagline || 'Giải pháp Năng lượng Xanh chuyên nghiệp'}
+                        </p>
                         <div className="h-1 w-20 bg-blue-600 ml-auto mt-3" />
                       </div>
                     </div>
@@ -781,7 +791,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                           <div className="w-7 h-7 rounded-lg bg-slate-50 flex items-center justify-center text-blue-600">
                              <MapPin className="h-3.5 w-3.5" />
                           </div>
-                          <span>Thanh Hóa, Việt Nam</span>
+                          <span>{settings?.address || 'Thanh Hóa, Việt Nam'}</span>
                         </div>
                         <div className="flex items-center gap-3 text-slate-600 font-bold text-xs">
                           <div className="w-7 h-7 rounded-lg bg-slate-50 flex items-center justify-center text-blue-600">
@@ -791,9 +801,15 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-1">TRƯỜNG SƠN SOLAR</p>
-                        <p className="text-base font-extrabold text-slate-950 tracking-tight">www.truongsonsolar.vn</p>
-                        <p className="text-[9px] font-bold text-slate-400 mt-0.5 italic">Professional Clean Energy Solutions</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-1">
+                          {settings?.companyBrandName || 'TRƯỜNG SƠN SOLAR'}
+                        </p>
+                        <p className="text-base font-extrabold text-slate-950 tracking-tight">
+                          {settings?.website || 'www.truongsonsolar.vn'}
+                        </p>
+                        <p className="text-[9px] font-bold text-slate-400 mt-0.5 italic">
+                          {settings?.companyTagline || 'Professional Clean Energy Solutions'}
+                        </p>
                       </div>
                     </div>
                   </div>

@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { cn } from '../lib/utils';
 
 interface LogoProps {
@@ -7,8 +9,21 @@ interface LogoProps {
 }
 
 export const Logo: React.FC<LogoProps> = ({ className, variant = 'dark' }) => {
-  const [imgSrc, setImgSrc] = React.useState('/logo.png');
+  const [imgSrc, setImgSrc] = useState<string>('/logo.png');
   const fallbackSrc = "https://lh3.googleusercontent.com/d/1vN7tAn7UoZ7rR7U7S-JtG0rY_iV7B56Q";
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'settings', 'general'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.logoUrl) {
+          setImgSrc(data.logoUrl);
+        }
+      }
+    });
+
+    return () => unsub();
+  }, []);
 
   return (
     <div className={cn("flex flex-col items-center justify-center overflow-hidden", className)}>

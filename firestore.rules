@@ -91,6 +91,15 @@ service cloud.firestore {
           && (!('id' in data) || data.id is string);
     }
 
+    function isValidSettings(data) {
+      return (!('logoUrl' in data) || data.logoUrl is string)
+          && (!('companyName' in data) || data.companyName is string)
+          && (!('address' in data) || data.address is string)
+          && (!('phone' in data) || data.phone is string)
+          && (!('website' in data) || data.website is string)
+          && (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
     function isAdmin() {
       return isSignedIn() && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
@@ -183,6 +192,11 @@ service cloud.firestore {
       allow create: if isActive() && isValidSalesTask(incoming());
       allow update: if isActive() && isValidSalesTask(incoming());
       allow delete: if isActive() && isAdmin();
+    }
+
+    match /settings/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isActive() && isAdmin() && isValidSettings(incoming());
     }
   }
 }

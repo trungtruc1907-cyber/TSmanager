@@ -126,6 +126,19 @@
         "lastLogin": { "type": "string", "format": "date-time" }
       },
       "required": ["username", "email", "role", "status"]
+    },
+    "SystemSettings": {
+      "title": "System Settings",
+      "description": "Global application configuration.",
+      "type": "object",
+      "properties": {
+        "logoUrl": { "type": "string" },
+        "companyName": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "website": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "firestore": {
@@ -152,6 +165,10 @@
     "users": {
         "schema": "AppUser",
         "description": "Application user profiles and permissions."
+    },
+    "settings": {
+      "schema": "SystemSettings",
+      "description": "Global settings for the application."
     }
   }
 }

@@ -16,7 +16,9 @@ import {
   X,
   LayoutDashboard,
   LogOut,
-  UserCog
+  UserCog,
+  Sliders,
+  Box
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db, auth, handleFirestoreError, OperationType } from './lib/firebase';
@@ -40,9 +42,10 @@ import CatalogManager from './components/CatalogManager';
 import ProjectEditor from './components/ProjectEditor';
 import ProjectProgressTracker from './components/ProjectProgressTracker';
 import UserManagement from './components/UserManagement';
+import SystemSettings from './components/SystemSettings';
 import { Logo } from './components/Logo';
 
-type View = 'dashboard' | 'customers' | 'projects' | 'catalog' | 'editor' | 'users' | 'tracker';
+type View = 'dashboard' | 'customers' | 'projects' | 'catalog' | 'editor' | 'users' | 'tracker' | 'settings';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -343,8 +346,11 @@ export default function App() {
     { id: 'dashboard', label: 'Tổng quan', icon: LayoutDashboard },
     { id: 'customers', label: 'Khách hàng', icon: Users },
     { id: 'projects', label: 'Công trình', icon: Sun },
-    { id: 'catalog', label: 'Danh mục TB', icon: Settings },
-    ...(userRole === 'admin' || userRole === 'manager' ? [{ id: 'users', label: 'Quản lý Nhân sự', icon: UserCog }] : []),
+    { id: 'catalog', label: 'Danh mục TB', icon: Box },
+    ...(userRole === 'admin' || userRole === 'manager' ? [
+      { id: 'users', label: 'Quản lý Nhân sự', icon: UserCog },
+      { id: 'settings', label: 'Cấu hình', icon: Sliders }
+    ] : []),
   ];
 
   const handleOpenProject = (id: string) => {
@@ -484,6 +490,7 @@ export default function App() {
               {activeView === 'projects' && <ProjectDashboard onOpenProject={handleOpenProject} onOpenTracker={handleOpenTracker} showAll userRole={userRole} userId={user.uid} />}
               {activeView === 'catalog' && <CatalogManager userId={user.uid} />}
               {activeView === 'users' && <UserManagement userId={user.uid} />}
+              {activeView === 'settings' && <SystemSettings userId={user.uid} />}
               {activeView === 'editor' && (
                 <ProjectEditor 
                   projectId={selectedProjectId} 
