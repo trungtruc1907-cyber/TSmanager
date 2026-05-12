@@ -37,103 +37,87 @@
     size: A4;
   }
 
+  /* Reset all background colors and text for printing */
   html, body {
-    height: auto !important;
-    overflow: visible !important;
-    background: white !important;
     margin: 0 !important;
     padding: 0 !important;
+    background: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  /* Hide specific UI elements that shouldn't be printed */
-  aside, nav, header, footer, .no-print, button, form, .sticky, [role="dialog"], [role="presentation"], .lucide {
+  /* Hide navigation, buttons, and extra UI */
+  .no-print, 
+  nav, 
+  aside, 
+  header, 
+  button, 
+  form, 
+  .sticky,
+  [role="dialog"],
+  [role="presentation"] {
     display: none !important;
   }
 
-  /* Make the entire app container transparent for printing */
-  html, body, #root, #root div, main, .max-w-7xl, .proposal-container {
-    display: block !important;
-    visibility: visible !important;
-    position: static !important;
-    width: 100% !important;
-    height: auto !important;
-    min-height: auto !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: visible !important;
-    float: none !important;
-    border: none !important;
-    box-shadow: none !important;
+  /* Force the proposal container to be the only visible thing */
+  /* We hide everything under root first, then show the proposal path */
+  #root > * {
+    display: none !important;
   }
 
-  /* Restore visibility for printable items and their children */
+  #root .print-content-root,
+  #root .print-content-root *,
   .proposal-container,
   .proposal-container * {
+    display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
+    position: static !important;
+    overflow: visible !important;
+    height: auto !important;
+    width: 100% !important;
     transform: none !important;
     transition: none !important;
+    animation: none !important;
   }
 
-  /* Ensure background and colors are printed */
-  .proposal-print {
-    background-color: white !important;
-    color: black !important;
-  }
-
-  /* Restore table layouts */
-  .proposal-container table {
-    display: table !important;
-    width: 100% !important;
-  }
-  .proposal-container thead { display: table-header-group !important; }
-  .proposal-container tbody { display: table-row-group !important; }
-  .proposal-container tr { display: table-row !important; }
-  .proposal-container th, .proposal-container td { 
-    display: table-cell !important; 
-    border: 1px solid #334155 !important;
-  }
-
+  /* Structural fixes for print */
   .proposal-container {
     padding: 0 !important;
     margin: 0 !important;
-    width: 100% !important;
-    max-width: none !important;
-    top: 0 !important;
-    left: 0 !important;
+    border: none !important;
+    background: transparent !important;
   }
 
   .proposal-print {
-    margin: 0 0 20px 0 !important;
-    padding: 20px !important;
+    margin-bottom: 20px !important;
     border: 1px solid #e2e8f0 !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    width: 100% !important;
+    padding: 40px !important;
     page-break-inside: avoid;
   }
 
   .break-after-page {
     page-break-after: always !important;
     break-after: page !important;
-    margin-bottom: 0 !important;
   }
 
-  /* Color fixes for printing */
-  * {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-    color-adjust: exact !important;
+  /* Restore table layouts */
+  .proposal-container table {
+    display: table !important;
+  }
+  .proposal-container thead { display: table-header-group !important; }
+  .proposal-container tbody { display: table-row-group !important; }
+  .proposal-container tr { display: table-row !important; }
+  .proposal-container th, .proposal-container td { 
+    display: table-cell !important; 
+    border: 1px solid #e2e8f0 !important;
   }
 
-  .text-white { color: white !important; }
+  /* Color forcing */
   .bg-slate-900 { background-color: #0f172a !important; }
-  .bg-[#334155] { background-color: #334155 !important; }
-  .text-blue-600 { color: #2563eb !important; }
   .bg-blue-600 { background-color: #2563eb !important; }
-  .text-green-600 { color: #16a34a !important; }
-  .bg-green-600 { background-color: #16a34a !important; }
-  .text-amber-400 { color: #fbbf24 !important; }
-  .bg-amber-400 { background-color: #fbbf24 !important; }
+  .text-white { color: white !important; }
+  .text-blue-600 { color: #2563eb !important; }
+  .text-slate-900 { color: #0f172a !important; }
 }
 
