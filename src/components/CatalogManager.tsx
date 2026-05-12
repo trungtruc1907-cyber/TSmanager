@@ -7,7 +7,11 @@ import { formatCurrency, cn } from '../lib/utils';
 
 type EquipmentCategory = 'panel' | 'inverter' | 'battery' | 'mounting' | 'accessory';
 
-export default function CatalogManager() {
+interface CatalogManagerProps {
+  userId?: string;
+}
+
+export default function CatalogManager({ userId }: CatalogManagerProps) {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<EquipmentCategory | 'all'>('all');
@@ -24,6 +28,7 @@ export default function CatalogManager() {
   ];
 
   useEffect(() => {
+    if (!userId) return;
     const q = query(collection(db, 'equipment'), orderBy('brand'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setEquipment(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Equipment)));
@@ -32,7 +37,7 @@ export default function CatalogManager() {
       handleFirestoreError(error, OperationType.GET, 'equipment');
     });
     return () => unsubscribe();
-  }, []);
+  }, [userId]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

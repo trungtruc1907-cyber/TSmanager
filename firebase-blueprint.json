@@ -50,9 +50,12 @@
       "properties": {
         "customerId": { "type": "string" },
         "status": { "type": "string", "enum": ["lead", "survey", "proposal", "contract", "installation", "completed"] },
+        "currentPhase": { "type": "string" },
+        "progress": { "type": "number" },
         "monthlyBill": { "type": "number", "description": "Average monthly electricity bill in VND" },
         "systemSizeKWp": { "type": "number" },
         "assignedSalesId": { "type": "string" },
+        "assignedOperatorId": { "type": "string" },
         "panels": { "type": "object", "properties": { "equipmentId": { "type": "string" }, "count": { "type": "number" } } },
         "inverters": { "type": "object", "properties": { "equipmentId": { "type": "string" }, "count": { "type": "number" } } },
         "batteries": { "type": "object", "properties": { "equipmentId": { "type": "string" }, "count": { "type": "number" } } },
@@ -61,7 +64,39 @@
         "paybackYears": { "type": "number" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["customerId", "status"]
+      "required": ["customerId", "status", "progress"]
+    },
+    "ProjectTask": {
+      "title": "Project Task",
+      "description": "Execution tasks for project phases",
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "assignedToId": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "phase": { "type": "string" },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["todo", "in_progress", "review", "done"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["projectId", "title", "status", "creatorId"]
+    },
+    "ProjectActivity": {
+      "title": "Project Activity",
+      "description": "History log for project events",
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "type": { "type": "string", "enum": ["status_change", "task_update", "comment", "file_upload"] },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["projectId", "userId", "type", "description"]
     },
     "SalesTask": {
       "title": "Sales Task",
@@ -84,9 +119,9 @@
       "properties": {
         "username": { "type": "string" },
         "email": { "type": "string" },
-        "role": { "type": "string", "enum": ["admin", "manager", "sales_rep"] },
+        "role": { "type": "string", "enum": ["admin", "manager", "sales_rep", "operator"] },
         "displayName": { "type": "string" },
-        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "status": { "type": "string", "enum": ["active", "inactive", "pending"] },
         "createdAt": { "type": "string", "format": "date-time" },
         "lastLogin": { "type": "string", "format": "date-time" }
       },

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, doc, getDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
-import { Project, Customer, Equipment, ProjectStatus, SalesPerson } from '../types';
+import { Project, Customer, Equipment, ProjectStatus, AppUser, UserRole } from '../types';
 import { 
   Calculator, 
   ArrowLeft, 
@@ -37,14 +37,16 @@ import {
 interface Props {
   projectId: string | null;
   initialCustomerId?: string | null;
+  userRole?: UserRole;
+  userId?: string;
   onClose: () => void;
 }
 
-export default function ProjectEditor({ projectId, initialCustomerId, onClose }: Props) {
+export default function ProjectEditor({ projectId, initialCustomerId, userRole, userId, onClose }: Props) {
   const [step, setStep] = useState(1);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [catalog, setCatalog] = useState<Equipment[]>([]);
-  const [salesStaff, setSalesStaff] = useState<SalesPerson[]>([]);
+  const [salesStaff, setSalesStaff] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Form State
@@ -53,12 +55,13 @@ export default function ProjectEditor({ projectId, initialCustomerId, onClose }:
     customerId: initialCustomerId || '',
     monthlyBill: 0,
     systemSizeKWp: 0,
+    progress: 0,
     panels: { equipmentId: '', count: 0 },
     inverters: { equipmentId: '', count: 0 },
     totalCost: 0,
     annualProduction: 0,
     paybackYears: 0,
-    assignedSalesId: ''
+    assignedSalesId: userRole === 'sales_rep' ? userId : ''
   });
 
   useEffect(() => {
@@ -68,8 +71,8 @@ export default function ProjectEditor({ projectId, initialCustomerId, onClose }:
     onSnapshot(collection(db, 'equipment'), (s) => setCatalog(s.docs.map(d => ({ id: d.id, ...d.data() } as Equipment))), (error) => {
       handleFirestoreError(error, OperationType.GET, 'equipment');
     });
-    onSnapshot(query(collection(db, 'sales'), orderBy('name')), (s) => setSalesStaff(s.docs.map(d => ({ id: d.id, ...d.data() } as SalesPerson))), (error) => {
-      handleFirestoreError(error, OperationType.GET, 'sales');
+    onSnapshot(query(collection(db, 'users'), orderBy('displayName')), (s) => setSalesStaff(s.docs.map(d => ({ id: d.id, ...d.data() } as AppUser))), (error) => {
+      handleFirestoreError(error, OperationType.GET, 'users');
     });
 
     if (projectId) {
@@ -129,14 +132,14 @@ export default function ProjectEditor({ projectId, initialCustomerId, onClose }:
     if (!selectedPanel || !selectedInverter) return;
 
     const panelCount = Math.ceil((size * 1000) / selectedPanel.capacity);
-    const inverterCount = Math.ceil(size / selectedInverter.capacity);
+    const inverterCount = 1;
     
     const baseProject = {
       ...project,
       monthlyBill: bill,
       systemSizeKWp: size,
       panels: { equipmentId: selectedPanel.id, count: panelCount },
-      inverters: { equipmentId: selectedInverter.id, count: inverterCount },
+      inverters: { equipmentId: selectedInverter.id, count: 1 },
       batteries: project.batteries ? { ...project.batteries } : { equipmentId: '', count: 0 }
     };
 
@@ -259,12 +262,19 @@ export default function ProjectEditor({ projectId, initialCustomerId, onClose }:
                     <div className="relative">
                       <UserCheck className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300" />
                       <select 
-                        className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:bg-white focus:border-blue-500 appearance-none transition-all"
+                        disabled={userRole === 'sales_rep'}
+                        className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:bg-white focus:border-blue-500 appearance-none transition-all disabled:opacity-50"
                         value={project.assignedSalesId || ''}
                         onChange={e => setProject({...project, assignedSalesId: e.target.value})}
                       >
-                        <option value="">-- Cấp độ hệ thống --</option>
-                        {salesStaff.map(s => <option key={s.id} value={s.id}>{s.name.toUpperCase()}</option>)}
+                        <option value="">-- Chọn nhân sự phụ trách --</option>
+                        {userRole === 'sales_rep' && userId ? (
+                          <option value={userId}>CHÍNH TÔI</option>
+                        ) : (
+                          salesStaff
+                            .filter(u => u.status === 'active' && (u.role === 'sales_rep' || u.role === 'manager' || u.role === 'admin'))
+                            .map(s => <option key={s.id} value={s.id}>{s.displayName.toUpperCase()}</option>)
+                        )}
                       </select>
                     </div>
                   </div>
@@ -389,7 +399,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, onClose }:
                               className="w-full pl-6 pr-10 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:bg-white focus:border-blue-500 appearance-none transition-all"
                               value={project.inverters?.equipmentId}
                               onChange={e => {
-                                  const newProj = {...project, inverters: {...project.inverters!, equipmentId: e.target.value}};
+                                  const newProj = {...project, inverters: { equipmentId: e.target.value, count: 1 }};
                                   setProject({...newProj, ...calculateFinancials(newProj)});
                               }}
                           >
@@ -687,7 +697,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, onClose }:
                 {/* Footer Disclaimer */}
                 <div className="flex gap-3 items-start border-t border-slate-100 pt-8 italic">
                    <div className="w-1.5 h-1.5 rounded-full bg-slate-900 mt-1.5 shrink-0" />
-                   <p className="text-sm text-slate-700 leading-relaxed font-serif">
+                   <p className="text-sm text-slate-700 leading-relaxed font-sans">
                      báo giá trên được tạo bởi công cụ AI - Trí tuệ nhân tạo được phát triển bởi đội ngũ kỹ sư của Trường Sơn Solar dựa trên dữ liệu sản lượng bức xạ tại địa điểm khách hàng cung cấp
                    </p>
                 </div>
@@ -700,7 +710,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, onClose }:
                   <div className="w-40 h-1 bg-slate-900 mx-auto mt-4" />
                 </div>
 
-                <div className="space-y-4 mb-12 text-lg font-serif">
+                <div className="space-y-4 mb-12 text-lg font-sans">
                   <div className="flex border-b border-dotted border-slate-300 pb-1">
                     <span className="w-48 shrink-0">Khách hàng:</span>
                     <span className="font-bold">{currentCustomer?.name}</span>
@@ -785,16 +795,187 @@ export default function ProjectEditor({ projectId, initialCustomerId, onClose }:
                   </tbody>
                 </table>
 
-                <div className="mt-16 grid grid-cols-2 text-center font-serif">
+                {/* Quotation Notes & Conditions */}
+                <div className="mt-8 space-y-4 text-sm font-sans text-slate-800 leading-relaxed">
+                  <p className="font-bold underline">Ghi chú:</p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>Báo giá trên đã bao gồm chi phí vận chuyển, lắp đặt . . .</li>
+                    <li><span className="font-bold">Quy cách hàng hóa:</span> Đảm bảo chất lượng, chính hãng, chứng nhận COCQ (đối với thiết bị chính) đầy đủ.</li>
+                    <li><span className="font-bold">Tiến độ:</span> Giao hàng và thi công lắp đặt trong vòng 10 ngày từ ngày nhận đặt cọc.</li>
+                    <li>
+                      <span className="font-bold">Điều kiện thanh toán:</span>
+                      <ul className="list-[circle] pl-5 mt-1 space-y-1">
+                        <li>Tạm ứng 40% giá trị hợp đồng ngay sau khi ký hợp đồng.</li>
+                        <li>Thanh toán 30% giá trị hợp đồng sau khi thiết bị chính (Tấm pin, Inverter, Pin Lithium) về đến chân công trình.</li>
+                        <li>Thanh toán 30% còn lại sau khi hoàn thành nghiệm thu lắp đặt đưa vào sử dụng.</li>
+                        <li>Hình thức thanh toán: Tiền mặt hoặc chuyển khoản.</li>
+                      </ul>
+                    </li>
+                    <li><span className="font-bold">Điều kiện bảo hành:</span> Tất cả hàng hóa, thiết bị được bảo hành theo tiêu chuẩn của Nhà sản xuất (chi tiết như trên báo giá).</li>
+                  </ul>
+                </div>
+
+                <div className="mt-16 grid grid-cols-2 text-center font-sans">
                   <div className="space-y-24">
                     <p className="font-bold">ĐẠI DIỆN KHÁCH HÀNG</p>
                     <p className="text-slate-400 italic">(Ký và ghi rõ họ tên)</p>
                   </div>
                   <div className="space-y-24">
                     <p className="font-bold uppercase leading-tight">CÔNG TY CỔ PHẦN ĐẦU TƯ TM TRƯỜNG SƠN</p>
-                    <p className="font-bold">{salesStaff.find(s => s.id === project.assignedSalesId)?.name || 'CHUYÊN VIÊN KỸ THUẬT'}</p>
+                    <p className="font-bold">{salesStaff.find(s => s.id === project.assignedSalesId)?.displayName || 'CHUYÊN VIÊN KỸ THUẬT'}</p>
                   </div>
                 </div>
+              </div>
+
+              {/* Third Page: Detailed Equipment List */}
+              <div className="bg-white p-10 proposal-print shadow-sm border border-slate-200 min-h-[1050px]">
+                <h3 className="text-xl font-bold text-slate-900 mb-6 font-sans">Chi tiết</h3>
+                
+                <table className="w-full border-collapse border border-[#334155] text-[11px]">
+                  <thead>
+                    <tr className="bg-[#334155] text-white">
+                      <th className="border border-[#334155] px-2 py-3 text-center w-10">STT</th>
+                      <th className="border border-[#334155] px-3 py-3 text-left w-40">Các hạng mục</th>
+                      <th className="border border-[#334155] px-3 py-3 text-left">Mô tả</th>
+                      <th className="border border-[#334155] px-2 py-3 text-center">Xuất xứ</th>
+                      <th className="border border-[#334155] px-2 py-3 text-center">Mode</th>
+                      <th className="border border-[#334155] px-2 py-3 text-center">Bảo hành (Tháng)</th>
+                      <th className="border border-[#334155] px-2 py-3 text-center">Số lượng</th>
+                      <th className="border border-[#334155] px-2 py-3 text-center font-normal">Đơn vị</th>
+                      <th className="border border-[#334155] px-2 py-3 text-right">Đơn giá</th>
+                      <th className="border border-[#334155] px-2 py-3 text-right">Thành tiền</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Section A: Main Equipment */}
+                    <tr className="bg-slate-50">
+                      <td className="border border-slate-300 px-2 py-2 text-center font-bold">A</td>
+                      <td colSpan={8} className="border border-slate-300 px-3 py-2 font-bold uppercase tracking-wide">THIẾT BỊ CHÍNH</td>
+                      <td className="border border-slate-300 px-2 py-2 text-right font-bold">
+                        {formatCurrency((project.totalCost || 0) / 1.08 * 0.75)}
+                      </td>
+                    </tr>
+                    
+                    {/* PV Panels */}
+                    {project.panels?.equipmentId && (() => {
+                      const item = catalog.find(e => e.id === project.panels?.equipmentId);
+                      if (!item) return null;
+                      return (
+                        <tr>
+                          <td className="border border-slate-300 px-2 py-4 text-center">1</td>
+                          <td className="border border-slate-300 px-3 py-4 font-medium">Tấm pin năng lượng mặt trời {item.brand} {item.model}</td>
+                          <td className="border border-slate-300 px-3 py-4 text-slate-600 leading-relaxed">
+                            Hãng Pin Top 1 thế giới, Hiệu suất cao, Công nghệ Ntype topcon mới nhất, Bảo hành vật lý 15-25 năm.
+                          </td>
+                          <td className="border border-slate-300 px-2 py-4 text-center">{item.brand}</td>
+                          <td className="border border-slate-300 px-2 py-4 text-center">{item.capacity}W</td>
+                          <td className="border border-slate-300 px-2 py-4 text-center">144 tháng</td>
+                          <td className="border border-slate-300 px-2 py-4 text-center">{project.panels?.count}</td>
+                          <td className="border border-slate-300 px-2 py-4 text-center">Tấm</td>
+                          <td className="border border-slate-300 px-2 py-4 text-right">{formatCurrency(item.unitPrice)}</td>
+                          <td className="border border-slate-300 px-2 py-4 text-right font-bold">{formatCurrency(item.unitPrice * (project.panels?.count || 0))}</td>
+                        </tr>
+                      );
+                    })()}
+
+                    {/* Inverters */}
+                    {project.inverters?.equipmentId && (() => {
+                      const item = catalog.find(e => e.id === project.inverters?.equipmentId);
+                      if (!item) return null;
+                      return (
+                        <tr>
+                          <td className="border border-slate-300 px-2 py-4 text-center">2</td>
+                          <td className="border border-slate-300 px-3 py-4 font-medium">Biến tần (Inverter) {item.brand} {item.model}</td>
+                          <td className="border border-slate-300 px-3 py-4 text-slate-600 leading-relaxed">
+                            Sóng sin chuẩn, hiệu suất chuyển đổi cực cao {item.capacity}KW, hỗ trợ giám sát qua Cloud/Wifi.
+                          </td>
+                          <td className="border border-slate-300 px-2 py-4 text-center">{item.brand}</td>
+                          <td className="border border-slate-300 px-2 py-4 text-center">{item.capacity}KW</td>
+                          <td className="border border-slate-300 px-2 py-4 text-center">60 tháng</td>
+                          <td className="border border-slate-300 px-2 py-4 text-center">{project.inverters?.count}</td>
+                          <td className="border border-slate-300 px-2 py-4 text-center">Bộ</td>
+                          <td className="border border-slate-300 px-2 py-4 text-right">{formatCurrency(item.unitPrice)}</td>
+                          <td className="border border-slate-300 px-2 py-4 text-right font-bold">{formatCurrency(item.unitPrice * (project.inverters?.count || 0))}</td>
+                        </tr>
+                      );
+                    })()}
+
+                    {/* Batteries (Optional) */}
+                    {project.batteries?.equipmentId && (() => {
+                      const item = catalog.find(e => e.id === project.batteries?.equipmentId);
+                      if (!item) return null;
+                      return (
+                        <tr>
+                          <td className="border border-slate-300 px-2 py-4 text-center">3</td>
+                          <td className="border border-slate-300 px-3 py-4 font-medium">Pin lưu trữ (Battery) {item.brand} {item.model}</td>
+                          <td className="border border-slate-300 px-3 py-4 text-slate-600 leading-relaxed">
+                            Công nghệ Lithium LiFePO4 an toàn, chu kỳ nạp xả cao, tuổi thọ trên 10 năm.
+                          </td>
+                          <td className="border border-slate-300 px-2 py-4 text-center">{item.brand}</td>
+                          <td className="border border-slate-300 px-2 py-4 text-center">{item.capacity}KWH</td>
+                          <td className="border border-slate-300 px-2 py-4 text-center">60 tháng</td>
+                          <td className="border border-slate-300 px-2 py-4 text-center">{project.batteries?.count}</td>
+                          <td className="border border-slate-300 px-2 py-4 text-center">Bộ</td>
+                          <td className="border border-slate-300 px-2 py-4 text-right">{formatCurrency(item.unitPrice)}</td>
+                          <td className="border border-slate-300 px-2 py-4 text-right font-bold">{formatCurrency(item.unitPrice * (project.batteries?.count || 0))}</td>
+                        </tr>
+                      );
+                    })()}
+
+                    {/* Section B: Materials & Installation */}
+                    <tr className="bg-slate-50">
+                      <td className="border border-slate-300 px-2 py-2 text-center font-bold">B</td>
+                      <td colSpan={8} className="border border-slate-300 px-3 py-2 font-bold uppercase tracking-wide">VẬT TƯ PHỤ VÀ THI CÔNG</td>
+                      <td className="border border-slate-300 px-2 py-2 text-right font-bold">
+                        {formatCurrency((project.totalCost || 0) / 1.08 * 0.20)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="border border-slate-300 px-2 py-4 text-center">1</td>
+                      <td className="border border-slate-300 px-3 py-4 font-medium">Hệ thống khung giàn giá đỡ</td>
+                      <td className="border border-slate-300 px-3 py-4 text-slate-600 leading-relaxed">
+                        Nhôm định hình chuyên dụng anode, Inox 304, đảm bảo chống ăn mòn và chịu bão cấp 12.
+                      </td>
+                      <td className="border border-slate-300 px-2 py-4 text-center">Việt Nam</td>
+                      <td className="border border-slate-300 px-2 py-4 text-center">Standard</td>
+                      <td className="border border-slate-300 px-2 py-4 text-center">120 tháng</td>
+                      <td className="border border-slate-300 px-2 py-4 text-center">1</td>
+                      <td className="border border-slate-300 px-2 py-4 text-center">Hệ</td>
+                      <td className="border border-slate-300 px-2 py-4 text-right">--</td>
+                      <td className="border border-slate-300 px-2 py-4 text-right">--</td>
+                    </tr>
+                    <tr>
+                      <td className="border border-slate-300 px-2 py-4 text-center">2</td>
+                      <td className="border border-slate-300 px-3 py-4 font-medium">Vật tư điện & Cáp Solar</td>
+                      <td className="border border-slate-300 px-3 py-4 text-slate-600 leading-relaxed">
+                        Dây cáp DC chuyên dụng 4mm2, Tủ điện bảo vệ AC/DC, thiết bị chống sét lan truyền.
+                      </td>
+                      <td className="border border-slate-300 px-2 py-4 text-center">Cadisun</td>
+                      <td className="border border-slate-300 px-2 py-4 text-center">4mm2</td>
+                      <td className="border border-slate-300 px-2 py-4 text-center">12 tháng</td>
+                      <td className="border border-slate-300 px-2 py-4 text-center">1</td>
+                      <td className="border border-slate-300 px-2 py-4 text-center">Gói</td>
+                      <td className="border border-slate-300 px-2 py-4 text-right">--</td>
+                      <td className="border border-slate-300 px-2 py-4 text-right">--</td>
+                    </tr>
+
+                    {/* Section C: Others */}
+                    <tr className="bg-slate-50">
+                      <td className="border border-slate-300 px-2 py-2 text-center font-bold">C</td>
+                      <td colSpan={8} className="border border-slate-300 px-3 py-2 font-bold uppercase tracking-wide">VẬN CHUYỂN VÀ CHI PHÍ KHÁC</td>
+                      <td className="border border-slate-300 px-2 py-2 text-right font-bold">
+                        {formatCurrency((project.totalCost || 0) / 1.08 * 0.05)}
+                      </td>
+                    </tr>
+                    
+                    <tr className="bg-slate-100">
+                      <td colSpan={9} className="border border-slate-300 px-4 py-3 text-right font-black uppercase text-xs">Tổng cộng giá trị hệ thống (Đã bao gồm VAT)</td>
+                      <td className="border border-slate-300 px-2 py-3 text-right font-black text-sm text-blue-700">
+                        {formatCurrency(project.totalCost || 0)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4 no-print sm:justify-center">

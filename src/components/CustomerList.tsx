@@ -11,7 +11,7 @@ import {
   getDocs,
   limit
 } from 'firebase/firestore';
-import { Project, Customer, SalesPerson } from '../types';
+import { Project, Customer, AppUser } from '../types';
 import { UserPlus, Search, Phone, Mail, MapPin, Calendar, UserCheck, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -19,11 +19,12 @@ import { motion, AnimatePresence } from 'motion/react';
 
 interface CustomerListProps {
   onViewProject: (customerId: string) => void;
+  userId?: string;
 }
 
-export default function CustomerList({ onViewProject }: CustomerListProps) {
+export default function CustomerList({ onViewProject, userId }: CustomerListProps) {
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [salesStaff, setSalesStaff] = useState<SalesPerson[]>([]);
+  const [salesStaff, setSalesStaff] = useState<AppUser[]>([]);
   const [search, setSearch] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [newCustomer, setNewCustomer] = useState({ 
@@ -37,6 +38,7 @@ export default function CustomerList({ onViewProject }: CustomerListProps) {
   });
 
   useEffect(() => {
+    if (!userId) return;
     const qCust = query(collection(db, 'customers'), orderBy('createdAt', 'desc'));
     const unsubCust = onSnapshot(qCust, (snapshot) => {
       setCustomers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer)));
@@ -44,18 +46,18 @@ export default function CustomerList({ onViewProject }: CustomerListProps) {
       handleFirestoreError(error, OperationType.GET, 'customers');
     });
 
-    const qSales = query(collection(db, 'sales'), orderBy('name'));
+    const qSales = query(collection(db, 'users'), orderBy('displayName'));
     const unsubSales = onSnapshot(qSales, (snapshot) => {
-      setSalesStaff(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SalesPerson)));
+      setSalesStaff(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppUser)));
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'sales');
+      handleFirestoreError(error, OperationType.GET, 'users');
     });
 
     return () => {
       unsubCust();
       unsubSales();
     };
-  }, []);
+  }, [userId]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,7 +167,7 @@ export default function CustomerList({ onViewProject }: CustomerListProps) {
                     <div className="w-8 h-8 rounded-xl bg-blue-50/50 flex items-center justify-center border border-blue-100/50">
                       <UserCheck className="h-3.5 w-3.5 text-blue-600" />
                     </div>
-                    <span className="text-[9px] font-black text-blue-800 uppercase tracking-widest">Sale: {salesStaff.find(s => s.id === c.assignedSalesId)?.name || 'N/A'}</span>
+                    <span className="text-[9px] font-black text-blue-800 uppercase tracking-widest">Sale: {salesStaff.find(s => s.id === c.assignedSalesId)?.displayName || 'N/A'}</span>
                   </div>
                 )}
 
@@ -313,7 +315,9 @@ export default function CustomerList({ onViewProject }: CustomerListProps) {
                     onChange={e => setNewCustomer({...newCustomer, assignedSalesId: e.target.value})}
                   >
                     <option value="">-- Chưa bàn giao nhân sự --</option>
-                    {salesStaff.map(s => <option key={s.id} value={s.id}>{s.name.toUpperCase()}</option>)}
+                    {salesStaff
+                      .filter(s => s.status === 'active' && (s.role === 'sales_rep' || s.role === 'manager' || s.role === 'admin'))
+                      .map(s => <option key={s.id} value={s.id}>{s.displayName.toUpperCase()}</option>)}
                   </select>
                 </div>
 

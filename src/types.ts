@@ -1,6 +1,14 @@
 export type ProjectStatus = 'lead' | 'survey' | 'proposal' | 'contract' | 'installation' | 'completed';
+export type TaskStatus = 'todo' | 'in_progress' | 'review' | 'done';
 export type UsageType = 'residential' | 'commercial' | 'industrial';
 export type PhaseType = '1phase' | '3phase';
+
+export interface ProjectPhase {
+  id: string;
+  name: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  progress: number;
+}
 
 export interface Customer {
   id: string;
@@ -36,9 +44,12 @@ export interface Project {
   id: string;
   customerId: string;
   status: ProjectStatus;
+  currentPhase?: string;
+  progress: number;
   monthlyBill: number;
   systemSizeKWp: number;
   assignedSalesId?: string;
+  assignedOperatorId?: string;
   panels: {
     equipmentId: string;
     count: number;
@@ -57,7 +68,7 @@ export interface Project {
   updatedAt: any;
 }
 
-export type UserRole = 'admin' | 'sales_rep' | 'manager';
+export type UserRole = 'admin' | 'manager' | 'sales_rep' | 'operator';
 
 export interface AppUser {
   id: string;
@@ -65,9 +76,35 @@ export interface AppUser {
   email: string;
   role: UserRole;
   displayName: string;
+  phone?: string;
+  region?: string;
   createdAt: any;
   lastLogin?: any;
-  status: 'active' | 'inactive';
+  status: 'active' | 'inactive' | 'pending';
+}
+
+export interface ProjectTask {
+  id: string;
+  projectId: string;
+  assignedToId?: string;
+  creatorId: string;
+  title: string;
+  description: string;
+  phase?: string;
+  dueDate: any;
+  status: TaskStatus;
+  createdAt: any;
+  updatedAt: any;
+}
+
+export interface ProjectActivity {
+  id: string;
+  projectId: string;
+  userId: string;
+  userName: string;
+  type: 'status_change' | 'task_update' | 'comment' | 'file_upload';
+  description: string;
+  createdAt: any;
 }
 
 export interface SalesTask {

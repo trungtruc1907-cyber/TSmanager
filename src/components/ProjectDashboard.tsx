@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
-import { Project, Customer, SalesPerson } from '../types';
+import { collection, onSnapshot, query, orderBy, limit, deleteDoc, doc, where } from 'firebase/firestore';
+import { Project, Customer, AppUser, UserRole } from '../types';
 import { 
   Sun, 
   ArrowUpRight, 
@@ -10,38 +10,55 @@ import {
   AlertCircle,
   TrendingUp,
   Wallet,
-  UserCheck
+  UserCheck,
+  Trash2
 } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { motion } from 'motion/react';
 
 interface Props {
   onOpenProject: (id: string) => void;
+  onOpenTracker: (id: string) => void;
   showAll?: boolean;
+  userRole?: UserRole;
+  userId?: string;
 }
 
-export default function ProjectDashboard({ onOpenProject, showAll }: Props) {
+export default function ProjectDashboard({ onOpenProject, onOpenTracker, showAll, userRole, userId }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [customers, setCustomers] = useState<Record<string, Customer>>({});
-  const [salesStaff, setSalesStaff] = useState<SalesPerson[]>([]);
+  const [salesStaff, setSalesStaff] = useState<AppUser[]>([]);
 
   useEffect(() => {
-    const q = showAll 
-      ? query(collection(db, 'projects'), orderBy('updatedAt', 'desc'))
-      : query(collection(db, 'projects'), orderBy('updatedAt', 'desc'), limit(5));
+    if (!userId) return;
+    let q;
+    if (userRole === 'sales_rep' && userId) {
+      q = query(
+        collection(db, 'projects'), 
+        where('assignedSalesId', '==', userId),
+        orderBy('updatedAt', 'desc')
+      );
+    } else {
+      q = query(collection(db, 'projects'), orderBy('updatedAt', 'desc'));
+    }
+    
+    if (!showAll) {
+      q = query(q, limit(5));
+    }
       
     return onSnapshot(q, (snapshot) => {
       setProjects(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Project)));
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'projects');
     });
-  }, [showAll]);
+  }, [showAll, userRole, userId]);
 
   useEffect(() => {
-    onSnapshot(collection(db, 'sales'), (s) => {
-      setSalesStaff(s.docs.map(d => ({ id: d.id, ...d.data() } as SalesPerson)));
+    if (!userId) return;
+    const unsubSales = onSnapshot(collection(db, 'users'), (s) => {
+      setSalesStaff(s.docs.map(d => ({ id: d.id, ...d.data() } as AppUser)));
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'sales');
+      handleFirestoreError(error, OperationType.GET, 'users');
     });
 
     const unsubCust = onSnapshot(collection(db, 'customers'), (snapshot) => {
@@ -55,9 +72,29 @@ export default function ProjectDashboard({ onOpenProject, showAll }: Props) {
     });
 
     return () => {
+      unsubSales();
       unsubCust();
     };
-  }, []);
+  }, [userId]);
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDeleteProject = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+    
+    if (deletingId === id) {
+      try {
+        await deleteDoc(doc(db, 'projects', id));
+        setDeletingId(null);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, `projects/${id}`);
+      }
+    } else {
+      setDeletingId(id);
+      setTimeout(() => setDeletingId(null), 3000);
+    }
+  };
 
   const getStatusInfo = (status: string) => {
     switch (status) {
@@ -178,9 +215,9 @@ export default function ProjectDashboard({ onOpenProject, showAll }: Props) {
                       {salesRep ? (
                         <div className="flex items-center gap-2.5">
                           <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center text-[10px] font-black text-blue-600 border border-blue-100">
-                            {salesRep.name[0]}
+                            {salesRep.displayName?.[0] || salesRep.username?.[0]}
                           </div>
-                          <span className="text-[11px] font-black text-slate-700 uppercase">{salesRep.name}</span>
+                          <span className="text-[11px] font-black text-slate-700 uppercase">{salesRep.displayName || salesRep.username}</span>
                         </div>
                       ) : (
                         <span className="text-[10px] text-slate-300 font-black uppercase italic tracking-widest bg-slate-50 px-2 py-1 rounded-md">Pending</span>
@@ -193,21 +230,48 @@ export default function ProjectDashboard({ onOpenProject, showAll }: Props) {
                       </div>
                     </td>
                     <td className="px-8 py-6">
-                      <div className="font-black text-xs text-slate-900">{project.systemSizeKWp} kWp</div>
-                      <div className="text-[10px] text-slate-400 uppercase font-black tracking-tighter">{project.panels?.count || 0} Tấm Pin</div>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="font-black text-xs text-slate-900">{project.systemSizeKWp} kWp</div>
+                        <span className="text-[9px] font-black text-blue-600">{project.progress || 0}%</span>
+                      </div>
+                      <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-600 rounded-full" style={{ width: `${project.progress || 0}%` }} />
+                      </div>
+                      <div className="text-[10px] text-slate-400 uppercase font-black tracking-tighter mt-1">{project.panels?.count || 0} Tấm Pin</div>
                     </td>
                     <td className="px-8 py-6">
                       <div className="font-black text-sm text-slate-900">{formatCurrency(project.totalCost || 0)}</div>
                       <div className="text-[9px] text-green-600 font-black uppercase tracking-tighter">NPV Dương • 22.4%</div>
                     </td>
                     <td className="px-8 py-6 text-right">
-                      <button 
-                        onClick={() => onOpenProject(project.id)}
-                        className="p-2.5 bg-slate-900 text-white rounded-xl hover:bg-blue-600 transition-all shadow-lg active:scale-95"
-                        title="Xem chi tiết"
-                      >
-                        <ArrowUpRight className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button 
+                          onClick={() => onOpenTracker(project.id)}
+                          className="p-2.5 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm active:scale-95 border border-blue-100"
+                          title="Theo dõi tiến độ"
+                        >
+                          <TrendingUp className="h-4 w-4" />
+                        </button>
+                        <button 
+                          onClick={() => onOpenProject(project.id)}
+                          className="p-2.5 bg-slate-900 text-white rounded-xl hover:bg-blue-600 transition-all shadow-lg active:scale-95"
+                          title="Xem chi tiết"
+                        >
+                          <ArrowUpRight className="h-4 w-4" />
+                        </button>
+                        <button 
+                          onClick={(e) => handleDeleteProject(e, project.id)}
+                          className={cn(
+                            "p-2.5 rounded-xl transition-all active:scale-95 border shadow-lg",
+                            deletingId === project.id 
+                              ? "bg-red-600 text-white border-red-700 animate-pulse" 
+                              : "bg-white text-slate-400 border-slate-200 hover:text-red-600 hover:border-red-100 hover:bg-red-50"
+                          )}
+                          title={deletingId === project.id ? "Nhấn lại để xóa" : "Xóa dự án"}
+                        >
+                          {deletingId === project.id ? <AlertCircle className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -274,16 +338,38 @@ export default function ProjectDashboard({ onOpenProject, showAll }: Props) {
                   </div>
                 </div>
 
+                <div className="bg-slate-50/80 p-3 rounded-2xl border border-slate-100 space-y-2">
+                   <div className="flex items-center justify-between">
+                      <p className="text-slate-400 font-black uppercase text-[8px] tracking-tighter">Tiến độ</p>
+                      <p className="font-black text-[9px] text-blue-600 leading-none">{project.progress || 0}%</p>
+                   </div>
+                   <div className="w-full h-1 bg-white rounded-full overflow-hidden">
+                      <div className="h-full bg-blue-600 rounded-full" style={{ width: `${project.progress || 0}%` }} />
+                   </div>
+                </div>
+
                 <div className="pt-2 flex items-center justify-between border-t border-slate-100">
-                   <div className="flex -space-x-2">
-                      {[1, 2].map(i => (
-                        <div key={i} className="w-6 h-6 rounded-full bg-slate-200 border-2 border-white flex items-center justify-center text-[8px] font-black text-slate-500 uppercase">
-                          {i === 1 ? 'S' : 'M'}
-                        </div>
-                      ))}
-                      <div className="w-6 h-6 rounded-full bg-slate-900 border-2 border-white flex items-center justify-center text-[7px] font-black text-white px-1">
-                        +2
-                      </div>
+                   <div className="flex items-center gap-2">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenTracker(project.id);
+                        }}
+                        className="p-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-100"
+                      >
+                         <TrendingUp className="h-4 w-4" />
+                      </button>
+                      <button 
+                        onClick={(e) => handleDeleteProject(e, project.id)}
+                        className={cn(
+                          "p-2 rounded-xl transition-all active:scale-95",
+                          deletingId === project.id 
+                            ? "bg-red-600 text-white shadow-lg animate-pulse" 
+                            : "text-slate-400 hover:text-red-600"
+                        )}
+                      >
+                        {deletingId === project.id ? <AlertCircle className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
+                      </button>
                    </div>
                    <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-1">
                       Chi tiết <ArrowUpRight className="h-3 w-3" />

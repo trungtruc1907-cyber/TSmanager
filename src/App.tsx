@@ -29,7 +29,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, limit, onSnapshot } from 'firebase/firestore';
 import { cn } from './lib/utils';
 import { UserRole } from './types';
 
@@ -38,10 +38,10 @@ import CustomerList from './components/CustomerList';
 import ProjectDashboard from './components/ProjectDashboard';
 import CatalogManager from './components/CatalogManager';
 import ProjectEditor from './components/ProjectEditor';
-import SalesManagement from './components/SalesManagement';
+import ProjectProgressTracker from './components/ProjectProgressTracker';
 import UserManagement from './components/UserManagement';
 
-type View = 'dashboard' | 'customers' | 'projects' | 'catalog' | 'sales' | 'editor' | 'users';
+type View = 'dashboard' | 'customers' | 'projects' | 'catalog' | 'editor' | 'users' | 'tracker';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -52,26 +52,27 @@ export default function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [targetCustomerId, setTargetCustomerId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<UserRole>('sales_rep');
-
-  // Username/Password state
+  const [userStatus, setUserStatus] = useState<'active' | 'inactive' | 'pending'>('pending');
+  const [profileLoading, setProfileLoading] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
+    const unsubAuth = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       setAuthLoading(false);
       
       if (u) {
+        setProfileLoading(true);
+        const userRef = doc(db, 'users', u.uid);
         try {
-          const userRef = doc(db, 'users', u.uid);
           const userDoc = await getDoc(userRef);
-          
           if (!userDoc.exists()) {
             const username = u.email?.split('@')[0] || 'unknown';
             const role: UserRole = username === 'mrhieu' ? 'admin' : 'sales_rep';
+            const status = username === 'mrhieu' ? 'active' : 'pending';
             
             await setDoc(userRef, {
               username,
@@ -80,21 +81,44 @@ export default function App() {
               displayName: username.toUpperCase(),
               createdAt: serverTimestamp(),
               lastLogin: serverTimestamp(),
-              status: 'active'
+              status
             });
-            setUserRole(role);
           } else {
-            const data = userDoc.data();
-            setUserRole(data.role || 'sales_rep');
             await setDoc(userRef, { lastLogin: serverTimestamp() }, { merge: true });
           }
         } catch (error) {
           console.error("User sync error:", error);
         }
+      } else {
+        setProfileLoading(false);
       }
     });
-    return () => unsub();
+    return () => unsubAuth();
   }, []);
+
+  // User status management is now at the top
+  useEffect(() => {
+    if (!user) {
+      setUserRole('sales_rep');
+      setUserStatus('pending'); // Default to pending on logout
+      return;
+    }
+
+    const userRef = doc(db, 'users', user.uid);
+    const unsubRole = onSnapshot(userRef, (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        setUserRole(data.role || 'sales_rep');
+        setUserStatus(data.status || 'pending');
+      }
+      setProfileLoading(false);
+    }, (error) => {
+      console.error("Role listener error:", error);
+      setProfileLoading(false);
+    });
+
+    return () => unsubRole();
+  }, [user?.uid]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -117,7 +141,13 @@ export default function App() {
       await signInWithPopup(auth, provider);
     } catch (error: any) {
       console.error("Login failed:", error);
-      setAuthError(error.message);
+      if (error.code === 'auth/popup-closed-by-user') {
+        setAuthError("Popup đã bị đóng trước khi hoàn tất đăng nhập.");
+      } else if (error.code === 'auth/cancelled-by-user') {
+        setAuthError("Đăng nhập đã bị hủy.");
+      } else {
+        setAuthError("Đăng nhập Google thất bại: " + (error.message || "Lỗi không xác định"));
+      }
     }
   };
 
@@ -137,11 +167,13 @@ export default function App() {
     } catch (error: any) {
       console.error("Auth failed:", error);
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        setAuthError("Tên đăng nhập hoặc mật khẩu không chính xác.");
+        setAuthError("Tên đăng nhập hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại thông tin.");
+      } else if (error.code === 'auth/invalid-email') {
+        setAuthError("Tên đăng nhập không hợp lệ.");
       } else if (error.code === 'auth/email-already-in-use') {
         setAuthError("Tên đăng nhập này đã tồn tại.");
       } else if (error.code === 'auth/operation-not-allowed') {
-        setAuthError("LỖI: Bạn cần bật 'Email/Password' trong Firebase Console > Authentication > Sign-in method.");
+        setAuthError("LỖI CẤU HÌNH: Bạn cần bật 'Email/Password' trong Firebase Console > Authentication > Sign-in method để sử dụng tính năng này.");
       } else if (error.code === 'auth/unauthorized-domain') {
         setAuthError("LỖI: Tên miền này chưa được cấp phép trong Firebase Console > Authentication > Settings > Authorized domains.");
       } else {
@@ -152,11 +184,73 @@ export default function App() {
 
   const handleLogout = () => signOut(auth);
 
-  if (authLoading) {
+  if (authLoading || profileLoading) {
     return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-900 text-white font-sans">
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-900 text-white font-sans">
         <Sun className="h-10 w-10 text-amber-400 animate-spin mb-4" />
-        <p className="text-sm font-bold uppercase tracking-widest animate-pulse">Khởi động hệ thống...</p>
+        <p className="text-sm font-bold uppercase tracking-widest animate-pulse">
+          {authLoading ? 'Khởi động hệ thống...' : 'Đang tải thông tin...'}
+        </p>
+      </div>
+    );
+  }
+
+  if (user && userStatus !== 'active') {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-slate-950 font-sans p-6 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-full opacity-20">
+           <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600 rounded-full blur-[120px]" />
+           <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-amber-600 rounded-full blur-[120px]" />
+        </div>
+        
+        <div className="relative z-10 w-full max-w-lg bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl md:rounded-3xl p-6 md:p-10 shadow-2xl text-center">
+            <div className="w-20 h-20 bg-white/10 rounded-2xl mx-auto flex items-center justify-center mb-6 border border-white/20">
+              {userStatus === 'pending' ? (
+                <ClipboardList className="h-10 w-10 text-amber-400" />
+              ) : (
+                <X className="h-10 w-10 text-red-500" />
+              )}
+            </div>
+            
+            <h1 className="text-2xl md:text-3xl font-extrabold text-white mb-2 tracking-tight uppercase">
+              {userStatus === 'pending' ? 'Yêu cầu đang chờ duyệt' : 'Tài khoản bị khóa'}
+            </h1>
+            
+            <p className="text-slate-400 text-sm md:text-base font-medium mb-8 leading-relaxed">
+              {userStatus === 'pending' 
+                ? 'Tài khoản của bạn đã được khởi tạo thành công. Vui lòng liên hệ Quản trị viên để được phê duyệt và gán quyền truy cập hệ thống.' 
+                : 'Tài khoản của bạn đã bị tạm khóa. Vui lòng liên hệ với bộ phận kỹ thuật để biết thêm chi tiết.'}
+            </p>
+
+            <div className="bg-white/5 rounded-2xl p-4 border border-white/5 mb-8 text-left">
+              <p className="text-[10px] text-slate-500 uppercase font-black mb-2 tracking-widest leading-none">Thông tin tài khoản</p>
+              <div className="space-y-2">
+                <p className="text-xs text-white font-bold tracking-tight shrink-0 flex items-center gap-2">
+                  <span className="text-slate-400 font-medium">Username:</span> {user.email?.split('@')[0]}
+                </p>
+                <p className="text-xs text-white font-bold tracking-tight shrink-0 flex items-center gap-2">
+                  <span className="text-slate-400 font-medium">Email:</span> {user.email}
+                </p>
+                <p className="text-xs text-white font-bold tracking-tight shrink-0 flex items-center gap-2">
+                  <span className="text-slate-400 font-medium">Trạng thái:</span> 
+                  <span className={cn(
+                    "px-1.5 py-0.5 rounded text-[10px] font-black uppercase",
+                    userStatus === 'pending' ? "bg-amber-400/20 text-amber-300" : "bg-red-400/20 text-red-300"
+                  )}>
+                    {userStatus === 'pending' ? 'Chờ duyệt' : 'Đã khóa'}
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <button 
+              onClick={handleLogout}
+              className="w-full py-4 border border-white/10 text-white rounded-xl font-bold text-sm uppercase tracking-widest transition-all hover:bg-white/5 active:scale-95 flex items-center justify-center gap-2"
+            >
+              <LogOut className="h-4 w-4" />
+              Đăng xuất
+            </button>
+        </div>
       </div>
     );
   }
@@ -251,9 +345,8 @@ export default function App() {
     { id: 'dashboard', label: 'Tổng quan', icon: LayoutDashboard },
     { id: 'customers', label: 'Khách hàng', icon: Users },
     { id: 'projects', label: 'Công trình', icon: Sun },
-    { id: 'sales', label: 'Quản lý Sale', icon: ClipboardList },
     { id: 'catalog', label: 'Danh mục TB', icon: Settings },
-    ...(userRole === 'admin' ? [{ id: 'users', label: 'Quản lý User', icon: UserCog }] : []),
+    ...(userRole === 'admin' || userRole === 'manager' ? [{ id: 'users', label: 'Quản lý Nhân sự', icon: UserCog }] : []),
   ];
 
   const handleOpenProject = (id: string) => {
@@ -261,13 +354,28 @@ export default function App() {
     setActiveView('editor');
   };
 
+  const handleOpenTracker = (id: string) => {
+    setSelectedProjectId(id);
+    setActiveView('tracker');
+  };
+
   const handleViewCustomerProject = async (customerId: string) => {
     try {
-      const q = query(
-        collection(db, 'projects'), 
-        where('customerId', '==', customerId),
-        limit(1)
-      );
+      let q;
+      if (userRole === 'admin' || userRole === 'manager') {
+        q = query(
+          collection(db, 'projects'), 
+          where('customerId', '==', customerId),
+          limit(1)
+        );
+      } else {
+        q = query(
+          collection(db, 'projects'), 
+          where('customerId', '==', customerId),
+          where('assignedSalesId', '==', user.uid),
+          limit(1)
+        );
+      }
       const snapshot = await getDocs(q);
       
       if (!snapshot.empty) {
@@ -376,20 +484,29 @@ export default function App() {
               transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
               className="max-w-7xl mx-auto w-full"
             >
-              {activeView === 'dashboard' && <ProjectDashboard onOpenProject={handleOpenProject} />}
-              {activeView === 'customers' && <CustomerList onViewProject={handleViewCustomerProject} />}
-              {activeView === 'projects' && <ProjectDashboard onOpenProject={handleOpenProject} showAll />}
-              {activeView === 'catalog' && <CatalogManager />}
-              {activeView === 'sales' && <SalesManagement />}
-              {activeView === 'users' && <UserManagement />}
+              {activeView === 'dashboard' && <ProjectDashboard onOpenProject={handleOpenProject} onOpenTracker={handleOpenTracker} userRole={userRole} userId={user.uid} />}
+              {activeView === 'customers' && <CustomerList onViewProject={handleViewCustomerProject} userId={user.uid} />}
+              {activeView === 'projects' && <ProjectDashboard onOpenProject={handleOpenProject} onOpenTracker={handleOpenTracker} showAll userRole={userRole} userId={user.uid} />}
+              {activeView === 'catalog' && <CatalogManager userId={user.uid} />}
+              {activeView === 'users' && <UserManagement userId={user.uid} />}
               {activeView === 'editor' && (
                 <ProjectEditor 
                   projectId={selectedProjectId} 
                   initialCustomerId={targetCustomerId}
+                  userRole={userRole}
+                  userId={user.uid}
                   onClose={() => {
                     setActiveView('dashboard');
                     setTargetCustomerId(null);
                   }} 
+                />
+              )}
+              {activeView === 'tracker' && (
+                <ProjectProgressTracker 
+                  projectId={selectedProjectId!} 
+                  userId={user.uid}
+                  userName={user.displayName || user.email?.split('@')[0]}
+                  onClose={() => setActiveView('dashboard')}
                 />
               )}
             </motion.div>
