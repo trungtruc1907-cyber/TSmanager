@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { cn, formatCurrency, estimateSystemSize, calculateSolarProduction, getAverageElectricityPrice } from '../lib/utils';
 import { motion } from 'motion/react';
+import { Logo } from './Logo';
 import * as XLSX from 'xlsx';
 import { 
   BarChart, 
@@ -713,9 +714,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
               <div className="bg-white p-8 md:p-12 rounded-[1rem] border border-slate-200 proposal-print shadow-sm break-after-page mb-10">
                 {/* Header Section */}
                 <div className="flex items-start gap-6 border-b border-slate-100 pb-8 mb-8">
-                  <div className="w-24 h-24 shrink-0 flex items-center justify-center border border-slate-100 rounded-xl bg-white p-2">
-                    <img src="https://lh3.googleusercontent.com/d/1vN7tAn7UoZ7rR7U7S-JtG0rY_iV7B56Q" alt="Trường Sơn Solar Logo" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
-                  </div>
+                  <Logo className="w-24 h-24 shrink-0 border border-slate-100 rounded-xl bg-white p-2" />
                   <div className="flex-1 space-y-1">
                     <h1 className="text-2xl font-bold text-slate-900">CÔNG TY CỔ PHẦN ĐẦU TƯ TM TRƯỜNG SƠN</h1>
                     <p className="text-sm text-slate-600">Địa chỉ: Số 151 Thôi Hữu, MB 1413, P. Đông Vệ, TP. Thanh Hóa</p>

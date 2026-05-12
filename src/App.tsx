@@ -40,6 +40,7 @@ import CatalogManager from './components/CatalogManager';
 import ProjectEditor from './components/ProjectEditor';
 import ProjectProgressTracker from './components/ProjectProgressTracker';
 import UserManagement from './components/UserManagement';
+import { Logo } from './components/Logo';
 
 type View = 'dashboard' | 'customers' | 'projects' | 'catalog' | 'editor' | 'users' | 'tracker';
 
@@ -264,10 +265,7 @@ export default function App() {
         </div>
         
         <div className="relative z-10 w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl md:rounded-3xl p-6 md:p-10 shadow-2xl text-center">
-            <div className="w-16 h-16 md:w-20 md:h-20 bg-white rounded-2xl md:rounded-3xl mx-auto flex flex-col items-center justify-center mb-6 md:mb-8 rotate-3 shadow-xl border-2 border-blue-600 shadow-blue-500/20">
-              <span className="text-3xl md:text-4xl font-black text-red-600 leading-none">TS</span>
-              <span className="text-[7px] md:text-[8px] font-bold text-blue-600 uppercase tracking-tighter mt-1 whitespace-nowrap">Solar Trường Sơn</span>
-            </div>
+            <Logo className="w-20 h-20 md:w-24 md:h-24 mx-auto mb-6 md:mb-8" />
             <h1 className="text-2xl md:text-5xl font-extrabold text-white mb-2 tracking-tight">TRUONGSONSOLAR</h1>
             <p className="text-slate-400 text-sm md:text-base font-medium mb-6 md:mb-10 leading-relaxed uppercase tracking-widest opacity-80">
               Giải pháp Điện mặt trời Trường Sơn - Chuyên nghiệp & Tận tâm.
@@ -398,10 +396,7 @@ export default function App() {
       {/* Top Header - Mobile and Desktop Optimized */}
       <header className="h-16 lg:h-20 bg-white border-b border-slate-200 sticky top-0 z-40 px-4 lg:px-8 flex items-center justify-between shadow-sm backdrop-blur-md bg-white/90">
         <div className="flex items-center gap-3 lg:gap-4">
-          <div className="w-10 h-10 lg:w-12 lg:h-12 bg-slate-900 rounded-xl flex flex-col items-center justify-center shadow-lg border-b-2 border-red-600 shrink-0">
-              <span className="text-xl lg:text-2xl font-black text-white leading-none">TS</span>
-              <span className="text-[5px] font-bold text-blue-400 uppercase tracking-tighter">TRƯỜNG SƠN</span>
-          </div>
+          <Logo className="w-10 h-10 lg:w-14 lg:h-14 shrink-0" />
           <div>
             <h1 className="text-sm lg:text-lg font-black text-slate-900 tracking-tight uppercase leading-none mb-0.5">TRƯỜNG SƠN SOLAR</h1>
             <div className="flex items-center gap-1.5">
