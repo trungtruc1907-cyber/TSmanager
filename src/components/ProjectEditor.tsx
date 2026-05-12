@@ -19,10 +19,12 @@ import {
   Calendar,
   MapPin,
   Sun,
-  Download
+  Download,
+  FileSpreadsheet
 } from 'lucide-react';
 import { cn, formatCurrency, estimateSystemSize, calculateSolarProduction, getAverageElectricityPrice } from '../lib/utils';
 import { motion } from 'motion/react';
+import * as XLSX from 'xlsx';
 import { 
   BarChart, 
   Bar, 
@@ -165,6 +167,110 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
       await addDoc(collection(db, 'projects'), data);
     }
     onClose();
+  };
+
+  const exportToExcel = () => {
+    if (!currentCustomer) return;
+
+    const data = [
+      ['CÔNG TY CỔ PHẦN ĐẦU TƯ TM TRƯỜNG SƠN'],
+      ['Địa chỉ: Số 151 Thôi Hữu, MB 1413, P. Đông Vệ, TP. Thanh Hóa'],
+      ['VP: 368 Nguyễn Thiếp (Đường 39m mới) - P. Đông Vệ - TP Thanh Hóa'],
+      [''],
+      ['BÁO GIÁ HỆ THỐNG ĐIỆN NĂNG LƯỢNG MẶT TRỜI'],
+      ['Ngày báo giá:', new Date().toLocaleDateString('vi-VN')],
+      [''],
+      ['THÔNG TIN KHÁCH HÀNG'],
+      ['Khách hàng:', currentCustomer.name],
+      ['Địa chỉ lắp đặt:', currentCustomer.address],
+      ['Số điện thoại:', currentCustomer.phone],
+      ['Công suất thiết kế:', `${project.systemSizeKWp} kWp`],
+      [''],
+      ['DANH MỤC THIẾT BỊ & CHI PHÍ'],
+      ['STT', 'Hạng mục', 'Mô tả chi tiết', 'Thương hiệu', 'Thông số', 'Số lượng', 'Đơn vị', 'Đơn giá', 'Thành tiền'],
+    ];
+
+    let stt = 1;
+
+    // PV Panels
+    if (project.panels?.equipmentId) {
+      const item = catalog.find(e => e.id === project.panels!.equipmentId);
+      if (item) {
+        data.push([
+          stt++,
+          `Tấm pin NLMT ${item.brand}`,
+          'Hiệu suất cao, công nghệ N-type Topcon mới nhất',
+          item.brand,
+          `${item.capacity}W`,
+          project.panels!.count,
+          'Tấm',
+          item.unitPrice,
+          item.unitPrice * project.panels!.count
+        ]);
+      }
+    }
+
+    // Inverter
+    if (project.inverters?.equipmentId) {
+      const item = catalog.find(e => e.id === project.inverters!.equipmentId);
+      if (item) {
+        data.push([
+          stt++,
+          `Biến tần (Inverter) ${item.brand}`,
+          'Sóng sin chuẩn, hỗ trợ giám sát Cloud/Wifi',
+          item.brand,
+          `${item.capacity}KW`,
+          project.inverters!.count,
+          'Bộ',
+          item.unitPrice,
+          item.unitPrice * project.inverters!.count
+        ]);
+      }
+    }
+
+    // Battery
+    if (project.batteries?.equipmentId) {
+      const item = catalog.find(e => e.id === project.batteries!.equipmentId);
+      if (item) {
+        data.push([
+          stt++,
+          `Pin lưu trữ (Battery) ${item.brand}`,
+          'Lithium LiFePO4 an toàn, tuổi thọ cao',
+          item.brand,
+          `${item.capacity}KWH`,
+          project.batteries!.count,
+          'Bộ',
+          item.unitPrice,
+          item.unitPrice * project.batteries!.count
+        ]);
+      }
+    }
+
+    // Materials
+    data.push([stt++, 'Hệ thống khung giàn', 'Nhôm định hình chuyên dụng anode', 'VN', 'Standard', 1, 'Hệ', '', '']);
+    data.push([stt++, 'Vật tư điện & Cáp Solar', 'Cáp DC 4mm2, Tủ điện bảo vệ AC/DC', 'Cadisun', 'Standard', 1, 'Gói', '', '']);
+    data.push([stt++, 'Vận chuyển & Thi công', 'Lắp đặt đưa vào sử dụng', '', '', 1, 'Gói', '', '']);
+
+    data.push(['']);
+    data.push(['', '', '', '', '', '', '', 'TỔNG CỘNG (Đã VAT):', project.totalCost || 0]);
+    data.push(['']);
+    data.push(['GHI CHÚ & ĐIỀU KIỆN']);
+    data.push(['- Báo giá đã bao gồm vận chuyển và lắp đặt']);
+    data.push(['- Tiến độ: 10 ngày từ ngày đặt cọc']);
+    data.push(['- Thanh toán: 40% (Ký HĐ) - 30% (Thiết bị về) - 30% (Nghiệm thu)']);
+    data.push(['- Bảo hành theo tiêu chuẩn nhà sản xuất']);
+
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    
+    // Auto-width for columns
+    const wscols = [
+      {wch: 5}, {wch: 30}, {wch: 40}, {wch: 15}, {wch: 10}, {wch: 10}, {wch: 8}, {wch: 15}, {wch: 15}
+    ];
+    ws['!cols'] = wscols;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Quotation");
+    XLSX.writeFile(wb, `BaoGia_${currentCustomer.name.replace(/\s+/g, '_')}_${project.systemSizeKWp}kWp.xlsx`);
   };
 
   if (loading) return <div>Đang tải...</div>;
@@ -986,7 +1092,13 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                     }}
                     className="flex-1 max-w-xs bg-slate-900 text-white rounded-[2rem] py-5 font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-2xl shadow-slate-200 active:scale-95 transition-all mx-auto sm:mx-0"
                   >
-                    <Download className="h-4 w-4" /> Xuất File In
+                    <Download className="h-4 w-4" /> Xuất File PDF
+                  </button>
+                  <button 
+                    onClick={exportToExcel}
+                    className="flex-1 max-w-xs bg-green-700 text-white rounded-[2rem] py-5 font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-2xl shadow-green-200 active:scale-95 transition-all mx-auto sm:mx-0"
+                  >
+                    <FileSpreadsheet className="h-4 w-4" /> Xuất Excel
                   </button>
                   <button 
                     onClick={handleSave}
