@@ -54,31 +54,34 @@
   button, 
   form, 
   .sticky,
+  .no-print *,
   [role="dialog"],
   [role="presentation"] {
     display: none !important;
   }
 
-  /* Force the proposal container to be the only visible thing */
-  /* We hide everything under root first, then show the proposal path */
-  #root > * {
-    display: none !important;
+  /* Structural fixes for print - avoid hiding parents */
+  html, body, #root, #root > div {
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+    background: white !important;
   }
 
-  #root .print-content-root,
-  #root .print-content-root *,
-  .proposal-container,
-  .proposal-container * {
+  .proposal-container {
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
     position: static !important;
     overflow: visible !important;
-    height: auto !important;
     width: 100% !important;
-    transform: none !important;
-    transition: none !important;
-    animation: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+  }
+
+  .proposal-container * {
+    visibility: visible !important;
   }
 
   /* Structural fixes for print */
