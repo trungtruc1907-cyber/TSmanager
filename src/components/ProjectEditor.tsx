@@ -709,7 +709,8 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
               animate={{ opacity: 1, x: 0 }}
               className="space-y-8"
             >
-              <div className="bg-white p-8 md:p-12 rounded-[1rem] border border-slate-200 proposal-print relative shadow-sm break-after-page mb-8">
+            <div className="proposal-container">
+              <div className="bg-white p-8 md:p-12 rounded-[1rem] border border-slate-200 proposal-print shadow-sm break-after-page mb-10 overflow-hidden">
                 {/* Header Section */}
                 <div className="flex items-start gap-6 border-b border-slate-100 pb-8 mb-8">
                   <div className="w-24 h-24 shrink-0 flex items-center justify-center border border-slate-100 rounded-xl bg-white p-2">
@@ -810,7 +811,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
               </div>
 
               {/* Second Page: Formal Quote Table */}
-              <div className="bg-white p-12 proposal-print relative shadow-sm border border-slate-200 min-h-[1050px]">
+              <div className="bg-white p-12 proposal-print relative shadow-sm border border-slate-200 min-h-[1050px] break-after-page">
                 <div className="text-center mb-12">
                   <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">BÁO GIÁ HỆ THỐNG ĐIỆN NĂNG LƯỢNG MẶT TRỜI</h2>
                   <div className="w-40 h-1 bg-slate-900 mx-auto mt-4" />
@@ -1083,6 +1084,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                   </tbody>
                 </table>
               </div>
+            </div>
 
               <div className="flex flex-col sm:flex-row gap-4 no-print sm:justify-center">
                   <button 
