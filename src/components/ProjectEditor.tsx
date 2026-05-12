@@ -886,91 +886,91 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                 </div>
 
                 {/* PAGE 3: FORMAL QUOTATION TABLE */}
-                <div className="bg-white p-12 proposal-print relative shadow-sm border border-slate-200 min-h-[1050px] break-after-page flex flex-col">
-                  <div className="text-center mb-12">
-                    <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">PHỤ LỤC CHI PHÍ CHI TIẾT</h2>
-                    <div className="w-24 h-1 bg-blue-600 mx-auto mt-4" />
+                <div className="bg-white p-10 md:p-12 proposal-print relative shadow-sm border border-slate-200 min-h-[1050px] max-h-[1050px] break-after-page flex flex-col overflow-hidden">
+                  <div className="text-center mb-8">
+                    <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">PHỤ LỤC CHI PHÍ CHI TIẾT</h2>
+                    <div className="w-20 h-1 bg-blue-600 mx-auto mt-3" />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-3 mb-10 text-sm font-sans">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-2 mb-8 text-[11px] font-sans">
                     <div className="flex border-b border-dotted border-slate-300 pb-1">
-                      <span className="w-40 shrink-0 text-slate-400 font-bold uppercase text-[9px] tracking-widest">Khách hàng</span>
+                      <span className="w-32 shrink-0 text-slate-400 font-bold uppercase text-[8px] tracking-widest">Khách hàng</span>
                       <span className="font-bold text-slate-900">{currentCustomer?.name}</span>
                     </div>
                     <div className="flex border-b border-dotted border-slate-300 pb-1">
-                      <span className="w-40 shrink-0 text-slate-400 font-bold uppercase text-[9px] tracking-widest">Ngày lập</span>
+                      <span className="w-32 shrink-0 text-slate-400 font-bold uppercase text-[8px] tracking-widest">Ngày lập</span>
                       <span className="font-bold text-slate-900">{new Date().toLocaleDateString('vi-VN')}</span>
                     </div>
                     <div className="flex border-b border-dotted border-slate-300 pb-1">
-                      <span className="w-40 shrink-0 text-slate-400 font-bold uppercase text-[9px] tracking-widest">Hệ thống</span>
+                      <span className="w-32 shrink-0 text-slate-400 font-bold uppercase text-[8px] tracking-widest">Hệ thống</span>
                       <span className="font-bold text-slate-900">{project.systemSizeKWp} kWp Hybrid</span>
                     </div>
                     <div className="flex border-b border-dotted border-slate-300 pb-1">
-                      <span className="w-40 shrink-0 text-slate-400 font-bold uppercase text-[9px] tracking-widest">Thanh toán</span>
+                      <span className="w-32 shrink-0 text-slate-400 font-bold uppercase text-[8px] tracking-widest">Thanh toán</span>
                       <span className="font-bold text-slate-600">Tiền mặt / Chuyển khoản</span>
                     </div>
                   </div>
 
-                  <table className="w-full border-collapse border-b border-slate-200 text-sm mb-12">
+                  <table className="w-full border-collapse border-b border-slate-200 text-xs mb-8">
                     <thead>
                       <tr className="bg-slate-900 text-white">
-                        <th className="px-4 py-4 text-center w-16 uppercase text-[10px] tracking-widest">STT</th>
-                        <th className="px-6 py-4 text-left uppercase text-[10px] tracking-widest">Các hạng mục giải pháp</th>
-                        <th className="px-6 py-4 text-right uppercase text-[10px] tracking-widest">Giá trị (VNĐ)</th>
-                        <th className="px-6 py-4 text-left uppercase text-[10px] tracking-widest">Ghi Chú</th>
+                        <th className="px-3 py-3 text-center w-12 uppercase text-[9px] tracking-widest">STT</th>
+                        <th className="px-5 py-3 text-left uppercase text-[9px] tracking-widest">Các hạng mục giải pháp</th>
+                        <th className="px-5 py-3 text-right uppercase text-[9px] tracking-widest">Giá trị (VNĐ)</th>
+                        <th className="px-5 py-3 text-left uppercase text-[9px] tracking-widest">Ghi Chú</th>
                       </tr>
                     </thead>
                     <tbody className="font-sans">
                       <tr className="border-b border-slate-100">
-                        <td className="px-4 py-5 text-center font-bold text-slate-400 italic">01</td>
-                        <td className="px-6 py-5">
+                        <td className="px-3 py-4 text-center font-bold text-slate-400 italic text-[11px]">01</td>
+                        <td className="px-5 py-4">
                           <p className="font-bold text-slate-900">Gói thiết bị chính (Standard/Premium)</p>
-                          <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-tighter">Pin năng lượng mặt trời & Inverter Hybrid & Pin Lithium</p>
+                          <p className="text-[9px] text-slate-400 mt-1 uppercase tracking-tighter font-medium">Pin năng lượng mặt trời & Inverter Hybrid & Pin Lithium</p>
                         </td>
-                        <td className="px-6 py-5 text-right font-bold text-slate-900">
+                        <td className="px-5 py-4 text-right font-bold text-slate-900">
                           {formatCurrency((project.totalCost || 0) / 1.08 * 0.75)}
                         </td>
-                        <td className="px-6 py-5 text-xs text-slate-500 italic">Theo Catalog</td>
+                        <td className="px-5 py-4 text-[10px] text-slate-500 italic">Theo Catalog</td>
                       </tr>
                       <tr className="border-b border-slate-100">
-                        <td className="px-4 py-5 text-center font-bold text-slate-400 italic">02</td>
-                        <td className="px-6 py-5">
+                        <td className="px-3 py-4 text-center font-bold text-slate-400 italic text-[11px]">02</td>
+                        <td className="px-5 py-4">
                           <p className="font-bold text-slate-900">Hệ thống khung đỡ & Vật tư điện</p>
-                          <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-tighter">Nhôm định hình, Tủ điện bảo vệ, Cáp DC/AC chuyên dụng</p>
+                          <p className="text-[9px] text-slate-400 mt-1 uppercase tracking-tighter font-medium">Nhôm định hình, Tủ điện bảo vệ, Cáp DC/AC chuyên dụng</p>
                         </td>
-                        <td className="px-6 py-5 text-right font-bold text-slate-900">
+                        <td className="px-5 py-4 text-right font-bold text-slate-900">
                           {formatCurrency((project.totalCost || 0) / 1.08 * 0.20)}
                         </td>
-                        <td className="px-6 py-5 text-xs text-slate-500 italic">Trọn gói</td>
+                        <td className="px-5 py-4 text-[10px] text-slate-500 italic">Trọn gói</td>
                       </tr>
                       <tr className="border-b border-slate-100">
-                        <td className="px-4 py-5 text-center font-bold text-slate-400 italic">03</td>
-                        <td className="px-6 py-5">
+                        <td className="px-3 py-4 text-center font-bold text-slate-400 italic text-[11px]">03</td>
+                        <td className="px-5 py-4">
                           <p className="font-bold text-slate-900">Vận chuyển & Nhân công lắp đặt</p>
-                          <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-tighter">Nhân sự kỹ thuật cao, Kiểm định và Test vận hành</p>
+                          <p className="text-[9px] text-slate-400 mt-1 uppercase tracking-tighter font-medium">Nhân sự kỹ thuật cao, Kiểm định và Test vận hành</p>
                         </td>
-                        <td className="px-6 py-5 text-right font-bold text-slate-900">
+                        <td className="px-5 py-4 text-right font-bold text-slate-900">
                           {formatCurrency((project.totalCost || 0) / 1.08 * 0.05)}
                         </td>
-                        <td className="px-6 py-5 text-xs text-slate-500 italic">Trọn gói</td>
+                        <td className="px-5 py-4 text-[10px] text-slate-500 italic">Trọn gói</td>
                       </tr>
                       <tr className="bg-slate-50/50">
-                        <td colSpan={2} className="px-6 py-6 font-bold text-slate-500 text-right uppercase text-[10px] tracking-widest">Tổng cộng (Chưa VAT)</td>
-                        <td className="px-6 py-6 text-right font-bold text-slate-900">
+                        <td colSpan={2} className="px-5 py-4 font-bold text-slate-500 text-right uppercase text-[9px] tracking-widest">Tổng cộng (Chưa VAT)</td>
+                        <td className="px-5 py-4 text-right font-bold text-slate-900">
                           {formatCurrency((project.totalCost || 0) / 1.08)}
                         </td>
                         <td></td>
                       </tr>
                       <tr>
-                        <td colSpan={2} className="px-6 py-4 font-bold text-slate-400 text-right uppercase text-[10px] tracking-widest">Thuế giá trị gia tăng (8%)</td>
-                        <td className="px-6 py-4 text-right font-bold text-slate-600">
+                        <td colSpan={2} className="px-5 py-3 font-bold text-slate-400 text-right uppercase text-[9px] tracking-widest">Thuế giá trị gia tăng (8%)</td>
+                        <td className="px-5 py-3 text-right font-bold text-slate-600">
                           {formatCurrency((project.totalCost || 0) - (project.totalCost || 0) / 1.08)}
                         </td>
                         <td></td>
                       </tr>
                       <tr className="bg-blue-600 text-white">
-                        <td colSpan={2} className="px-6 py-8 font-black uppercase text-lg tracking-tight">TỔNG GIÁ TRỊ HỢP ĐỒNG (VNĐ)</td>
-                        <td className="px-6 py-8 text-right font-black text-2xl">
+                        <td colSpan={2} className="px-5 py-6 font-black uppercase text-base tracking-tight">TỔNG GIÁ TRỊ HỢP ĐỒNG (VNĐ)</td>
+                        <td className="px-5 py-6 text-right font-black text-xl">
                           {formatCurrency(project.totalCost || 0)}
                         </td>
                         <td></td>
@@ -978,18 +978,18 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                     </tbody>
                   </table>
 
-                  <div className="grid grid-cols-2 gap-10 mt-auto">
-                    <div className="space-y-4">
-                      <p className="text-xs font-black text-slate-900 uppercase tracking-widest border-b border-slate-900 pb-2">Điều khoản thanh toán</p>
-                      <ul className="text-xs space-y-2 text-slate-600 font-sans">
+                  <div className="grid grid-cols-2 gap-8 mt-auto">
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-black text-slate-900 uppercase tracking-widest border-b border-slate-900 pb-1.5">Điều khoản thanh toán</p>
+                      <ul className="text-[10px] space-y-1.5 text-slate-600 font-sans">
                         <li className="flex justify-between"><span>• Tạm ứng ngay khi ký HĐ (40%):</span> <span className="font-bold">{formatCurrency((project.totalCost || 0) * 0.4)}</span></li>
                         <li className="flex justify-between"><span>• Khi thiết bị về công trình (30%):</span> <span className="font-bold">{formatCurrency((project.totalCost || 0) * 0.3)}</span></li>
                         <li className="flex justify-between"><span>• Khi nghiệm thu bàn giao (30%):</span> <span className="font-bold">{formatCurrency((project.totalCost || 0) * 0.3)}</span></li>
                       </ul>
                     </div>
-                    <div className="space-y-4">
-                      <p className="text-xs font-black text-slate-900 uppercase tracking-widest border-b border-slate-900 pb-2">Cam kết kỹ thuật</p>
-                      <ul className="text-xs space-y-2 text-slate-600 font-sans">
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-black text-slate-900 uppercase tracking-widest border-b border-slate-900 pb-1.5">Cam kết kỹ thuật</p>
+                      <ul className="text-[10px] space-y-1.5 text-slate-600 font-sans">
                         <li>• Tiến độ: Hoàn thành trong vòng 10 ngày.</li>
                         <li>• Bảo hành: Theo tiêu chuẩn NSX (15-25 năm Pin).</li>
                         <li>• Chất lượng: Đầy đủ chứng nhận COCQ chính hãng.</li>
@@ -998,14 +998,14 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                     </div>
                   </div>
 
-                  <div className="mt-16 grid grid-cols-2 text-center font-sans">
-                    <div className="space-y-20">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Đại diện khách hàng</p>
-                      <p className="font-bold text-slate-300 italic text-sm">..................................................</p>
+                  <div className="mt-12 grid grid-cols-2 text-center font-sans">
+                    <div className="space-y-16">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Đại diện khách hàng</p>
+                      <p className="font-bold text-slate-300 italic text-xs">..................................................</p>
                     </div>
-                    <div className="space-y-20">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Đại diện Trường Sơn Solar</p>
-                      <p className="font-black text-slate-900 text-sm uppercase">{salesStaff.find(s => s.id === project.assignedSalesId)?.displayName || 'PHÒNG KỸ THUẬT'}</p>
+                    <div className="space-y-16">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Đại diện Trường Sơn Solar</p>
+                      <p className="font-black text-slate-900 text-xs uppercase">{salesStaff.find(s => s.id === project.assignedSalesId)?.displayName || 'PHÒNG KỸ THUẬT'}</p>
                     </div>
                   </div>
                 </div>
