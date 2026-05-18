@@ -6,13 +6,16 @@ import {
   query, 
   orderBy, 
   addDoc, 
+  updateDoc,
+  deleteDoc,
+  doc,
   serverTimestamp,
   where,
   getDocs,
   limit
 } from 'firebase/firestore';
 import { Project, Customer, AppUser } from '../types';
-import { UserPlus, Search, Phone, Mail, MapPin, Calendar, UserCheck, X } from 'lucide-react';
+import { UserPlus, Search, Phone, Mail, MapPin, Calendar, UserCheck, X, Edit2, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
@@ -20,13 +23,17 @@ import { motion, AnimatePresence } from 'motion/react';
 interface CustomerListProps {
   onViewProject: (customerId: string) => void;
   userId?: string;
+  userRole?: string;
 }
 
-export default function CustomerList({ onViewProject, userId }: CustomerListProps) {
+export default function CustomerList({ onViewProject, userId, userRole }: CustomerListProps) {
+  const isAdmin = userRole === 'admin' || userRole === 'manager';
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [salesStaff, setSalesStaff] = useState<AppUser[]>([]);
   const [search, setSearch] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [newCustomer, setNewCustomer] = useState({ 
     name: '', 
     phone: '', 
@@ -62,20 +69,57 @@ export default function CustomerList({ onViewProject, userId }: CustomerListProp
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCustomer.name || !newCustomer.phone) return;
-    await addDoc(collection(db, 'customers'), {
-      ...newCustomer,
-      createdAt: serverTimestamp()
+    
+    try {
+      if (editingId) {
+        await updateDoc(doc(db, 'customers', editingId), {
+          ...newCustomer,
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        await addDoc(collection(db, 'customers'), {
+          ...newCustomer,
+          createdAt: serverTimestamp()
+        });
+      }
+      
+      setNewCustomer({ 
+        name: '', 
+        phone: '', 
+        email: '', 
+        address: '', 
+        usageType: 'residential', 
+        phaseType: '1phase',
+        assignedSalesId: ''
+      });
+      setIsAdding(false);
+      setEditingId(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'customers');
+    }
+  };
+
+  const deleteCustomer = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'customers', id));
+      setDeletingId(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `customers/${id}`);
+    }
+  };
+
+  const startEdit = (customer: Customer) => {
+    setNewCustomer({
+      name: customer.name,
+      phone: customer.phone,
+      email: customer.email || '',
+      address: customer.address || '',
+      usageType: customer.usageType || 'residential',
+      phaseType: customer.phaseType || '1phase',
+      assignedSalesId: customer.assignedSalesId || ''
     });
-    setNewCustomer({ 
-      name: '', 
-      phone: '', 
-      email: '', 
-      address: '', 
-      usageType: 'residential', 
-      phaseType: '1phase',
-      assignedSalesId: ''
-    });
-    setIsAdding(false);
+    setEditingId(customer.id);
+    setIsAdding(true);
   };
 
   const getUsageLabel = (type?: string) => {
@@ -139,10 +183,28 @@ export default function CustomerList({ onViewProject, userId }: CustomerListProp
               <div className="h-12 w-12 bg-blue-50/50 text-blue-600 rounded-2xl flex items-center justify-center text-base font-black border border-blue-100 shadow-sm">
                 {c.name.substring(0, 1)}
               </div>
-              <div className="flex flex-col items-end gap-2">
-                <div className="text-[9px] font-black text-slate-400 flex items-center gap-1.5 uppercase tracking-widest bg-slate-50 px-2.5 py-1 rounded-full">
-                  <Calendar className="h-3 w-3" />
-                  {c.createdAt?.seconds ? format(c.createdAt.seconds * 1000, 'dd MMM yyyy', { locale: vi }) : 'Vừa xong'}
+              <div className="flex flex-col items-end gap-2 text-right">
+                <div className="flex gap-1.5 justify-end">
+                  {isAdmin && (
+                    <>
+                      <button 
+                        onClick={() => startEdit(c)}
+                        className="p-2 bg-slate-50 text-slate-400 hover:text-blue-600 rounded-lg border border-slate-100 transition-all hover:shadow-sm"
+                      >
+                        <Edit2 className="h-3 w-3" />
+                      </button>
+                      <button 
+                        onClick={() => setDeletingId(c.id)}
+                        className="p-2 bg-slate-50 text-slate-400 hover:text-red-500 rounded-lg border border-slate-100 transition-all hover:shadow-sm"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </>
+                  )}
+                  <div className="text-[9px] font-black text-slate-400 flex items-center gap-1.5 uppercase tracking-widest bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100">
+                    <Calendar className="h-3 w-3" />
+                    {c.createdAt?.seconds ? format(c.createdAt.seconds * 1000, 'dd MMM yyyy', { locale: vi }) : 'Vừa xong'}
+                  </div>
                 </div>
                 <div className="flex gap-1.5">
                    <span className="text-[8px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-black uppercase border border-indigo-100/50">{getUsageLabel(c.usageType).split(' ')[1]}</span>
@@ -205,8 +267,46 @@ export default function CustomerList({ onViewProject, userId }: CustomerListProp
          </div>
       )}
 
-      {/* Modern Slide-up Sheet for Adding Customer */}
       <AnimatePresence>
+        {deletingId && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDeletingId(null)}
+              className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative w-full max-w-sm bg-white rounded-[2rem] p-8 shadow-2xl text-center"
+            >
+              <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-red-100">
+                <Trash2 className="h-8 w-8 text-red-500" />
+              </div>
+              <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-2">Xác nhận xóa?</h3>
+              <p className="text-sm text-slate-500 font-medium mb-8">Dữ liệu khách hàng và các thông tin liên quan sẽ bị gỡ bỏ vĩnh viễn.</p>
+              
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setDeletingId(null)}
+                  className="flex-1 px-6 py-4 text-[10px] font-black bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl transition-all uppercase tracking-widest"
+                >
+                  Hủy
+                </button>
+                <button 
+                  onClick={() => deleteCustomer(deletingId)}
+                  className="flex-1 px-6 py-4 text-[10px] font-black bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-lg shadow-red-200 transition-all uppercase tracking-widest"
+                >
+                  Xác nhận
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
         {isAdding && (
           <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-6">
             <motion.div 
@@ -225,10 +325,21 @@ export default function CustomerList({ onViewProject, userId }: CustomerListProp
             >
               <div className="flex justify-between items-center mb-10">
                 <div className="space-y-1">
-                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Thiết lập KH mới</h3>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+                    {editingId ? 'Cập nhật thông tin' : 'Thiết lập KH mới'}
+                  </h3>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Hệ thống đồng bộ Firestore</p>
                 </div>
-                <button onClick={() => setIsAdding(false)} className="p-3 bg-slate-50 text-slate-400 hover:text-slate-900 rounded-full transition-colors border border-slate-100">
+                <button 
+                  onClick={() => {
+                    setIsAdding(false);
+                    setEditingId(null);
+                    setNewCustomer({ 
+                      name: '', phone: '', email: '', address: '', usageType: 'residential', phaseType: '1phase', assignedSalesId: ''
+                    });
+                  }} 
+                  className="p-3 bg-slate-50 text-slate-400 hover:text-slate-900 rounded-full transition-colors border border-slate-100"
+                >
                   <X className="h-6 w-6" />
                 </button>
               </div>
@@ -324,7 +435,13 @@ export default function CustomerList({ onViewProject, userId }: CustomerListProp
                 <div className="pt-8 flex gap-4">
                   <button 
                     type="button"
-                    onClick={() => setIsAdding(false)}
+                    onClick={() => {
+                      setIsAdding(false);
+                      setEditingId(null);
+                      setNewCustomer({ 
+                        name: '', phone: '', email: '', address: '', usageType: 'residential', phaseType: '1phase', assignedSalesId: ''
+                      });
+                    }}
                     className="flex-1 px-8 py-5 text-xs font-black bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-2xl transition-all uppercase tracking-[0.2em]"
                   >
                     Hủy bỏ
@@ -333,7 +450,7 @@ export default function CustomerList({ onViewProject, userId }: CustomerListProp
                     type="submit"
                     className="flex-[2] px-8 py-5 text-xs font-black bg-slate-900 hover:bg-blue-600 text-white rounded-2xl shadow-xl shadow-slate-200 transition-all uppercase tracking-[0.2em] active:scale-95"
                   >
-                    Khởi tạo dữ liệu
+                    {editingId ? 'Cập nhật dữ liệu' : 'Khởi tạo dữ liệu'}
                   </button>
                 </div>
               </form>

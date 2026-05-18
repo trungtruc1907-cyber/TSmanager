@@ -103,7 +103,8 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'manager');
     }
 
     function isActive() {
@@ -136,13 +137,14 @@ service cloud.firestore {
     match /customers/{customerId} {
       allow read: if isActive();
       allow create: if isActive() && isValidCustomer(incoming());
-      allow update: if isActive() && isValidCustomer(incoming());
-      allow delete: if isAdmin();
+      allow update: if isActive() && isAdmin() && isValidCustomer(incoming());
+      allow delete: if isActive() && isAdmin();
     }
 
     match /equipment/{equipmentId} {
-      allow read: if isSignedIn(); // Require sign in even for catalog
-      allow write: if isActive() && isAdmin() && isValidEquipment(incoming());
+      allow read: if isSignedIn();
+      allow create, update: if isActive() && isAdmin() && isValidEquipment(incoming());
+      allow delete: if isActive() && isAdmin();
     }
 
     match /projects/{projectId} {

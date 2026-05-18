@@ -9,15 +9,18 @@ type EquipmentCategory = 'panel' | 'inverter' | 'battery' | 'mounting' | 'access
 
 interface CatalogManagerProps {
   userId?: string;
+  userRole?: string;
 }
 
-export default function CatalogManager({ userId }: CatalogManagerProps) {
+export default function CatalogManager({ userId, userRole }: CatalogManagerProps) {
+  const isAdmin = userRole === 'admin' || userRole === 'manager';
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<EquipmentCategory | 'all'>('all');
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Partial<Equipment> | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const categories: { id: EquipmentCategory; label: string; icon: any }[] = [
     { id: 'panel', label: 'Tấm pin PV', icon: Package },
@@ -57,8 +60,11 @@ export default function CatalogManager({ userId }: CatalogManagerProps) {
   };
 
   const deleteItem = async (id: string) => {
-    if (confirm('Xác nhận xóa thiết bị này khỏi danh mục?')) {
+    try {
       await deleteDoc(doc(db, 'equipment', id));
+      setDeletingId(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `equipment/${id}`);
     }
   };
 
@@ -75,15 +81,17 @@ export default function CatalogManager({ userId }: CatalogManagerProps) {
           <h2 className="text-xl font-bold text-slate-800 uppercase tracking-tight">Danh mục Thiết bị Kỹ thuật</h2>
           <p className="text-xs text-slate-500 font-medium">Quản lý thư viện vật tư dùng cho dự toán và báo giá.</p>
         </div>
-        <button 
-          onClick={() => {
-            setEditingItem({ type: 'panel', brand: '', model: '', capacity: 0, unitPrice: 0 });
-            setIsModalOpen(true);
-          }}
-          className="bg-blue-600 text-white px-5 py-2 rounded-md flex items-center gap-2 text-sm font-bold shadow-md hover:bg-blue-700 transition-all active:scale-95"
-        >
-          <Plus className="h-4 w-4" /> Thêm Thiết bị
-        </button>
+        {isAdmin && (
+          <button 
+            onClick={() => {
+              setEditingItem({ type: 'panel', brand: '', model: '', capacity: 0, unitPrice: 0 });
+              setIsModalOpen(true);
+            }}
+            className="bg-blue-600 text-white px-5 py-2 rounded-md flex items-center gap-2 text-sm font-bold shadow-md hover:bg-blue-700 transition-all active:scale-95"
+          >
+            <Plus className="h-4 w-4" /> Thêm Thiết bị
+          </button>
+        )}
       </div>
 
       {/* Phân nhóm (Tabs) */}
@@ -115,20 +123,22 @@ export default function CatalogManager({ userId }: CatalogManagerProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {filteredEquipment.map((item) => (
           <div key={item.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all group relative">
-            <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button 
-                onClick={() => { setEditingItem(item); setIsModalOpen(true); }}
-                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-              >
-                <Edit2 className="h-4 w-4" />
-              </button>
-              <button 
-                onClick={() => deleteItem(item.id)}
-                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
+            {isAdmin && (
+              <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button 
+                  onClick={() => { setEditingItem(item); setIsModalOpen(true); }}
+                  className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                >
+                  <Edit2 className="h-4 w-4" />
+                </button>
+                <button 
+                  onClick={() => setDeletingId(item.id)}
+                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            )}
             
             <div className="flex flex-col h-full">
               <div className="flex items-center gap-3 mb-4">
@@ -173,6 +183,34 @@ export default function CatalogManager({ userId }: CatalogManagerProps) {
           </div>
         )}
       </div>
+
+      {/* Modal Xóa */}
+      {deletingId && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl w-full max-w-sm p-6 shadow-2xl animate-in zoom-in duration-200 border border-slate-200 text-center">
+            <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="h-8 w-8 text-red-500" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">Xác nhận xóa?</h3>
+            <p className="text-sm text-slate-500 mb-8">Hành động này không thể hoàn tác. Thiết bị sẽ bị xóa vĩnh viễn khỏi danh mục.</p>
+            
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setDeletingId(null)}
+                className="flex-1 px-4 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-600 rounded transition-colors uppercase tracking-widest"
+              >
+                Hủy
+              </button>
+              <button 
+                onClick={() => deleteItem(deletingId)}
+                className="flex-1 px-4 py-2 text-xs font-bold bg-red-600 hover:bg-red-700 text-white rounded shadow-md transition-colors uppercase tracking-widest"
+              >
+                Xác nhận xóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Thêm/Sửa */}
       {isModalOpen && (

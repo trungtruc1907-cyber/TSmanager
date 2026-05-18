@@ -486,9 +486,9 @@ export default function App() {
               className="max-w-7xl mx-auto w-full"
             >
               {activeView === 'dashboard' && <ProjectDashboard onOpenProject={handleOpenProject} onOpenTracker={handleOpenTracker} userRole={userRole} userId={user.uid} />}
-              {activeView === 'customers' && <CustomerList onViewProject={handleViewCustomerProject} userId={user.uid} />}
+              {activeView === 'customers' && <CustomerList onViewProject={handleViewCustomerProject} userId={user.uid} userRole={userRole} />}
               {activeView === 'projects' && <ProjectDashboard onOpenProject={handleOpenProject} onOpenTracker={handleOpenTracker} showAll userRole={userRole} userId={user.uid} />}
-              {activeView === 'catalog' && <CatalogManager userId={user.uid} />}
+              {activeView === 'catalog' && <CatalogManager userId={user.uid} userRole={userRole} />}
               {activeView === 'users' && <UserManagement userId={user.uid} />}
               {activeView === 'settings' && <SystemSettings userId={user.uid} />}
               {activeView === 'editor' && (
