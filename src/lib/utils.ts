@@ -16,24 +16,27 @@ export function calculateSolarProduction(sizeKWp: number, sunHoursDay: number = 
   return sizeKWp * sunHoursDay * 365 * 0.8;
 }
 
-export function getAverageElectricityPrice(monthlyBill: number, usageType?: string) {
-  let avgPrice = 2500;
+export function getAverageElectricityPrice(monthlyBill: number, usageType?: string, phaseType?: string) {
+  if (phaseType === '3phase') return 2600;
+  if (phaseType === '1phase') return 3000;
+
+  let avgPrice = 3000;
 
   if (usageType === 'residential') {
-    if (monthlyBill > 5000000) avgPrice = 3000;
-    else if (monthlyBill > 2000000) avgPrice = 2800;
-    else avgPrice = 2500;
+    if (monthlyBill > 5000000) avgPrice = 3200;
+    else if (monthlyBill > 2000000) avgPrice = 3000;
+    else avgPrice = 2800;
   } else if (usageType === 'commercial') {
-    avgPrice = 3100;
+    avgPrice = 3500;
   } else if (usageType === 'industrial') {
-    avgPrice = 2100;
+    avgPrice = 2800;
   }
 
   return avgPrice;
 }
 
 export function estimateSystemSize(monthlyBill: number, usageType?: string, phaseType?: string) {
-  const avgPrice = getAverageElectricityPrice(monthlyBill, usageType);
+  const avgPrice = getAverageElectricityPrice(monthlyBill, usageType, phaseType);
   const kwhPerMonth = monthlyBill / avgPrice;
   
   // Recommended size covers ~80% of consumption

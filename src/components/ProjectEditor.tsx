@@ -73,6 +73,11 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
     [customers, project.customerId]
   );
 
+  const currentPrice = useMemo(() => 
+    getAverageElectricityPrice(project.monthlyBill || 0, currentCustomer?.usageType, currentCustomer?.phaseType),
+    [project.monthlyBill, currentCustomer]
+  );
+
   useEffect(() => {
     onSnapshot(collection(db, 'customers'), (s) => setCustomers(s.docs.map(d => ({ id: d.id, ...d.data() } as Customer))), (error) => {
       handleFirestoreError(error, OperationType.GET, 'customers');
@@ -136,7 +141,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
     const total = panelCost + inverterCost + batteryCost + additionalCost;
 
     const annualProduction = calculateSolarProduction(p.systemSizeKWp || 0);
-    const avgPrice = getAverageElectricityPrice(p.monthlyBill || 0, cust?.usageType);
+    const avgPrice = getAverageElectricityPrice(p.monthlyBill || 0, cust?.usageType, cust?.phaseType);
     const annualSavings = annualProduction * avgPrice;
     const payback = total / annualSavings;
 
@@ -147,16 +152,26 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
     };
   };
 
+  const findBestInverter = (capacity: number) => {
+    if (inverters.length === 0) return null;
+    const sortedInverters = [...inverters].sort((a, b) => a.capacity - b.capacity);
+    // Find smallest inverter that has capacity >= systemSize
+    const match = sortedInverters.find(i => i.capacity >= capacity);
+    return match || sortedInverters[sortedInverters.length - 1]; // Return largest if none big enough
+  };
+
   const handleAutoConfig = (bill: number) => {
     const cust = customers.find(c => c.id === project.customerId);
     const size = estimateSystemSize(bill, cust?.usageType, cust?.phaseType);
     const selectedPanel = panels[0];
-    const selectedInverter = inverters[0];
+    const selectedInverter = findBestInverter(size);
 
-    if (!selectedPanel || !selectedInverter) return;
+    if (!selectedPanel || !selectedInverter) {
+      setProject(prev => ({ ...prev, monthlyBill: bill, systemSizeKWp: size }));
+      return;
+    }
 
     const panelCount = Math.ceil((size * 1000) / selectedPanel.capacity);
-    const inverterCount = 1;
     
     const baseProject = {
       ...project,
@@ -174,6 +189,21 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
       ...financials
     });
   };
+
+  // Auto-select inverter when capacity or inverter list changes (e.g. phase change)
+  useEffect(() => {
+    if (project.systemSizeKWp && project.systemSizeKWp > 0 && inverters.length > 0) {
+      const best = findBestInverter(project.systemSizeKWp);
+      if (best && best.id !== project.inverters?.equipmentId) {
+        const newProj = {
+          ...project,
+          inverters: { equipmentId: best.id, count: 1 }
+        };
+        const financials = calculateFinancials(newProj);
+        setProject({ ...newProj, ...financials });
+      }
+    }
+  }, [project.systemSizeKWp, inverters]);
 
   const handleSave = async () => {
     if (!project.customerId) return alert('Vui lòng chọn khách hàng');
@@ -283,7 +313,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
     data.push(['', '', '', '', '', '', '', 'TỔNG CỘNG (Đã VAT):', project.totalCost || 0]);
     data.push(['']);
     data.push(['PHÂN TÍCH HIỆU QUẢ KINH TẾ']);
-    data.push(['Dòng tiền tiết kiệm/năm:', formatCurrency((project.annualProduction || 0) * 2500)]);
+    data.push(['Dòng tiền tiết kiệm/năm:', formatCurrency((project.annualProduction || 0) * currentPrice)]);
     data.push(['Thời gian hoàn vốn:', `${project.paybackYears} năm`]);
     data.push(['ROI dự kiến:', `${project.paybackYears ? Math.round(100 / project.paybackYears) : 0}%/năm`]);
     data.push(['']);
@@ -458,7 +488,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
 
                       <div className="text-center">
                         <span className="text-4xl font-black text-blue-600 tracking-tighter">
-                          {Math.round((project.monthlyBill || 0) / getAverageElectricityPrice(project.monthlyBill || 0, currentCustomer?.usageType))}
+                          {Math.round((project.monthlyBill || 0) / currentPrice)}
                         </span>
                         <span className="text-sm font-black text-slate-400 ml-2 uppercase tracking-widest">kWh / Tháng</span>
                       </div>
@@ -476,7 +506,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                        <div className="space-y-1 text-right">
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Đơn giá</span>
                           <p className="text-[11px] font-black text-slate-800">
-                            ~{getAverageElectricityPrice(project.monthlyBill || 0, currentCustomer?.usageType).toLocaleString('vi-VN')} đ/kWh
+                            ~{currentPrice.toLocaleString('vi-VN')} đ/kWh
                           </p>
                        </div>
                     </div>
@@ -573,12 +603,41 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                 </div>
 
                 <div className="space-y-6">
-                  <div className="p-8 bg-slate-900 rounded-[2.5rem] text-white shadow-2xl shadow-slate-200 group">
-                    <p className="text-[10px] uppercase opacity-40 font-black tracking-widest mb-2">Công suất đề xuất</p>
-                    <div className="flex items-baseline gap-2 group-hover:scale-105 transition-transform origin-left">
-                       <span className="text-4xl md:text-5xl font-black text-amber-400 tracking-tighter">{project.systemSizeKWp}</span>
-                       <span className="text-sm font-black opacity-40 uppercase tracking-widest">kWp</span>
+                  <div className="p-8 bg-slate-900 rounded-[2.5rem] text-white shadow-2xl shadow-slate-200 group relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+                    <p className="text-[10px] uppercase opacity-40 font-black tracking-widest mb-4">Công suất đề xuất (Thiết kế)</p>
+                    <div className="flex items-center gap-4 group-hover:scale-105 transition-transform origin-left">
+                       <input 
+                         type="number"
+                         step="0.1"
+                         className="bg-transparent text-4xl md:text-5xl font-black text-amber-400 tracking-tighter outline-none border-b-2 border-slate-700 focus:border-amber-400 w-32 transition-all"
+                         value={project.systemSizeKWp}
+                         onChange={e => {
+                            const newSize = Number(e.target.value);
+                            // Also update panel count to match new size if panel is selected
+                            const panel = catalog.find(p => p.id === project.panels?.equipmentId);
+                            let newCount = project.panels?.count || 0;
+                            if (panel) {
+                              newCount = Math.ceil((newSize * 1000) / panel.capacity);
+                            }
+                            
+                            const newProj = { 
+                              ...project, 
+                              systemSizeKWp: newSize,
+                              panels: { ...project.panels!, count: newCount }
+                            };
+                            const financials = calculateFinancials(newProj);
+                            setProject({ ...newProj, ...financials });
+                         }}
+                       />
+                       <div className="flex flex-col">
+                          <span className="text-sm font-black text-white uppercase tracking-widest">kWp</span>
+                          <span className="text-[8px] font-bold text-blue-400 uppercase tracking-widest mt-1">Ai Engine Active</span>
+                       </div>
                     </div>
+                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-6 bg-slate-800/50 px-3 py-2 rounded-lg inline-block">
+                      Biến tần sẽ tự động chọn theo công suất này
+                    </p>
                   </div>
 
                   <div className="p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100">
@@ -663,7 +722,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                 </div>
                 <div className="p-8 bg-green-50 rounded-[2rem] border border-green-100 group">
                    <p className="text-[10px] text-green-600 uppercase font-black tracking-widest mb-3">Tiết kiệm / Năm</p>
-                   <p className="text-2xl font-black text-green-900 group-hover:scale-105 transition-transform origin-left uppercase">{formatCurrency((project.annualProduction || 0) * 2500)}</p>
+                   <p className="text-2xl font-black text-green-900 group-hover:scale-105 transition-transform origin-left uppercase">{formatCurrency((project.annualProduction || 0) * currentPrice)}</p>
                 </div>
                 <div className="p-8 bg-amber-50 rounded-[2rem] border border-amber-100 group">
                    <p className="text-[10px] text-amber-600 uppercase font-black tracking-widest mb-3">Hoàn vốn (ROI)</p>
@@ -693,7 +752,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={Array.from({length: 20}, (_, i) => ({
                         year: i + 1,
-                        benefit: Math.round(((project.annualProduction || 0) * 2500 * (i + 1)) - (project.totalCost || 0))
+                        benefit: Math.round(((project.annualProduction || 0) * currentPrice * (i + 1)) - (project.totalCost || 0))
                     }))}>
                         <XAxis 
                           dataKey="year" 
@@ -719,7 +778,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                         {Array.from({length: 20}).map((_, i) => (
                             <Cell 
                               key={i} 
-                              fill={((project.annualProduction || 0) * 2500 * (i + 1)) >= (project.totalCost || 0) ? '#10b981' : '#f43f5e'} 
+                              fill={((project.annualProduction || 0) * currentPrice * (i + 1)) >= (project.totalCost || 0) ? '#10b981' : '#f43f5e'} 
                               fillOpacity={0.8}
                             />
                         ))}
@@ -884,7 +943,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                     </div>
                     <div className="bg-white border-2 border-slate-50 rounded-2xl p-6 text-center">
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Tiết kiệm/tháng</p>
-                      <p className="text-lg font-black text-blue-600">{formatCurrency(Math.round(((project.annualProduction || 0) * 2500) / 12))}</p>
+                      <p className="text-lg font-black text-blue-600">{formatCurrency(Math.round(((project.annualProduction || 0) * currentPrice) / 12))}</p>
                     </div>
                   </div>
 
@@ -893,11 +952,11 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="bg-slate-50 p-6 rounded-2xl flex justify-between items-center">
                         <span className="text-xs font-bold text-slate-500">Tiết kiệm sau 12 tháng:</span>
-                        <span className="text-md font-black text-slate-900">{formatCurrency(Math.round((project.annualProduction || 0) * 2500))}</span>
+                        <span className="text-md font-black text-slate-900">{formatCurrency(Math.round((project.annualProduction || 0) * currentPrice))}</span>
                       </div>
                       <div className="bg-slate-50 p-6 rounded-2xl flex justify-between items-center border-2 border-slate-900/5">
                         <span className="text-xs font-bold text-slate-500">Tiết kiệm sau 30 năm (Dự kiến):</span>
-                        <span className="text-md font-black text-blue-700">{formatCurrency(Math.round((project.annualProduction || 0) * 2500 * 54.8))}</span>
+                        <span className="text-md font-black text-blue-700">{formatCurrency(Math.round((project.annualProduction || 0) * currentPrice * 54.8))}</span>
                       </div>
                     </div>
                   </div>
