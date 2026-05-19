@@ -68,6 +68,11 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
     assignedSalesId: userRole === 'sales_rep' ? userId : ''
   });
 
+  const currentCustomer = useMemo(() => 
+    customers.find(c => c.id === project.customerId),
+    [customers, project.customerId]
+  );
+
   useEffect(() => {
     onSnapshot(collection(db, 'customers'), (s) => setCustomers(s.docs.map(d => ({ id: d.id, ...d.data() } as Customer))), (error) => {
       handleFirestoreError(error, OperationType.GET, 'customers');
@@ -103,7 +108,17 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
   }, [project.customerId, customers]);
 
   const panels = useMemo(() => catalog.filter(e => e.type === 'panel'), [catalog]);
-  const inverters = useMemo(() => catalog.filter(e => e.type === 'inverter'), [catalog]);
+  const inverters = useMemo(() => {
+    const allInverters = catalog.filter(e => e.type === 'inverter');
+    if (!currentCustomer?.phaseType) return allInverters;
+    
+    return allInverters.filter(i => {
+      if (currentCustomer.phaseType === '1phase') {
+        return !i.isThreePhase;
+      }
+      return !!i.isThreePhase;
+    });
+  }, [catalog, currentCustomer]);
   const batteries = useMemo(() => catalog.filter(e => e.type === 'battery'), [catalog]);
 
   const calculateFinancials = (p: Partial<Project>) => {
@@ -292,8 +307,6 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
   };
 
   if (loading) return <div>Đang tải...</div>;
-
-  const currentCustomer = customers.find(c => c.id === project.customerId);
 
   return (
     <div className="max-w-5xl mx-auto pb-32 md:pb-20 px-4 md:px-0">

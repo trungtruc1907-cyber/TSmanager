@@ -57,23 +57,32 @@ export default function ProjectProgressTracker({ projectId, onClose, userId, use
   });
 
   useEffect(() => {
+    if (!projectId || !userId) return;
+
     const unsubProj = onSnapshot(doc(db, 'projects', projectId), (s) => {
       if (s.exists()) setProject({ id: s.id, ...s.data() } as Project);
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `projects/${projectId}`);
       setLoading(false);
     });
 
     const unsubTasks = onSnapshot(
       query(collection(db, 'projectTasks'), where('projectId', '==', projectId), orderBy('createdAt', 'desc')),
-      (s) => setTasks(s.docs.map(d => ({ id: d.id, ...d.data() } as ProjectTask)))
+      (s) => setTasks(s.docs.map(d => ({ id: d.id, ...d.data() } as ProjectTask))),
+      (error) => handleFirestoreError(error, OperationType.GET, 'projectTasks')
     );
 
     const unsubActivities = onSnapshot(
       query(collection(db, 'projectActivities'), where('projectId', '==', projectId), orderBy('createdAt', 'desc')),
-      (s) => setActivities(s.docs.map(d => ({ id: d.id, ...d.data() } as ProjectActivity)))
+      (s) => setActivities(s.docs.map(d => ({ id: d.id, ...d.data() } as ProjectActivity))),
+      (error) => handleFirestoreError(error, OperationType.GET, 'projectActivities')
     );
 
     const unsubUsers = onSnapshot(collection(db, 'users'), (s) => {
       setUsers(s.docs.map(d => ({ id: d.id, ...d.data() } as AppUser)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'users');
     });
 
     return () => {
@@ -82,7 +91,7 @@ export default function ProjectProgressTracker({ projectId, onClose, userId, use
       unsubActivities();
       unsubUsers();
     };
-  }, [projectId]);
+  }, [projectId, userId]);
 
   const logActivity = async (type: ProjectActivity['type'], description: string) => {
     if (!userId || !userName) return;

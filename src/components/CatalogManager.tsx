@@ -154,7 +154,17 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                 </div>
                 <div className="overflow-hidden">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{item.brand}</p>
-                  <h3 className="text-sm font-bold text-slate-800 truncate leading-tight mt-0.5">{item.model}</h3>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <h3 className="text-sm font-bold text-slate-800 truncate leading-tight">{item.model}</h3>
+                    {item.type === 'inverter' && (
+                      <span className={cn(
+                        "text-[8px] px-1.5 py-0.5 rounded font-black uppercase border",
+                        item.isThreePhase ? "bg-purple-50 text-purple-600 border-purple-100" : "bg-blue-50 text-blue-600 border-blue-100"
+                      )}>
+                        {item.isThreePhase ? '3 Pha' : '1 Pha'}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -281,6 +291,23 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                   />
                 </div>
               </div>
+
+              {editingItem?.type === 'inverter' && (
+                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input 
+                      type="checkbox"
+                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      checked={editingItem?.isThreePhase || false}
+                      onChange={e => setEditingItem({ ...editingItem, isThreePhase: e.target.checked })}
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-tight">Biến tần 3 Pha</span>
+                      <span className="text-[10px] text-slate-500 font-medium">Bỏ tích nếu là biến tần 1 pha</span>
+                    </div>
+                  </label>
+                </div>
+              )}
 
               <div className="pt-6 flex gap-3">
                 <button 

@@ -39,6 +39,7 @@ service cloud.firestore {
           && data.type in ['panel', 'inverter', 'battery', 'mounting', 'accessory', 'other']
           && data.unitPrice is number && data.unitPrice >= 0
           && (!('capacity' in data) || data.capacity is number)
+          && (!('isThreePhase' in data) || data.isThreePhase is bool)
           && (!('id' in data) || data.id is string);
     }
 

@@ -29,6 +29,7 @@ export interface Equipment {
   model: string;
   capacity: number;
   unitPrice: number;
+  isThreePhase?: boolean;
 }
 
 export interface SalesPerson {

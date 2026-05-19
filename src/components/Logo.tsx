@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase';
 import { cn } from '../lib/utils';
 
 interface LogoProps {
@@ -13,6 +13,9 @@ export const Logo: React.FC<LogoProps> = ({ className, variant = 'dark' }) => {
   const fallbackSrc = "https://lh3.googleusercontent.com/d/1vN7tAn7UoZ7rR7U7S-JtG0rY_iV7B56Q";
 
   useEffect(() => {
+    // Only fetch settings if authenticated to avoid permission errors on login screen
+    if (!auth.currentUser) return;
+
     const unsub = onSnapshot(doc(db, 'settings', 'general'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -20,10 +23,13 @@ export const Logo: React.FC<LogoProps> = ({ className, variant = 'dark' }) => {
           setImgSrc(data.logoUrl);
         }
       }
+    }, (error) => {
+      // Silently fail if no permissions (e.g. during auth transition)
+      console.log("Logo settings fetch failed (likely unauthenticated):", error.message);
     });
 
     return () => unsub();
-  }, []);
+  }, [auth.currentUser]);
 
   return (
     <div className={cn("flex flex-col items-center justify-center overflow-hidden", className)}>

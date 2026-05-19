@@ -39,6 +39,7 @@
         "model": { "type": "string" },
         "capacity": { "type": "number", "description": "Wattage for panels, kW for inverters" },
         "unitPrice": { "type": "number" },
+        "isThreePhase": { "type": "boolean" },
         "specifications": { "type": "object" }
       },
       "required": ["type", "brand", "model", "unitPrice"]
