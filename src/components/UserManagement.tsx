@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, onSnapshot, query, orderBy, updateDoc, doc, setDoc, serverTimestamp, getFirestore } from 'firebase/firestore';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
@@ -18,7 +18,8 @@ import {
   Mail,
   ShieldAlert,
   Settings,
-  ClipboardList
+  ClipboardList,
+  Key
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -42,6 +43,63 @@ export default function UserManagement({ userId }: UserManagementProps) {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // States for resetting password
+  const [resettingUser, setResettingUser] = useState<AppUser | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetSuccess, setResetSuccess] = useState<string | null>(null);
+
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resettingUser || !newPassword) return;
+
+    setIsResetting(true);
+    setResetError(null);
+    setResetSuccess(null);
+
+    try {
+      const currentAuthUser = auth.currentUser;
+      if (!currentAuthUser) {
+        throw new Error("Không thể lấy thông tin đăng nhập hiện tại của bạn.");
+      }
+
+      // Force refresh of current ID token
+      const idToken = await currentAuthUser.getIdToken(true);
+
+      const response = await fetch('/api/admin/reset-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          targetUserId: resettingUser.id,
+          newPassword: newPassword
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Không thể thực hiện cấp lại mật khẩu.");
+      }
+
+      setResetSuccess(`Cấp lại mật khẩu cho tài khoản "${resettingUser.username}" thành công.`);
+      setNewPassword('');
+      // Delay closing of modal for user feedback
+      setTimeout(() => {
+        setResettingUser(null);
+        setResetSuccess(null);
+      }, 1500);
+    } catch (err: any) {
+      console.error("Reset password error:", err);
+      setResetError(err.message || "Lỗi không xác định khi đổi mật khẩu.");
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -342,18 +400,30 @@ export default function UserManagement({ userId }: UserManagementProps) {
                           </button>
                         </>
                       ) : (
-                        <button 
-                          onClick={() => handleToggleStatus(user.id, user.status)}
-                          className={cn(
-                            "p-2 rounded-lg border transition-all",
-                            user.status === 'active' 
-                              ? "border-red-100 text-red-500 hover:bg-red-50" 
-                              : "border-green-100 text-green-500 hover:bg-green-50"
-                          )}
-                          title={user.status === 'active' ? "Khóa tài khoản" : "Mở khóa"}
-                        >
-                          {user.status === 'active' ? <XCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-                        </button>
+                        <>
+                          <button 
+                            onClick={() => {
+                              setResettingUser(user);
+                              setNewPassword('TS@' + Math.floor(100000 + Math.random() * 900000));
+                            }}
+                            className="p-2 rounded-lg border border-slate-100 text-slate-500 hover:bg-slate-50 hover:border-blue-100 hover:text-blue-600 transition-all"
+                            title="Cấu hình / Cấp lại mật khẩu"
+                          >
+                            <Key className="h-4 w-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleToggleStatus(user.id, user.status)}
+                            className={cn(
+                              "p-2 rounded-lg border transition-all",
+                              user.status === 'active' 
+                                ? "border-red-100 text-red-500 hover:bg-red-50" 
+                                : "border-green-100 text-green-500 hover:bg-green-50"
+                            )}
+                            title={user.status === 'active' ? "Khóa tài khoản" : "Mở khóa"}
+                          >
+                            {user.status === 'active' ? <XCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+                          </button>
+                        </>
                       )}
                     </div>
                   </td>
@@ -392,6 +462,24 @@ export default function UserManagement({ userId }: UserManagementProps) {
           isSubmitting={isSubmitting}
           errorMsg={errorMsg}
         />
+
+        {resettingUser && (
+          <ResetPasswordModal
+            isOpen={resettingUser !== null}
+            onClose={() => {
+              setResettingUser(null);
+              setResetError(null);
+              setResetSuccess(null);
+            }}
+            onSubmit={handleResetPasswordSubmit}
+            user={resettingUser}
+            newPassword={newPassword}
+            setNewPassword={setNewPassword}
+            isSubmitting={isResetting}
+            errorMsg={resetError}
+            successMsg={resetSuccess}
+          />
+        )}
       </AnimatePresence>
     </div>
   );
@@ -507,6 +595,124 @@ function AddUserModal({
                 className="flex-1 px-8 py-4 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 disabled:opacity-50 flex items-center justify-center"
               >
                 {isSubmitting ? "Đang tạo..." : "Xác nhận"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+interface ResetPasswordModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (e: React.FormEvent) => void;
+  user: AppUser;
+  newPassword: string;
+  setNewPassword: (val: string) => void;
+  isSubmitting: boolean;
+  errorMsg: string | null;
+  successMsg: string | null;
+}
+
+function ResetPasswordModal({
+  isOpen,
+  onClose,
+  onSubmit,
+  user,
+  newPassword,
+  setNewPassword,
+  isSubmitting,
+  errorMsg,
+  successMsg
+}: ResetPasswordModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden"
+      >
+        <div className="p-8 md:p-10 space-y-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Cấp lại Mật khẩu</h3>
+              <p className="text-xs text-slate-500 font-bold mt-1">Thay đổi mật khẩu cho: {user.displayName || user.username}</p>
+            </div>
+            <Key className="h-6 w-6 text-blue-600 shrink-0" />
+          </div>
+
+          {errorMsg && (
+            <div className="p-4 bg-red-50 rounded-2xl border border-red-100 flex items-center gap-3">
+              <ShieldAlert className="h-5 w-5 text-red-500 shrink-0" />
+              <p className="text-xs font-bold text-red-600">{errorMsg}</p>
+            </div>
+          )}
+
+          {successMsg && (
+            <div className="p-4 bg-green-50 rounded-2xl border border-green-100 flex items-center gap-3">
+              <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+              <p className="text-xs font-bold text-green-600">{successMsg}</p>
+            </div>
+          )}
+
+          <form onSubmit={onSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Email tài khoản</label>
+              <input 
+                disabled
+                className="w-full bg-slate-100 border border-transparent px-6 py-4 rounded-2xl text-sm text-slate-500 font-bold outline-none cursor-not-allowed"
+                value={user.email}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between items-center ml-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mật khẩu mới</label>
+                <button
+                  type="button"
+                  onClick={() => setNewPassword('TS@' + Math.floor(100000 + Math.random() * 900000))}
+                  className="text-[10px] text-blue-600 font-bold uppercase tracking-wider hover:underline animate-pulse"
+                >
+                  Tạo mã ngẫu nhiên
+                </button>
+              </div>
+              <input 
+                required
+                className="w-full bg-slate-50 border border-slate-100 px-6 py-4 rounded-2xl text-sm font-mono font-bold outline-none focus:bg-white focus:border-blue-600 transition-all shadow-inner"
+                placeholder="Nhập tối thiểu 6 ký tự"
+                type="text"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+              />
+            </div>
+
+            <div className="flex gap-4 pt-4">
+              <button 
+                type="button"
+                onClick={onClose}
+                className="flex-1 px-8 py-4 bg-slate-100 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
+                disabled={isSubmitting}
+              >
+                Hủy
+              </button>
+              <button 
+                type="submit"
+                disabled={isSubmitting || !!successMsg}
+                className="flex-1 px-8 py-4 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 disabled:opacity-50 flex items-center justify-center"
+              >
+                {isSubmitting ? "Đang xử lý..." : "Cập nhật"}
               </button>
             </div>
           </form>

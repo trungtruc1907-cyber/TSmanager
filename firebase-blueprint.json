@@ -12,9 +12,40 @@
         "usageType": { "type": "string", "enum": ["residential", "commercial", "industrial"] },
         "phaseType": { "type": "string", "enum": ["1phase", "3phase"] },
         "assignedSalesId": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["new", "contacted", "survey", "negotiating", "won", "lost"] },
+        "source": { "type": "string", "enum": ["facebook", "google", "referral", "hotline", "other"] },
+        "leadValue": { "type": "number" }
       },
       "required": ["name", "phone"]
+    },
+    "CustomerInteraction": {
+      "title": "Customer Interaction",
+      "description": "An action or meeting with the customer.",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "type": { "type": "string", "enum": ["call", "meeting", "note", "email", "survey"] },
+        "content": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customerId", "type", "content", "userId", "userName"]
+    },
+    "CustomerReminder": {
+      "title": "Customer Reminder",
+      "description": "Tasks or events associated with a customer lead.",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "assignedToId": { "type": "string" },
+        "title": { "type": "string" },
+        "dueDate": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["pending", "completed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customerId", "title", "status"]
     },
     "SalesPerson": {
       "title": "Sales Person",
@@ -146,6 +177,14 @@
     "customers": {
       "schema": "Customer",
       "description": "Collection of customer leads."
+    },
+    "customers/{customerId}/interactions": {
+      "schema": "CustomerInteraction",
+      "description": "Call logs, notes, and surveys for this customer."
+    },
+    "customers/{customerId}/reminders": {
+      "schema": "CustomerReminder",
+      "description": "Reminders and tasks to do for this customer."
     },
     "equipment": {
       "schema": "Equipment",

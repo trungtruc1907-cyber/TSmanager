@@ -18,7 +18,10 @@ import {
   LogOut,
   UserCog,
   Sliders,
-  Box
+  Box,
+  Bell,
+  AlertTriangle,
+  User as UserIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db, auth, handleFirestoreError, OperationType } from './lib/firebase';
@@ -43,9 +46,11 @@ import ProjectEditor from './components/ProjectEditor';
 import ProjectProgressTracker from './components/ProjectProgressTracker';
 import UserManagement from './components/UserManagement';
 import SystemSettings from './components/SystemSettings';
+import WorkSchedulerHub from './components/WorkSchedulerHub';
+import UserProfile from './components/UserProfile';
 import { Logo } from './components/Logo';
 
-type View = 'dashboard' | 'customers' | 'projects' | 'catalog' | 'editor' | 'users' | 'tracker' | 'settings';
+type View = 'dashboard' | 'customers' | 'projects' | 'catalog' | 'editor' | 'users' | 'tracker' | 'settings' | 'tasks' | 'profile';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -62,6 +67,26 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+
+  const [userTasks, setUserTasks] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      setUserTasks([]);
+      return;
+    }
+    const qTask = query(
+      collection(db, 'projectTasks'),
+      where('assignedToId', '==', user.uid)
+    );
+    const unsubTasks = onSnapshot(qTask, (s) => {
+      setUserTasks(s.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      console.error("Error loading tasks for notification bar:", error);
+    });
+    return () => unsubTasks();
+  }, [user?.uid]);
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (u) => {
@@ -346,8 +371,10 @@ export default function App() {
     { id: 'dashboard', label: 'Tổng quan', icon: LayoutDashboard },
     { id: 'customers', label: 'Khách hàng', icon: Users },
     { id: 'projects', label: 'Công trình', icon: Sun },
-    { id: 'catalog', label: 'Danh mục TB', icon: Box },
+    { id: 'tasks', label: 'Lịch & Công việc', icon: ClipboardList },
+    { id: 'profile', label: 'Cá nhân', icon: UserIcon },
     ...(userRole === 'admin' || userRole === 'manager' ? [
+      { id: 'catalog', label: 'Danh mục TB', icon: Box },
       { id: 'users', label: 'Quản lý Nhân sự', icon: UserCog },
       { id: 'settings', label: 'Cấu hình', icon: Sliders }
     ] : []),
@@ -413,7 +440,123 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="hidden md:flex flex-col items-end mr-4">
+          {/* Real-time Reminder/Alert Notification Bell */}
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className="p-2.5 bg-slate-50 text-slate-500 hover:text-red-500 hover:bg-red-50 border border-slate-100 rounded-xl transition-all relative flex items-center justify-center"
+              title="Nhắc việc & Cảnh báo"
+            >
+              <Bell className="h-4.5 w-4.5" />
+              {userTasks.filter(t => {
+                if (t.status === 'done' || !t.dueDate) return false;
+                try {
+                  const dDate = t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000) : new Date(t.dueDate);
+                  const today = new Date();
+                  today.setHours(23, 59, 59, 999);
+                  return dDate <= today; // Overdue or urgent (today/past)
+                } catch (e) {
+                  return false;
+                }
+              }).length > 0 && (
+                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-rose-500 animate-ping" />
+              )}
+              {userTasks.filter(t => {
+                if (t.status === 'done' || !t.dueDate) return false;
+                try {
+                  const dDate = t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000) : new Date(t.dueDate);
+                  const today = new Date();
+                  today.setHours(23, 59, 59, 999);
+                  return dDate <= today;
+                } catch (e) {
+                  return false;
+                }
+              }).length > 0 && (
+                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-rose-500" />
+              )}
+            </button>
+
+            <AnimatePresence>
+              {showNotifications && (
+                <>
+                  {/* Click outside backdrop */}
+                  <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
+                  
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute right-0 mt-3 w-80 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-4 space-y-3 font-sans"
+                  >
+                    <div className="pb-2 border-b border-slate-100 flex justify-between items-center">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">🔔 Công việc cần lưu ý</span>
+                      <span className="text-[9px] px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full font-black uppercase">
+                        {userTasks.filter(t => {
+                          if (t.status === 'done' || !t.dueDate) return false;
+                          const dDate = t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000) : new Date(t.dueDate);
+                          const today = new Date();
+                          today.setHours(23, 59, 59, 999);
+                          return dDate <= today;
+                        }).length} gấp / trễ
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                      {userTasks.filter(t => t.status !== 'done').map((t, index) => {
+                        const isOverdue = (() => {
+                          if (!t.dueDate) return false;
+                          const dDate = t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000) : new Date(t.dueDate);
+                          const today = new Date();
+                          today.setHours(0,0,0,0);
+                          return dDate < today;
+                        })();
+                        
+                        return (
+                          <div 
+                            key={t.id || index} 
+                            onClick={() => {
+                              setActiveView('tasks');
+                              setShowNotifications(false);
+                            }}
+                            className={cn(
+                              "p-2.5 rounded-xl border text-xs text-left cursor-pointer hover:bg-slate-50 transition-colors space-y-1",
+                              isOverdue ? "border-rose-100 bg-rose-50/20" : "border-slate-100 bg-white"
+                            )}
+                          >
+                            <p className="font-extrabold text-slate-800 uppercase tracking-tight line-clamp-1">{t.title}</p>
+                            <div className="flex justify-between items-center text-[9px] font-bold">
+                              <span className={isOverdue ? "text-rose-500 font-extrabold" : "text-amber-500"}>
+                                {isOverdue ? 'Quá hạn!' : 'Hạn hôm nay / gần kề'}
+                              </span>
+                              <span className="text-slate-400">{t.dueDate ? (t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000).toLocaleDateString('vi-VN') : new Date(t.dueDate).toLocaleDateString('vi-VN')) : ''}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {userTasks.filter(t => t.status !== 'done').length === 0 && (
+                        <div className="text-center py-6 text-slate-400 text-[10px] font-black uppercase tracking-wider">
+                          Không có việc tồn đọng 🎉
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setActiveView('tasks');
+                        setShowNotifications(false);
+                      }}
+                      className="w-full text-center py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                    >
+                      Mở bảng điều hành lịch biểu
+                    </button>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div className="hidden md:flex flex-col items-end mr-2">
             <span className="text-xs font-black text-slate-900 uppercase">{user.displayName || user.email?.split('@')[0]}</span>
             <span className="text-[9px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-black uppercase tracking-tighter">{userRole}</span>
           </div>
@@ -489,8 +632,10 @@ export default function App() {
               {activeView === 'customers' && <CustomerList onViewProject={handleViewCustomerProject} userId={user.uid} userRole={userRole} />}
               {activeView === 'projects' && <ProjectDashboard onOpenProject={handleOpenProject} onOpenTracker={handleOpenTracker} showAll userRole={userRole} userId={user.uid} />}
               {activeView === 'catalog' && <CatalogManager userId={user.uid} userRole={userRole} />}
+              {activeView === 'tasks' && <WorkSchedulerHub userId={user.uid} userRole={userRole} />}
               {activeView === 'users' && <UserManagement userId={user.uid} />}
               {activeView === 'settings' && <SystemSettings userId={user.uid} />}
+              {activeView === 'profile' && <UserProfile userId={user.uid} user={user} />}
               {activeView === 'editor' && (
                 <ProjectEditor 
                   projectId={selectedProjectId} 

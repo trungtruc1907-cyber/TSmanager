@@ -20,6 +20,28 @@ export interface Customer {
   phaseType?: PhaseType;
   assignedSalesId?: string;
   createdAt: any;
+  status?: 'new' | 'contacted' | 'survey' | 'negotiating' | 'won' | 'lost';
+  source?: 'facebook' | 'google' | 'referral' | 'hotline' | 'other';
+  leadValue?: number;
+}
+
+export interface CustomerInteraction {
+  id: string;
+  customerId: string;
+  type: 'call' | 'meeting' | 'note' | 'email' | 'survey';
+  content: string;
+  userId: string;
+  userName: string;
+  createdAt: any;
+}
+
+export interface CustomerReminder {
+  id: string;
+  customerId: string;
+  title: string;
+  dueDate: any;
+  status: 'pending' | 'completed';
+  createdAt: any;
 }
 
 export interface Equipment {

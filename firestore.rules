@@ -7,6 +7,27 @@ service cloud.firestore {
       return request.auth != null;
     }
     
+    // Auth tokens NEVER contain custom claims (e.g., request.auth.token.role or admin).
+    // We explicitly look up roles using get() or exists() on the users collection.
+    function hAdmin(db, auth) {
+      return auth != null && 
+        exists(/databases/$(database)/documents/users/$(auth.uid)) && 
+        (get(/databases/$(database)/documents/users/$(auth.uid)).data.role == 'admin' ||
+         get(/databases/$(database)/documents/users/$(auth.uid)).data.role == 'manager');
+    }
+
+    function hActive(db, auth) {
+      return auth != null && 
+        exists(/databases/$(database)/documents/users/$(auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(auth.uid)).data.status == 'active';
+    }
+
+    function isSalesRep(db, auth) {
+      return auth != null && 
+        exists(/databases/$(database)/documents/users/$(auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(auth.uid)).data.role == 'sales_rep';
+    }
+
     function incoming() {
       return request.resource.data;
     }
@@ -30,7 +51,29 @@ service cloud.firestore {
           && (!('address' in data) || data.address is string)
           && (!('assignedSalesId' in data) || isValidId(data.assignedSalesId) || data.assignedSalesId == "")
           && (!('createdAt' in data) || data.createdAt is timestamp)
-          && (!('id' in data) || data.id is string);
+          && (!('updatedAt' in data) || data.updatedAt is timestamp)
+          && (!('id' in data) || data.id is string)
+          && (!('status' in data) || data.status in ['new', 'contacted', 'survey', 'negotiating', 'won', 'lost'])
+          && (!('source' in data) || data.source in ['facebook', 'google', 'referral', 'hotline', 'other'])
+          && (!('leadValue' in data) || data.leadValue is number);
+    }
+
+    function isValidInteraction(data, auth) {
+      return data.customerId is string && data.customerId.size() > 0
+          && data.type in ['call', 'meeting', 'note', 'email', 'survey']
+          && data.content is string && data.content.size() > 0 && data.content.size() <= 2000
+          && data.userId == auth.uid
+          && data.userName is string && data.userName.size() > 0
+          && (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidReminder(data) {
+      return data.customerId is string && data.customerId.size() > 0
+          && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+          && data.status in ['pending', 'completed']
+          && (!('dueDate' in data) || data.dueDate is string || data.dueDate is timestamp)
+          && (!('assignedToId' in data) || isValidId(data.assignedToId) || data.assignedToId == "")
+          && (!('createdAt' in data) || data.createdAt is timestamp);
     }
 
     function isValidEquipment(data) {
@@ -101,19 +144,6 @@ service cloud.firestore {
           && (!('updatedAt' in data) || data.updatedAt is timestamp);
     }
 
-    function isAdmin() {
-      return isSignedIn() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'manager');
-    }
-
-    function isActive() {
-      return isSignedIn() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
-    }
-
     // --- RULES ---
 
     // Default deny
@@ -128,78 +158,103 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn();
-      allow create: if isSignedIn() && (request.auth.uid == userId || isAdmin()) && isValidUser(incoming());
+      allow create: if isSignedIn() && (request.auth.uid == userId || hAdmin(database, request.auth)) && isValidUser(incoming());
       allow update: if isSignedIn() && (
         (request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['lastLogin', 'displayName', 'username', 'updatedAt', 'phone', 'region'])) ||
-        isAdmin()
+        hAdmin(database, request.auth)
       ) && isValidUser(incoming());
     }
 
     match /customers/{customerId} {
-      allow read: if isActive();
-      allow create: if isActive() && isValidCustomer(incoming());
-      allow update: if isActive() && isAdmin() && isValidCustomer(incoming());
-      allow delete: if isActive() && isAdmin();
+      allow read: if hActive(database, request.auth) && (!isSalesRep(database, request.auth) || resource.data.assignedSalesId == request.auth.uid);
+      allow create: if hActive(database, request.auth) && (!isSalesRep(database, request.auth) || incoming().assignedSalesId == request.auth.uid) && isValidCustomer(incoming());
+      allow update: if hActive(database, request.auth) && (
+        hAdmin(database, request.auth) || 
+        (existing().assignedSalesId == request.auth.uid && incoming().assignedSalesId == request.auth.uid)
+      ) && isValidCustomer(incoming());
+      allow delete: if hActive(database, request.auth) && hAdmin(database, request.auth);
+
+      match /interactions/{interactionId} {
+        allow read: if hActive(database, request.auth) && (!isSalesRep(database, request.auth) || get(/databases/$(database)/documents/customers/$(customerId)).data.assignedSalesId == request.auth.uid);
+        allow create: if hActive(database, request.auth) && (!isSalesRep(database, request.auth) || get(/databases/$(database)/documents/customers/$(customerId)).data.assignedSalesId == request.auth.uid) && isValidInteraction(incoming(), request.auth);
+        allow update, delete: if hActive(database, request.auth) && (hAdmin(database, request.auth) || resource.data.userId == request.auth.uid);
+      }
+    }
+
+    match /{path=**}/reminders/{reminderId} {
+      allow read: if isSignedIn();
+      allow create: if hActive(database, request.auth) && isValidReminder(incoming());
+      allow update: if hActive(database, request.auth) && isValidReminder(incoming());
+      allow delete: if hActive(database, request.auth);
     }
 
     match /equipment/{equipmentId} {
       allow read: if isSignedIn();
-      allow create, update: if isActive() && isAdmin() && isValidEquipment(incoming());
-      allow delete: if isActive() && isAdmin();
+      allow create, update: if hActive(database, request.auth) && hAdmin(database, request.auth) && isValidEquipment(incoming());
+      allow delete: if hActive(database, request.auth) && hAdmin(database, request.auth);
     }
 
     match /projects/{projectId} {
-      allow read: if isActive() && (isAdmin() || resource.data.assignedSalesId == request.auth.uid);
-      allow create: if isActive() && isValidProject(incoming()) && (isAdmin() || incoming().assignedSalesId == request.auth.uid);
-      allow update: if isActive() && isValidProject(incoming()) && (isAdmin() || (existing().assignedSalesId == request.auth.uid && incoming().assignedSalesId == existing().assignedSalesId));
-      allow delete: if isActive() && isAdmin();
+      allow read: if hActive(database, request.auth) && (!isSalesRep(database, request.auth) || resource.data.assignedSalesId == request.auth.uid);
+      allow create: if hActive(database, request.auth) && (!isSalesRep(database, request.auth) || incoming().assignedSalesId == request.auth.uid) && isValidProject(incoming());
+      allow update: if hActive(database, request.auth) && (
+        hAdmin(database, request.auth) || 
+        (existing().assignedSalesId == request.auth.uid && incoming().assignedSalesId == request.auth.uid)
+      ) && isValidProject(incoming());
+      allow delete: if hActive(database, request.auth) && hAdmin(database, request.auth);
     }
 
-    function isValidProjectTask(data) {
+    function isValidProjectTask(data, auth) {
       return isValidId(data.projectId)
           && data.title is string && data.title.size() > 0
           && data.status in ['todo', 'in_progress', 'review', 'done']
           && (!('assignedToId' in data) || isValidId(data.assignedToId))
-          && data.creatorId == request.auth.uid;
+          && data.creatorId == auth.uid;
     }
 
     match /projectTasks/{taskId} {
-      allow read: if isActive();
-      allow create: if isActive() && isValidProjectTask(incoming());
-      allow update: if isActive() && (isAdmin() || resource.data.creatorId == request.auth.uid || resource.data.assignedToId == request.auth.uid);
-      allow delete: if isActive() && (isAdmin() || resource.data.creatorId == request.auth.uid);
+      allow read: if hActive(database, request.auth) && (!isSalesRep(database, request.auth) || resource.data.assignedToId == request.auth.uid);
+      allow create: if hActive(database, request.auth) && (!isSalesRep(database, request.auth) || incoming().assignedToId == request.auth.uid) && isValidProjectTask(incoming(), request.auth);
+      allow update: if hActive(database, request.auth) && (
+        hAdmin(database, request.auth) || 
+        (existing().assignedToId == request.auth.uid && incoming().assignedToId == request.auth.uid)
+      );
+      allow delete: if hActive(database, request.auth) && (
+        hAdmin(database, request.auth) || 
+        (!isSalesRep(database, request.auth) && resource.data.creatorId == request.auth.uid)
+      );
     }
 
-    function isValidProjectActivity(data) {
+    function isValidProjectActivity(data, auth) {
       return isValidId(data.projectId)
-          && data.userId == request.auth.uid
+          && data.userId == auth.uid
           && data.type in ['status_change', 'task_update', 'comment', 'file_upload']
           && data.description is string && data.description.size() > 0;
     }
 
     match /projectActivities/{activityId} {
-      allow read: if isActive();
-      allow create: if isActive() && isValidProjectActivity(incoming());
+      allow read: if hActive(database, request.auth);
+      allow create: if hActive(database, request.auth) && isValidProjectActivity(incoming(), request.auth);
       allow update, delete: if false; // Activities are immutable logs
     }
 
     match /sales/{salesId} {
-      allow read: if isActive();
-      allow create: if isActive() && isAdmin() && isValidSalesPerson(incoming());
-      allow update: if isActive() && isAdmin() && isValidSalesPerson(incoming());
-      allow delete: if isActive() && isAdmin();
+      allow read: if hActive(database, request.auth);
+      allow create: if hActive(database, request.auth) && hAdmin(database, request.auth) && isValidSalesPerson(incoming());
+      allow update: if hActive(database, request.auth) && hAdmin(database, request.auth) && isValidSalesPerson(incoming());
+      allow delete: if hActive(database, request.auth) && hAdmin(database, request.auth);
     }
 
     match /salesTasks/{taskId} {
-      allow read: if isActive();
-      allow create: if isActive() && isValidSalesTask(incoming());
-      allow update: if isActive() && isValidSalesTask(incoming());
-      allow delete: if isActive() && isAdmin();
+      allow read: if hActive(database, request.auth);
+      allow create: if hActive(database, request.auth) && isValidSalesTask(incoming());
+      allow update: if hActive(database, request.auth) && isValidSalesTask(incoming());
+      allow delete: if hActive(database, request.auth) && hAdmin(database, request.auth);
     }
 
     match /settings/{docId} {
       allow read: if isSignedIn();
-      allow write: if isActive() && isAdmin() && isValidSettings(incoming());
+      allow write: if hActive(database, request.auth) && hAdmin(database, request.auth) && isValidSettings(incoming());
     }
   }
 }
