@@ -629,9 +629,9 @@ export default function WorkSchedulerHub({ userId, userRole }: Props) {
 
                           {/* Quick indicators */}
                           <div className="space-y-1 mt-1 overflow-hidden">
-                            {dateTasks.slice(0, 2).map((t) => (
+                            {dateTasks.slice(0, 2).map((t, idx) => (
                               <div 
-                                key={t.id} 
+                                key={`${t.id || 'task'}-${t.isCrmReminder ? 'crm' : 'task'}-${idx}`} 
                                 className={cn(
                                   "text-[8px] font-extrabold truncate px-1 rounded border",
                                   t.status === 'done' 
@@ -674,12 +674,12 @@ export default function WorkSchedulerHub({ userId, userRole }: Props) {
                     </div>
 
                     <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
-                      {getTasksForDate(new Date(selectedCalendarDate)).map((t) => {
+                      {getTasksForDate(new Date(selectedCalendarDate)).map((t, idx) => {
                         const linkedCust = getCustomerForTask(t);
                         const assignedTo = users.find(u => u.id === t.assignedToId);
                         
                         return (
-                          <div key={t.id} className="bg-white p-3 rounded-2xl border border-slate-100 hover:border-slate-200 shadow-sm space-y-2">
+                          <div key={`${t.id || 'task'}-${t.isCrmReminder ? 'crm' : 'task'}-${idx}`} className="bg-white p-3 rounded-2xl border border-slate-100 hover:border-slate-200 shadow-sm space-y-2">
                             <div className="flex items-start justify-between">
                               <h4 className={cn("text-xs font-black text-slate-800 uppercase tracking-tight", t.status === 'done' && "line-through text-slate-400")}>
                                 {t.title}
@@ -824,7 +824,7 @@ export default function WorkSchedulerHub({ userId, userRole }: Props) {
 
                 {/* Main list breakdown */}
                 <div className="space-y-3">
-                  {filteredTasks.map((t) => {
+                  {filteredTasks.map((t, idx) => {
                     const assignedUser = users.find(u => u.id === t.assignedToId);
                     const creatorUser = users.find(u => u.id === t.creatorId);
                     const isOverdue = checkTaskOverdue(t);
@@ -832,7 +832,7 @@ export default function WorkSchedulerHub({ userId, userRole }: Props) {
                     
                     return (
                       <div 
-                        key={t.id} 
+                        key={`${t.id || 'task'}-${t.isCrmReminder ? 'crm' : 'task'}-${idx}`} 
                         className={cn(
                           "p-4 rounded-2xl border flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all hover:bg-slate-50/50",
                           t.status === 'done' 
@@ -965,7 +965,9 @@ export default function WorkSchedulerHub({ userId, userRole }: Props) {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {users.map((member) => {
+                  {users
+                    .filter((member) => userRole === 'admin' || member.id === userId)
+                    .map((member) => {
                     const memberTasks = combinedTasks.filter(t => t.assignedToId === member.id);
                     const activeCount = memberTasks.filter(t => t.status !== 'done').length;
                     const doneCount = memberTasks.filter(t => t.status === 'done').length;
@@ -1168,8 +1170,8 @@ export default function WorkSchedulerHub({ userId, userRole }: Props) {
                     </h4>
                     
                     <div className="space-y-2">
-                      {overdueTasks.map((t) => (
-                        <div key={t.id} className="bg-rose-50/30 p-3.5 rounded-2xl border border-rose-100 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                      {overdueTasks.map((t, idx) => (
+                        <div key={`${t.id || 'task'}-${t.isCrmReminder ? 'crm' : 'task'}-${idx}`} className="bg-rose-50/30 p-3.5 rounded-2xl border border-rose-100 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
                           <div>
                             <p className="font-black text-rose-900 uppercase tracking-tight">{t.title}</p>
                             <p className="text-[10px] text-slate-500 mt-0.5">Phân công: <strong className="text-slate-700">{users.find(u => u.id === t.assignedToId)?.displayName || 'N/A'}</strong></p>
@@ -1205,8 +1207,8 @@ export default function WorkSchedulerHub({ userId, userRole }: Props) {
                     </h4>
                     
                     <div className="space-y-2">
-                      {dueSoonTasks.map((t) => (
-                        <div key={t.id} className="bg-amber-50/20 p-3.5 rounded-2xl border border-amber-250 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                      {dueSoonTasks.map((t, idx) => (
+                        <div key={`${t.id || 'task'}-${t.isCrmReminder ? 'crm' : 'task'}-${idx}`} className="bg-amber-50/20 p-3.5 rounded-2xl border border-amber-250 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
                           <div>
                             <p className="font-black text-amber-900 uppercase tracking-tight">{t.title}</p>
                             <p className="text-[10px] text-slate-500 mt-0.5">Phụ trách: <strong className="text-slate-700">{users.find(u => u.id === t.assignedToId)?.displayName || 'N/A'}</strong></p>

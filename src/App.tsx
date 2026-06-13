@@ -34,7 +34,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, limit, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, limit, onSnapshot, collectionGroup } from 'firebase/firestore';
 import { cn } from './lib/utils';
 import { UserRole } from './types';
 
@@ -69,6 +69,8 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
 
   const [userTasks, setUserTasks] = useState<any[]>([]);
+  const [crmReminders, setCrmReminders] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
 
   useEffect(() => {
@@ -87,6 +89,110 @@ export default function App() {
     });
     return () => unsubTasks();
   }, [user?.uid]);
+
+  useEffect(() => {
+    if (!user) {
+      setCrmReminders([]);
+      setCustomers([]);
+      return;
+    }
+
+    const qCust = userRole === 'sales_rep'
+      ? query(collection(db, 'customers'), where('assignedSalesId', '==', user.uid))
+      : collection(db, 'customers');
+
+    const unsubCust = onSnapshot(qCust, (snapshot) => {
+      setCustomers(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      console.error("Error loading customers for notifications:", error);
+    });
+
+    const unsubReminders = onSnapshot(
+      collectionGroup(db, 'reminders'),
+      (snapshot) => {
+        setCrmReminders(snapshot.docs.map(d => {
+          const parentPath = d.ref.parent.parent?.path || '';
+          const customerId = parentPath ? parentPath.split('/')[1] : '';
+          return { id: d.id, customerId, ...d.data() };
+        }));
+      },
+      (error) => {
+        console.error("Error loading CRM reminders for notifications:", error);
+      }
+    );
+
+    return () => {
+      unsubCust();
+      unsubReminders();
+    };
+  }, [user?.uid, userRole]);
+
+  const checkOverdue = React.useCallback((t: any) => {
+    if (t.status === 'done' || !t.dueDate) return false;
+    try {
+      const dDate = t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000) : new Date(t.dueDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      dDate.setHours(0, 0, 0, 0);
+      return dDate < today;
+    } catch (e) {
+      return false;
+    }
+  }, []);
+
+  const checkDueSoon = React.useCallback((t: any) => {
+    if (t.status === 'done' || !t.dueDate) return false;
+    try {
+      const dDate = t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000) : new Date(t.dueDate);
+      const today = new Date();
+      const tomorrow = new Date();
+      tomorrow.setDate(today.getDate() + 1);
+      
+      today.setHours(0, 0, 0, 0);
+      tomorrow.setHours(23, 59, 59, 999);
+      
+      const checkDate = new Date(dDate);
+      checkDate.setHours(12, 0, 0, 0);
+      
+      return checkDate >= today && checkDate <= tomorrow;
+    } catch (e) {
+      return false;
+    }
+  }, []);
+
+  const combinedUserTasks = React.useMemo(() => {
+    const formattedProjectTasks = userTasks.map(t => ({
+      ...t,
+      type: 'project_task' as const,
+      isCrmReminder: false,
+    }));
+
+    const formattedCrmTasks = crmReminders
+      .filter(rem => {
+        const customer = customers.find(c => c.id === rem.customerId);
+        const isAssignedToUser = rem.assignedToId === user?.uid || customer?.assignedSalesId === user?.uid;
+        if (userRole === 'sales_rep') {
+          return isAssignedToUser;
+        }
+        return rem.assignedToId === user?.uid || isAssignedToUser;
+      })
+      .map(rem => {
+        const customer = customers.find(c => c.id === rem.customerId);
+        const customerName = customer ? customer.name : 'Khách hàng';
+        return {
+          id: rem.id,
+          title: `[CRM] ${rem.title}`,
+          description: `Chăm sóc khách hàng: ${customerName}. ${rem.title}`,
+          dueDate: rem.dueDate,
+          status: rem.status === 'completed' ? 'done' as const : 'todo' as const,
+          isCrmReminder: true,
+          customerId: rem.customerId,
+          customerName: customerName,
+        };
+      });
+
+    return [...formattedProjectTasks, ...formattedCrmTasks];
+  }, [userTasks, crmReminders, customers, user?.uid, userRole]);
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (u) => {
@@ -444,31 +550,10 @@ export default function App() {
               title="Nhắc việc & Cảnh báo"
             >
               <Bell className="h-4.5 w-4.5" />
-              {userTasks.filter(t => {
-                if (t.status === 'done' || !t.dueDate) return false;
-                try {
-                  const dDate = t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000) : new Date(t.dueDate);
-                  const today = new Date();
-                  today.setHours(23, 59, 59, 999);
-                  return dDate <= today; // Overdue or urgent (today/past)
-                } catch (e) {
-                  return false;
-                }
-              }).length > 0 && (
-                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-rose-500 animate-ping" />
-              )}
-              {userTasks.filter(t => {
-                if (t.status === 'done' || !t.dueDate) return false;
-                try {
-                  const dDate = t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000) : new Date(t.dueDate);
-                  const today = new Date();
-                  today.setHours(23, 59, 59, 999);
-                  return dDate <= today;
-                } catch (e) {
-                  return false;
-                }
-              }).length > 0 && (
-                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-rose-500" />
+              {combinedUserTasks.filter(t => t.status !== 'done').length > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[8px] font-black text-white ring-2 ring-white">
+                  {combinedUserTasks.filter(t => t.status !== 'done').length}
+                </span>
               )}
             </button>
 
@@ -485,52 +570,101 @@ export default function App() {
                     className="absolute right-0 mt-3 w-80 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-4 space-y-3 font-sans"
                   >
                     <div className="pb-2 border-b border-slate-100 flex justify-between items-center">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">🔔 Công việc cần lưu ý</span>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">🔔 Công việc & Lịch nhắc</span>
                       <span className="text-[9px] px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full font-black uppercase">
-                        {userTasks.filter(t => {
-                          if (t.status === 'done' || !t.dueDate) return false;
-                          const dDate = t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000) : new Date(t.dueDate);
-                          const today = new Date();
-                          today.setHours(23, 59, 59, 999);
-                          return dDate <= today;
-                        }).length} gấp / trễ
+                        {combinedUserTasks.filter(t => t.status !== 'done' && (checkOverdue(t) || checkDueSoon(t))).length} gấp / cận kề
                       </span>
                     </div>
 
-                    <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                      {userTasks.filter(t => t.status !== 'done').map((t, index) => {
-                        const isOverdue = (() => {
-                          if (!t.dueDate) return false;
-                          const dDate = t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000) : new Date(t.dueDate);
-                          const today = new Date();
-                          today.setHours(0,0,0,0);
-                          return dDate < today;
-                        })();
-                        
-                        return (
-                          <div 
-                            key={t.id || index} 
-                            onClick={() => {
-                              setActiveView('tasks');
-                              setShowNotifications(false);
-                            }}
-                            className={cn(
-                              "p-2.5 rounded-xl border text-xs text-left cursor-pointer hover:bg-slate-50 transition-colors space-y-1",
-                              isOverdue ? "border-rose-100 bg-rose-50/20" : "border-slate-100 bg-white"
-                            )}
-                          >
-                            <p className="font-extrabold text-slate-800 uppercase tracking-tight line-clamp-1">{t.title}</p>
-                            <div className="flex justify-between items-center text-[9px] font-bold">
-                              <span className={isOverdue ? "text-rose-500 font-extrabold" : "text-amber-500"}>
-                                {isOverdue ? 'Quá hạn!' : 'Hạn hôm nay / gần kề'}
-                              </span>
-                              <span className="text-slate-400">{t.dueDate ? (t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000).toLocaleDateString('vi-VN') : new Date(t.dueDate).toLocaleDateString('vi-VN')) : ''}</span>
+                    <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                      {/* CATEGORY 1: OVERDUE (QUÁ HẠN) */}
+                      {combinedUserTasks.filter(t => t.status !== 'done' && checkOverdue(t)).length > 0 && (
+                        <div className="space-y-1">
+                          <p className="text-[8px] font-black text-rose-600 uppercase tracking-widest bg-rose-50 px-2 py-0.5 rounded-md w-max">
+                            🚨 ĐÃ QUÁ HẠN
+                          </p>
+                          {combinedUserTasks.filter(t => t.status !== 'done' && checkOverdue(t)).map((t, index) => (
+                            <div 
+                              key={`overdue-${t.id || index}`} 
+                              onClick={() => {
+                                setActiveView('tasks');
+                                setShowNotifications(false);
+                              }}
+                              className="p-2 bg-rose-50/10 border border-thin border-rose-100 rounded-xl text-xs text-left cursor-pointer hover:bg-rose-50/30 transition-colors space-y-1"
+                            >
+                              <p className="font-extrabold text-slate-800 uppercase tracking-tight line-clamp-1">
+                                {t.title}
+                              </p>
+                              {t.isCrmReminder && (
+                                <p className="text-[9px] font-bold text-slate-400">Khách: {t.customerName}</p>
+                              )}
+                              <div className="flex justify-between items-center text-[9px] font-bold mt-0.5 text-rose-500">
+                                <span>Trễ từ: {t.dueDate ? (t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000).toLocaleDateString('vi-VN') : new Date(t.dueDate).toLocaleDateString('vi-VN')) : ''}</span>
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          ))}
+                        </div>
+                      )}
 
-                      {userTasks.filter(t => t.status !== 'done').length === 0 && (
+                      {/* CATEGORY 2: DUE SOON (SẮP QUÁ HẠN - HÔM NAY / NGÀY MAI) */}
+                      {combinedUserTasks.filter(t => t.status !== 'done' && checkDueSoon(t)).length > 0 && (
+                        <div className="space-y-1">
+                          <p className="text-[8px] font-black text-amber-600 uppercase tracking-widest bg-amber-50 px-2 py-0.5 rounded-md w-max">
+                            ⚠️ HẠN GẦN KỀ (HÔM NAY / MAI)
+                          </p>
+                          {combinedUserTasks.filter(t => t.status !== 'done' && checkDueSoon(t)).map((t, index) => (
+                            <div 
+                              key={`soon-${t.id || index}`} 
+                              onClick={() => {
+                                setActiveView('tasks');
+                                setShowNotifications(false);
+                              }}
+                              className="p-2 bg-amber-50/10 border border-thin border-amber-100 rounded-xl text-xs text-left cursor-pointer hover:bg-amber-50/30 transition-colors space-y-1"
+                            >
+                              <p className="font-extrabold text-slate-800 uppercase tracking-tight line-clamp-1">
+                                {t.title}
+                              </p>
+                              {t.isCrmReminder && (
+                                <p className="text-[9px] font-bold text-slate-400">Khách: {t.customerName}</p>
+                              )}
+                              <div className="flex justify-between items-center text-[9px] font-bold mt-0.5 text-amber-600">
+                                <span>Hạn: {t.dueDate ? (t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000).toLocaleDateString('vi-VN') : new Date(t.dueDate).toLocaleDateString('vi-VN')) : ''}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* CATEGORY 3: TO DO (CẦN LÀM KHÁC) */}
+                      {combinedUserTasks.filter(t => t.status !== 'done' && !checkOverdue(t) && !checkDueSoon(t)).length > 0 && (
+                        <div className="space-y-1">
+                          <p className="text-[8px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded-md w-max">
+                            📋 CÔNG VIỆC CẦN LÀM
+                          </p>
+                          {combinedUserTasks.filter(t => t.status !== 'done' && !checkOverdue(t) && !checkDueSoon(t)).map((t, index) => (
+                            <div 
+                              key={`todo-${t.id || index}`} 
+                              onClick={() => {
+                                setActiveView('tasks');
+                                setShowNotifications(false);
+                              }}
+                              className="p-2 bg-slate-50/30 border border-thin border-slate-100 rounded-xl text-xs text-left cursor-pointer hover:bg-slate-50 transition-colors space-y-1"
+                            >
+                              <p className="font-extrabold text-slate-800 uppercase tracking-tight line-clamp-1">
+                                {t.title}
+                              </p>
+                              {t.isCrmReminder && (
+                                <p className="text-[9px] font-bold text-slate-400">Khách: {t.customerName}</p>
+                              )}
+                              <div className="flex justify-between items-center text-[9px] font-bold mt-0.5 text-slate-400">
+                                <span>Hạn: {t.dueDate ? (t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000).toLocaleDateString('vi-VN') : new Date(t.dueDate).toLocaleDateString('vi-VN')) : 'Không có hạn'}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {combinedUserTasks.filter(t => t.status !== 'done').length === 0 && (
                         <div className="text-center py-6 text-slate-400 text-[10px] font-black uppercase tracking-wider">
                           Không có việc tồn đọng 🎉
                         </div>

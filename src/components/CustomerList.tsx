@@ -1525,19 +1525,21 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1">Sale điều phối phụ trách</label>
-                  <select 
-                    className="w-full px-5 py-3.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold outline-none focus:bg-white focus:border-blue-500 appearance-none transition-all"
-                    value={newCustomer.assignedSalesId}
-                    onChange={e => setNewCustomer({...newCustomer, assignedSalesId: e.target.value})}
-                  >
-                    <option value="">-- Chưa bàn giao nhân sự --</option>
-                    {salesStaff
-                      .filter(s => s.status === 'active' && (s.role === 'sales_rep' || s.role === 'manager' || s.role === 'admin'))
-                      .map(s => <option key={s.id} value={s.id}>{s.displayName.toUpperCase()}</option>)}
-                  </select>
-                </div>
+                {userRole !== 'sales_rep' && (
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1">Sale điều phối phụ trách</label>
+                    <select 
+                      className="w-full px-5 py-3.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold outline-none focus:bg-white focus:border-blue-500 appearance-none transition-all"
+                      value={newCustomer.assignedSalesId}
+                      onChange={e => setNewCustomer({...newCustomer, assignedSalesId: e.target.value})}
+                    >
+                      <option value="">-- Chưa bàn giao nhân sự --</option>
+                      {salesStaff
+                        .filter(s => s.status === 'active' && (s.role === 'sales_rep' || s.role === 'manager' || s.role === 'admin'))
+                        .map(s => <option key={s.id} value={s.id}>{s.displayName.toUpperCase()}</option>)}
+                    </select>
+                  </div>
+                )}
 
                 <div className="pt-6 flex gap-4">
                   <button 

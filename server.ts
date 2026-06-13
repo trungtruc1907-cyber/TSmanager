@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
@@ -49,17 +50,67 @@ async function startServer() {
       const decodedToken = await authAdmin.verifyIdToken(idToken);
       const adminUid = decodedToken.uid;
 
-      // Double-check authorization inside Firestore to ensure they are admin/manager
-      const userRef = firestoreAdmin.collection('users').doc(adminUid);
-      const userSnap = await userRef.get();
+      let adminData: any = null;
 
-      if (!userSnap.exists) {
+      try {
+        const userRef = firestoreAdmin.collection('users').doc(adminUid);
+        const userSnap = await userRef.get();
+        if (userSnap.exists) {
+          adminData = userSnap.data();
+        }
+      } catch (firestoreErr: any) {
+        console.warn("[PASS_RESET] Firestore Admin SDK read failed, attempting REST API fallback:", firestoreErr.message || firestoreErr);
+        try {
+          const configJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'firebase-applet-config.json'), 'utf8'));
+          const projectId = configJson.projectId;
+          const databaseId = configJson.firestoreDatabaseId;
+          const apiKey = configJson.apiKey;
+          const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${adminUid}?key=${apiKey}`;
+          
+          const restRes = await fetch(url, {
+            headers: {
+              'Authorization': `Bearer ${idToken}`
+            }
+          });
+          
+          if (!restRes.ok) {
+            const errText = await restRes.text();
+            throw new Error(`REST fail: ${restRes.status} - ${errText}`);
+          }
+          
+          const restJson: any = await restRes.json();
+          const fields = restJson.fields || {};
+          const parsedData: Record<string, any> = {};
+          
+          for (const [key, valObj] of Object.entries(fields)) {
+            const typedVal = valObj as any;
+            if ('stringValue' in typedVal) {
+              parsedData[key] = typedVal.stringValue;
+            } else if ('integerValue' in typedVal) {
+              parsedData[key] = parseInt(typedVal.integerValue, 10);
+            } else if ('doubleValue' in typedVal) {
+              parsedData[key] = parseFloat(typedVal.doubleValue);
+            } else if ('booleanValue' in typedVal) {
+              parsedData[key] = typedVal.booleanValue;
+            } else if ('nullValue' in typedVal) {
+              parsedData[key] = null;
+            } else {
+              parsedData[key] = typedVal;
+            }
+          }
+          adminData = parsedData;
+        } catch (restErr: any) {
+          console.error("[PASS_RESET] REST API fallback also failed:", restErr.message || restErr);
+          throw firestoreErr; // Throw original error if fallback also fails
+        }
+      }
+
+      if (!adminData) {
         return res.status(403).json({ error: "Tài khoản quản trị không tồn tại trên hệ thống dữ liệu." });
       }
 
-      const adminData = userSnap.data();
-      const role = adminData?.role;
-      const status = adminData?.status;
+      const role = adminData.role;
+      const status = adminData.status;
 
       if (status !== 'active' || (role !== 'admin' && role !== 'manager')) {
         return res.status(403).json({ error: "Tài khoản của bạn không có quyền thực hiện chức năng này." });
@@ -68,7 +119,7 @@ async function startServer() {
       // Reset the password in Firebase Auth using Admin SDK
       await authAdmin.updateUser(targetUserId, { password: newPassword });
 
-      console.log(`[PASS_RESET] Admin/Manager "${adminData?.username || adminUid}" reset password for UID: ${targetUserId}`);
+      console.log(`[PASS_RESET] Admin/Manager "${adminData.username || adminUid}" reset password for UID: ${targetUserId}`);
       return res.json({ success: true, message: "Cấp lại mật khẩu thành công." });
     } catch (err: any) {
       console.error("[PASS_RESET] Exception occurred:", err);

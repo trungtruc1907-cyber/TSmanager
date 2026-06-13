@@ -377,7 +377,7 @@ export default function ProjectDashboard({ onOpenProject, onOpenTracker, showAll
                   .slice(0, 2).map((item, idx) => {
                     const isOverdue = isOverdueItem(item);
                     return (
-                      <div key={item.id + '-' + idx} className="flex items-center gap-1.5 text-[10px] text-rose-700 font-semibold">
+                      <div key={`${item.id || 'item'}-${item.isCrm ? 'crm' : 'task'}-${idx}`} className="flex items-center gap-1.5 text-[10px] text-rose-700 font-semibold">
                         <span className={cn("w-1 h-1 rounded-full shrink-0", isOverdue ? "bg-rose-600 animate-pulse" : "bg-amber-500")} />
                         <span className="truncate flex-1">{item.title}</span>
                       </div>
@@ -478,7 +478,7 @@ export default function ProjectDashboard({ onOpenProject, onOpenTracker, showAll
                     }
                     
                     return (
-                      <div key={item.id + '-' + index} className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col gap-2 hover:bg-slate-100/50 transition-colors">
+                      <div key={`${item.id || 'item'}-${item.isCrm ? 'crm' : 'task'}-${index}`} className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col gap-2 hover:bg-slate-100/50 transition-colors">
                         <div className="flex justify-between items-start gap-2">
                           <span className={cn(
                             "px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider",
