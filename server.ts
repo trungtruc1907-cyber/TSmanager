@@ -6,6 +6,10 @@ import { initializeApp, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 
+// Instruct Google APIs / Firebase Admin SDK to charge quota and API enablement check to target Project ID,
+// avoiding the identitytoolkit API omission error on the container sandbox hosting project.
+process.env.GOOGLE_CLOUD_QUOTA_PROJECT = "gen-lang-client-0349240272";
+
 // Initialize Firebase Admin SDK using ES import syntax
 if (!getApps().length) {
   try {

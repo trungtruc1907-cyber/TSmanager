@@ -702,13 +702,13 @@ export default function App() {
       
       <div className="flex flex-1 overflow-hidden relative">
         {/* Desktop Sidebar - Side Navigation */}
-        <aside className="hidden lg:flex w-72 bg-white border-r border-slate-200 flex-col p-6 space-y-1 shadow-inner h-full">
-            <div className="mb-6 px-4 py-3 bg-slate-50 rounded-2xl border border-slate-100">
+        <aside className="hidden lg:flex w-72 bg-white border-r border-slate-200 flex-col p-6 shadow-inner h-full shrink-0">
+            <div className="mb-4 px-4 py-3 bg-slate-50 rounded-2xl border border-slate-100 shrink-0">
                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Phần mềm ERP v2.0</p>
                <p className="text-[11px] text-slate-600 font-medium">Xin chào, <span className="font-bold text-slate-900">{user.displayName || user.email?.split('@')[0]}</span></p>
             </div>
 
-            <nav className="space-y-1.5">
+            <nav className="flex-1 overflow-y-auto space-y-1 pr-1 custom-sidebar-scrollbar min-h-0 py-2">
               {navigation.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeView === item.id;
@@ -717,14 +717,14 @@ export default function App() {
                     key={item.id}
                     onClick={() => setActiveView(item.id as View)}
                     className={cn(
-                      "w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-sm font-bold uppercase tracking-wide transition-all group relative overflow-hidden",
+                      "w-full flex items-center gap-4 px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all group relative overflow-hidden shrink-0",
                       isActive 
-                        ? "bg-slate-900 text-white shadow-xl translate-x-2" 
+                        ? "bg-slate-900 text-white shadow-xl translate-x-1" 
                         : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
                     )}
                   >
                     <Icon className={cn(
-                      "h-5 w-5 transition-colors",
+                      "h-4.5 w-4.5 transition-colors shrink-0",
                       isActive ? "text-blue-400" : "text-slate-400 group-hover:text-slate-900"
                     )} />
                     <span className="relative z-10">{item.label}</span>
@@ -739,7 +739,7 @@ export default function App() {
               })}
             </nav>
 
-            <div className="mt-auto pt-6 border-t border-slate-100">
+            <div className="pt-4 border-t border-slate-100 shrink-0">
               <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100/50">
                 <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1">Hệ thống sẵn sàng</p>
                 <p className="text-[10px] text-blue-700 font-medium leading-tight">Mọi dữ liệu đã được đồng bộ hóa với Firestore.</p>
