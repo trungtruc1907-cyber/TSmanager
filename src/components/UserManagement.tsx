@@ -50,6 +50,7 @@ export default function UserManagement({ userId }: UserManagementProps) {
   const [isResetting, setIsResetting] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetSuccess, setResetSuccess] = useState<string | null>(null);
+  const [iamDetails, setIamDetails] = useState<{ serviceAccount: string; projectId: string; instructions: string } | null>(null);
 
   const handleResetPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +59,7 @@ export default function UserManagement({ userId }: UserManagementProps) {
     setIsResetting(true);
     setResetError(null);
     setResetSuccess(null);
+    setIamDetails(null);
 
     try {
       const currentAuthUser = auth.currentUser;
@@ -83,6 +85,14 @@ export default function UserManagement({ userId }: UserManagementProps) {
       const result = await response.json();
 
       if (!response.ok) {
+        if (result.isIamError) {
+          setIamDetails({
+            serviceAccount: result.serviceAccount,
+            projectId: result.projectId,
+            instructions: result.instructions
+          });
+          throw new Error(result.error || "Lỗi phân quyền IAM dự án.");
+        }
         throw new Error(result.error || "Không thể thực hiện cấp lại mật khẩu.");
       }
 
@@ -92,6 +102,7 @@ export default function UserManagement({ userId }: UserManagementProps) {
       setTimeout(() => {
         setResettingUser(null);
         setResetSuccess(null);
+        setIamDetails(null);
       }, 1500);
     } catch (err: any) {
       console.error("Reset password error:", err);
@@ -470,6 +481,7 @@ export default function UserManagement({ userId }: UserManagementProps) {
               setResettingUser(null);
               setResetError(null);
               setResetSuccess(null);
+              setIamDetails(null);
             }}
             onSubmit={handleResetPasswordSubmit}
             user={resettingUser}
@@ -478,6 +490,7 @@ export default function UserManagement({ userId }: UserManagementProps) {
             isSubmitting={isResetting}
             errorMsg={resetError}
             successMsg={resetSuccess}
+            iamDetails={iamDetails}
           />
         )}
       </AnimatePresence>
@@ -614,6 +627,7 @@ interface ResetPasswordModalProps {
   isSubmitting: boolean;
   errorMsg: string | null;
   successMsg: string | null;
+  iamDetails: { serviceAccount: string; projectId: string; instructions: string } | null;
 }
 
 function ResetPasswordModal({
@@ -625,8 +639,11 @@ function ResetPasswordModal({
   setNewPassword,
   isSubmitting,
   errorMsg,
-  successMsg
+  successMsg,
+  iamDetails
 }: ResetPasswordModalProps) {
+  const [copied, setCopied] = useState(false);
+
   if (!isOpen) return null;
 
   return (
@@ -642,9 +659,9 @@ function ResetPasswordModal({
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden"
+        className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
       >
-        <div className="p-8 md:p-10 space-y-8">
+        <div className="p-8 md:p-10 space-y-6 overflow-y-auto custom-sidebar-scrollbar flex-1">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Cấp lại Mật khẩu</h3>
@@ -657,6 +674,59 @@ function ResetPasswordModal({
             <div className="p-4 bg-red-50 rounded-2xl border border-red-100 flex items-center gap-3">
               <ShieldAlert className="h-5 w-5 text-red-500 shrink-0" />
               <p className="text-xs font-bold text-red-600">{errorMsg}</p>
+            </div>
+          )}
+
+          {iamDetails && (
+            <div className="p-5 bg-amber-50/70 rounded-2xl border border-amber-100 space-y-4">
+              <div className="flex items-start gap-3">
+                <ShieldAlert className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-xs font-black text-amber-800 uppercase tracking-wider">Cần Phân Quyền (IAM)</h4>
+                  <p className="text-[11px] text-amber-700 font-medium leading-relaxed mt-1">
+                    Hệ thống không thể kết nối trực tiếp với dự án của bạn để cập nhật cơ sở dữ liệu Auth do thiếu quyền. Hãy bổ sung quyền sau:
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4 bg-white p-4 rounded-xl border border-amber-100">
+                <div className="space-y-1">
+                  <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">BƯỚC 1: Mở trang quản trị IAM</p>
+                  <a 
+                    href={`https://console.cloud.google.com/iam-admin/iam?project=${iamDetails.projectId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-blue-600 font-bold hover:underline transition-all inline-flex items-center gap-1"
+                  >
+                    Bấm để mở trang IAM Google Cloud ↗
+                  </a>
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">BƯỚC 2: Sao chép Email Service Account</p>
+                  <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 mt-1">
+                    <code className="text-[10px] font-mono font-bold text-slate-700 break-all select-all flex-1 leading-tight">{iamDetails.serviceAccount}</code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(iamDetails.serviceAccount);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      }}
+                      className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-[9px] font-black rounded-lg uppercase tracking-wider transition-all shadow-md shadow-blue-100 shrink-0"
+                    >
+                      {copied ? "Đã chép!" : "Sao chép"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">BƯỚC 3: Nhấp "Grant Access" / "Thêm thành viên"</p>
+                  <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
+                    Dán Email vừa sao chép ở trên vào ô <strong>"New principals"</strong>, chọn vai trò (Role) là <strong>"Firebase Authentication Admin"</strong> (hoặc <strong>"Editor"</strong>) và lưu lại. Sau 1 phút, quay lại đây bấm thực hiện đổi mật khẩu.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 

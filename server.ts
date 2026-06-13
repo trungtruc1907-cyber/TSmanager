@@ -30,25 +30,26 @@ async function startServer() {
 
   // API Route: Reset another user's password (Admin/Manager only)
   app.post('/api/admin/reset-password', async (req, res) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: "Yêu cầu cung cấp Token xác thực." });
-    }
-
-    const idToken = authHeader.split('Bearer ')[1];
-    const { targetUserId, newPassword } = req.body;
-
-    if (!targetUserId || !newPassword) {
-      return res.status(400).json({ error: "Thiếu mã tài khoản hoặc mật khẩu mới." });
-    }
-
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: "Mật khẩu mới phải có tối thiểu 6 ký tự." });
-    }
-
     try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: "Yêu cầu cung cấp Token xác thực." });
+      }
+
+      const idToken = authHeader.split('Bearer ')[1];
+      const { targetUserId, newPassword } = req.body || {};
+
+      if (!targetUserId || !newPassword) {
+        return res.status(400).json({ error: "Thiếu mã tài khoản hoặc mật khẩu mới." });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: "Mật khẩu mới phải có tối thiểu 6 ký tự." });
+      }
+
       const authAdmin = getAuth();
-      const firestoreAdmin = getFirestore("ai-studio-b2d8e0e9-52cd-42ef-bb50-f9a1cebfcf8b");
+      const appInstance = getApps()[0];
+      const firestoreAdmin = getFirestore(appInstance, "ai-studio-b2d8e0e9-52cd-42ef-bb50-f9a1cebfcf8b");
 
       // Verify user's ID token through Firebase Admin auth
       const decodedToken = await authAdmin.verifyIdToken(idToken);
@@ -127,7 +128,30 @@ async function startServer() {
       return res.json({ success: true, message: "Cấp lại mật khẩu thành công." });
     } catch (err: any) {
       console.error("[PASS_RESET] Exception occurred:", err);
-      return res.status(500).json({ error: err.message || "Lỗi máy chủ khi cập nhật mật khẩu." });
+      
+      const errMsg = err.message || "";
+      const isIamError = errMsg.includes("permission") || 
+                         errMsg.includes("IAM") || 
+                         errMsg.includes("quota") ||
+                         errMsg.includes("identitytoolkit") ||
+                         errMsg.includes("used in project") ||
+                         err.code === "auth/insufficient-permission" ||
+                         err.code === "auth/internal-error" ||
+                         errMsg.includes("403") ||
+                         errMsg.includes("credentials");
+
+      if (isIamError) {
+        const scEmail = "711060358240-compute@developer.gserviceaccount.com";
+        return res.status(403).json({
+          error: "Service Account chưa được phân quyền trong dự án Firebase của bạn.",
+          isIamError: true,
+          serviceAccount: scEmail,
+          projectId: "gen-lang-client-0349240272",
+          instructions: `Vui lòng cấp quyền (IAM) cho Service Account sau trong bảng điều khiển dự án Google Cloud/Firebase của bạn:\n\nEmail: ${scEmail}\nRole: "Firebase Authentication Admin" hoặc "Editor".\n\nXem hướng dẫn chi tiết bên dưới.`
+        });
+      }
+
+      return res.status(500).json({ error: errMsg || "Lỗi máy chủ khi cập nhật mật khẩu." });
     }
   });
 

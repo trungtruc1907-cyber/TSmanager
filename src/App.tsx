@@ -585,7 +585,7 @@ export default function App() {
                           </p>
                           {combinedUserTasks.filter(t => t.status !== 'done' && checkOverdue(t)).map((t, index) => (
                             <div 
-                              key={`overdue-${t.id || index}`} 
+                              key={`overdue-${t.isCrmReminder ? 'crm' : 'proj'}-${t.id || index}-${index}`} 
                               onClick={() => {
                                 setActiveView('tasks');
                                 setShowNotifications(false);
@@ -614,7 +614,7 @@ export default function App() {
                           </p>
                           {combinedUserTasks.filter(t => t.status !== 'done' && checkDueSoon(t)).map((t, index) => (
                             <div 
-                              key={`soon-${t.id || index}`} 
+                              key={`soon-${t.isCrmReminder ? 'crm' : 'proj'}-${t.id || index}-${index}`} 
                               onClick={() => {
                                 setActiveView('tasks');
                                 setShowNotifications(false);
@@ -643,7 +643,7 @@ export default function App() {
                           </p>
                           {combinedUserTasks.filter(t => t.status !== 'done' && !checkOverdue(t) && !checkDueSoon(t)).map((t, index) => (
                             <div 
-                              key={`todo-${t.id || index}`} 
+                              key={`todo-${t.isCrmReminder ? 'crm' : 'proj'}-${t.id || index}-${index}`} 
                               onClick={() => {
                                 setActiveView('tasks');
                                 setShowNotifications(false);
