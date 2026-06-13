@@ -322,10 +322,6 @@ export default function App() {
                     required
                   />
                </div>
-               <div className="bg-amber-400/10 p-3 rounded-lg border border-amber-400/20 mb-2">
-                  <p className="text-[9px] text-amber-200 uppercase font-bold tracking-tighter">Gợi ý tài khoản hệ thống:</p>
-                  <code className="text-white text-[10px] font-mono">user: mrhieu / pass: Truongson@79</code>
-               </div>
                {authError && <p className="text-red-400 text-[10px] font-bold uppercase py-1">{authError}</p>}
                <button 
                   type="submit"
