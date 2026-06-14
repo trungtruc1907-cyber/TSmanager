@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType, createNotification } from '../lib/firebase';
 import { 
   collection, 
   onSnapshot, 
@@ -248,6 +248,12 @@ export default function WorkSchedulerHub({ userId, userRole }: Props) {
           description: `Đã khởi tạo công việc mới: ${taskForm.title}`,
           createdAt: serverTimestamp()
         });
+
+        await createNotification(
+          'task',
+          'Công việc mới được giao',
+          `Công việc mới "${taskForm.title.trim()}" đã được giao và tạo trên hệ thống.`
+        );
       }
 
       setIsAddingTask(false);

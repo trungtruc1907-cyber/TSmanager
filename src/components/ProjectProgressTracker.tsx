@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType, createNotification } from '../lib/firebase';
 import { 
   collection, 
   onSnapshot, 
@@ -126,6 +126,12 @@ export default function ProjectProgressTracker({ projectId, onClose, userId, use
       });
 
       await logActivity('task_update', `Đã tạo công việc mới: ${newTask.title}`);
+
+      await createNotification(
+        'task',
+        'Công việc mới được giao',
+        `Công việc mới "${newTask.title.trim()}" đã được giao và tạo trên hệ thống.`
+      );
       
       setNewTask({ title: '', description: '', status: 'todo', assignedToId: '' });
       setIsAddingTask(false);

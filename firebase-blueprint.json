@@ -171,9 +171,27 @@
         "website": { "type": "string" },
         "updatedAt": { "type": "string", "format": "date-time" }
       }
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Real-time notifications for newly added customers, tasks, or appointments.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["customer", "appointment", "task"] },
+        "createdBy": { "type": "string" },
+        "createdByName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "message", "type", "createdBy", "createdByName"]
     }
   },
   "firestore": {
+    "notifications": {
+      "schema": "Notification",
+      "description": "Log of staff-generated real-time system alerts."
+    },
     "customers": {
       "schema": "Customer",
       "description": "Collection of customer leads."

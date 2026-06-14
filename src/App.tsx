@@ -34,7 +34,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, limit, onSnapshot, collectionGroup } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, limit, onSnapshot, collectionGroup, orderBy } from 'firebase/firestore';
 import { cn } from './lib/utils';
 import { UserRole } from './types';
 
@@ -72,6 +72,9 @@ export default function App() {
   const [crmReminders, setCrmReminders] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [teamNotifications, setTeamNotifications] = useState<any[]>([]);
+  const [activeToasts, setActiveToasts] = useState<any[]>([]);
+  const [notifTab, setNotifTab] = useState<'tasks' | 'team'>('tasks');
 
   useEffect(() => {
     if (!user) {
@@ -126,6 +129,64 @@ export default function App() {
       unsubReminders();
     };
   }, [user?.uid, userRole]);
+
+  useEffect(() => {
+    if (!user) {
+      setTeamNotifications([]);
+      return;
+    }
+
+    const qNotif = query(
+      collection(db, 'notifications'),
+      orderBy('createdAt', 'desc'),
+      limit(45)
+    );
+
+    const unsubNotif = onSnapshot(qNotif, (snapshot) => {
+      const loaded = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setTeamNotifications(loaded);
+
+      // Check for live additions (push notifications)
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const docData = change.doc.data();
+          if (docData.createdAt && docData.createdBy !== user.uid) {
+            let createdAt: Date;
+            if (docData.createdAt.toDate) {
+              createdAt = docData.createdAt.toDate();
+            } else {
+              createdAt = new Date(docData.createdAt);
+            }
+            const now = new Date();
+            const ageInSeconds = (now.getTime() - createdAt.getTime()) / 1000;
+            // Only push if the creation time is within 15 seconds (prevents history spam on load)
+            if (ageInSeconds < 15) {
+              const newToast = {
+                id: change.doc.id,
+                type: docData.type,
+                title: docData.title,
+                message: docData.message,
+                createdByName: docData.createdByName,
+                createdAt: createdAt
+              };
+              setActiveToasts(prev => {
+                if (prev.some(t => t.id === newToast.id)) return prev;
+                return [...prev, newToast];
+              });
+              // Auto-dismiss
+              setTimeout(() => {
+                setActiveToasts(prev => prev.filter(t => t.id !== change.doc.id));
+              }, 6000);
+            }
+          }
+        }
+      });
+    }, (error) => {
+      console.error("Error loading live team notifications:", error);
+    });
+
+    return () => unsubNotif();
+  }, [user?.uid]);
 
   const checkOverdue = React.useCallback((t: any) => {
     if (t.status === 'done' || !t.dueDate) return false;
@@ -569,107 +630,175 @@ export default function App() {
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
                     className="absolute right-0 mt-3 w-80 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-4 space-y-3 font-sans"
                   >
-                    <div className="pb-2 border-b border-slate-100 flex justify-between items-center">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">🔔 Công việc & Lịch nhắc</span>
-                      <span className="text-[9px] px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full font-black uppercase">
-                        {combinedUserTasks.filter(t => t.status !== 'done' && (checkOverdue(t) || checkDueSoon(t))).length} gấp / cận kề
-                      </span>
+                    {/* Tabs Selection */}
+                    <div className="flex bg-slate-100/70 p-1 rounded-xl text-[10px] font-bold uppercase tracking-wider">
+                      <button
+                        onClick={() => setNotifTab('tasks')}
+                        className={cn(
+                          "flex-1 text-center py-1.5 rounded-lg transition-all",
+                          notifTab === 'tasks' ? "bg-white text-slate-900 shadow-xs text-semibold" : "text-slate-400 hover:text-slate-600"
+                        )}
+                      >
+                        Nhắc việc ({combinedUserTasks.filter(t => t.status !== 'done').length})
+                      </button>
+                      <button
+                        onClick={() => setNotifTab('team')}
+                        className={cn(
+                          "flex-1 text-center py-1.5 rounded-lg transition-all",
+                          notifTab === 'team' ? "bg-white text-slate-900 shadow-xs text-semibold" : "text-slate-400 hover:text-slate-600"
+                        )}
+                      >
+                        Đội ngũ ({teamNotifications.length})
+                      </button>
                     </div>
 
-                    <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
-                      {/* CATEGORY 1: OVERDUE (QUÁ HẠN) */}
-                      {combinedUserTasks.filter(t => t.status !== 'done' && checkOverdue(t)).length > 0 && (
-                        <div className="space-y-1">
-                          <p className="text-[8px] font-black text-rose-600 uppercase tracking-widest bg-rose-50 px-2 py-0.5 rounded-md w-max">
-                            🚨 ĐÃ QUÁ HẠN
-                          </p>
-                          {combinedUserTasks.filter(t => t.status !== 'done' && checkOverdue(t)).map((t, index) => (
-                            <div 
-                              key={`overdue-${t.isCrmReminder ? 'crm' : 'proj'}-${t.id || index}-${index}`} 
-                              onClick={() => {
-                                setActiveView('tasks');
-                                setShowNotifications(false);
-                              }}
-                              className="p-2 bg-rose-50/10 border border-thin border-rose-100 rounded-xl text-xs text-left cursor-pointer hover:bg-rose-50/30 transition-colors space-y-1"
-                            >
-                              <p className="font-extrabold text-slate-800 uppercase tracking-tight line-clamp-1">
-                                {t.title}
+                    {notifTab === 'tasks' ? (
+                      <>
+                        <div className="pb-1 border-b border-slate-100 flex justify-between items-center">
+                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">🔔 Công việc & Lịch nhắc</span>
+                          <span className="text-[8px] px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full font-black uppercase">
+                            {combinedUserTasks.filter(t => t.status !== 'done' && (checkOverdue(t) || checkDueSoon(t))).length} gấp / cận kề
+                          </span>
+                        </div>
+
+                        <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                          {/* CATEGORY 1: OVERDUE (QUÁ HẠN) */}
+                          {combinedUserTasks.filter(t => t.status !== 'done' && checkOverdue(t)).length > 0 && (
+                            <div className="space-y-1">
+                              <p className="text-[8px] font-black text-rose-600 uppercase tracking-widest bg-rose-50 px-2 py-0.5 rounded-md w-max">
+                                🚨 ĐÃ QUÁ HẠN
                               </p>
-                              {t.isCrmReminder && (
-                                <p className="text-[9px] font-bold text-slate-400">Khách: {t.customerName}</p>
-                              )}
-                              <div className="flex justify-between items-center text-[9px] font-bold mt-0.5 text-rose-500">
-                                <span>Trễ từ: {t.dueDate ? (t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000).toLocaleDateString('vi-VN') : new Date(t.dueDate).toLocaleDateString('vi-VN')) : ''}</span>
+                              {combinedUserTasks.filter(t => t.status !== 'done' && checkOverdue(t)).map((t, index) => (
+                                <div 
+                                  key={`overdue-${t.isCrmReminder ? 'crm' : 'proj'}-${t.id || index}-${index}`} 
+                                  onClick={() => {
+                                    setActiveView('tasks');
+                                    setShowNotifications(false);
+                                  }}
+                                  className="p-2 bg-rose-50/10 border border-thin border-rose-100 rounded-xl text-xs text-left cursor-pointer hover:bg-rose-50/30 transition-colors space-y-1"
+                                >
+                                  <p className="font-extrabold text-slate-800 uppercase tracking-tight line-clamp-1">
+                                    {t.title}
+                                  </p>
+                                  {t.isCrmReminder && (
+                                    <p className="text-[9px] font-bold text-slate-400">Khách: {t.customerName}</p>
+                                  )}
+                                  <div className="flex justify-between items-center text-[9px] font-bold mt-0.5 text-rose-500">
+                                    <span>Trễ từ: {t.dueDate ? (t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000).toLocaleDateString('vi-VN') : new Date(t.dueDate).toLocaleDateString('vi-VN')) : ''}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* CATEGORY 2: DUE SOON (SẮP QUÁ HẠN - HÔM NAY / NGÀY MAI) */}
+                          {combinedUserTasks.filter(t => t.status !== 'done' && checkDueSoon(t)).length > 0 && (
+                            <div className="space-y-1">
+                              <p className="text-[8px] font-black text-amber-600 uppercase tracking-widest bg-amber-50 px-2 py-0.5 rounded-md w-max">
+                                ⚠️ HẠN GẦN KỀ (HÔM NAY / MAI)
+                              </p>
+                              {combinedUserTasks.filter(t => t.status !== 'done' && checkDueSoon(t)).map((t, index) => (
+                                <div 
+                                  key={`soon-${t.isCrmReminder ? 'crm' : 'proj'}-${t.id || index}-${index}`} 
+                                  onClick={() => {
+                                    setActiveView('tasks');
+                                    setShowNotifications(false);
+                                  }}
+                                  className="p-2 bg-amber-50/10 border border-thin border-amber-100 rounded-xl text-xs text-left cursor-pointer hover:bg-amber-50/30 transition-colors space-y-1"
+                                >
+                                  <p className="font-extrabold text-slate-800 uppercase tracking-tight line-clamp-1">
+                                    {t.title}
+                                  </p>
+                                  {t.isCrmReminder && (
+                                    <p className="text-[9px] font-bold text-slate-400">Khách: {t.customerName}</p>
+                                  )}
+                                  <div className="flex justify-between items-center text-[9px] font-bold mt-0.5 text-amber-600">
+                                    <span>Hạn: {t.dueDate ? (t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000).toLocaleDateString('vi-VN') : new Date(t.dueDate).toLocaleDateString('vi-VN')) : ''}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* CATEGORY 3: TO DO (CẦN LÀM KHÁC) */}
+                          {combinedUserTasks.filter(t => t.status !== 'done' && !checkOverdue(t) && !checkDueSoon(t)).length > 0 && (
+                            <div className="space-y-1">
+                              <p className="text-[8px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded-md w-max">
+                                📋 CÔNG VIỆC CẦN LÀM
+                              </p>
+                              {combinedUserTasks.filter(t => t.status !== 'done' && !checkOverdue(t) && !checkDueSoon(t)).map((t, index) => (
+                                <div 
+                                  key={`todo-${t.isCrmReminder ? 'crm' : 'proj'}-${t.id || index}-${index}`} 
+                                  onClick={() => {
+                                    setActiveView('tasks');
+                                    setShowNotifications(false);
+                                  }}
+                                  className="p-2 bg-slate-50/30 border border-thin border-slate-100 rounded-xl text-xs text-left cursor-pointer hover:bg-slate-50 transition-colors space-y-1"
+                                >
+                                  <p className="font-extrabold text-slate-800 uppercase tracking-tight line-clamp-1">
+                                    {t.title}
+                                  </p>
+                                  {t.isCrmReminder && (
+                                    <p className="text-[9px] font-bold text-slate-400">Khách: {t.customerName}</p>
+                                  )}
+                                  <div className="flex justify-between items-center text-[9px] font-bold mt-0.5 text-slate-400">
+                                    <span>Hạn: {t.dueDate ? (t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000).toLocaleDateString('vi-VN') : new Date(t.dueDate).toLocaleDateString('vi-VN')) : 'Không có hạn'}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {combinedUserTasks.filter(t => t.status !== 'done').length === 0 && (
+                            <div className="text-center py-6 text-slate-400 text-[10px] font-black uppercase tracking-wider">
+                              Không có việc tồn đọng 🎉
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="pb-1 border-b border-slate-100 flex justify-between items-center">
+                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">📢 Hoạt động từ đội ngũ</span>
+                          <span className="text-[8px] px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full font-black uppercase animate-pulse">
+                            Thời gian thực
+                          </span>
+                        </div>
+
+                        <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                          {teamNotifications.map((notif, idx) => (
+                            <div 
+                              key={`notif-${notif.id || idx}-${idx}`} 
+                              className="p-2.5 border border-slate-100 bg-slate-50/50 rounded-xl hover:bg-slate-100/50 transition-all space-y-1 text-xs text-left"
+                            >
+                              <div className="flex items-center justify-between gap-1">
+                                <span className={cn(
+                                  "text-[7px] font-black uppercase px-2 py-0.5 rounded-md border",
+                                  notif.type === 'customer' ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                                  notif.type === 'appointment' ? "bg-purple-50 text-purple-600 border-purple-100" :
+                                  "bg-blue-50 text-blue-600 border-blue-100"
+                                )}>
+                                  {notif.type === 'customer' ? 'Khách hàng' : notif.type === 'appointment' ? 'Lịch hẹn' : 'Công việc'}
+                                </span>
+                                <span className="text-[8px] text-slate-400 font-bold whitespace-nowrap">
+                                  {notif.createdAt ? (notif.createdAt.seconds ? new Date(notif.createdAt.seconds * 1000).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'}) : new Date(notif.createdAt).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})) : 'Vừa xong'}
+                                </span>
+                              </div>
+                              <p className="text-slate-700 font-semibold leading-normal text-[11px]">{notif.message}</p>
+                              <div className="text-[8px] font-extrabold text-slate-400 pt-0.5 uppercase tracking-tight">
+                                Thực hiện bởi: {notif.createdByName}
                               </div>
                             </div>
                           ))}
-                        </div>
-                      )}
 
-                      {/* CATEGORY 2: DUE SOON (SẮP QUÁ HẠN - HÔM NAY / NGÀY MAI) */}
-                      {combinedUserTasks.filter(t => t.status !== 'done' && checkDueSoon(t)).length > 0 && (
-                        <div className="space-y-1">
-                          <p className="text-[8px] font-black text-amber-600 uppercase tracking-widest bg-amber-50 px-2 py-0.5 rounded-md w-max">
-                            ⚠️ HẠN GẦN KỀ (HÔM NAY / MAI)
-                          </p>
-                          {combinedUserTasks.filter(t => t.status !== 'done' && checkDueSoon(t)).map((t, index) => (
-                            <div 
-                              key={`soon-${t.isCrmReminder ? 'crm' : 'proj'}-${t.id || index}-${index}`} 
-                              onClick={() => {
-                                setActiveView('tasks');
-                                setShowNotifications(false);
-                              }}
-                              className="p-2 bg-amber-50/10 border border-thin border-amber-100 rounded-xl text-xs text-left cursor-pointer hover:bg-amber-50/30 transition-colors space-y-1"
-                            >
-                              <p className="font-extrabold text-slate-800 uppercase tracking-tight line-clamp-1">
-                                {t.title}
-                              </p>
-                              {t.isCrmReminder && (
-                                <p className="text-[9px] font-bold text-slate-400">Khách: {t.customerName}</p>
-                              )}
-                              <div className="flex justify-between items-center text-[9px] font-bold mt-0.5 text-amber-600">
-                                <span>Hạn: {t.dueDate ? (t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000).toLocaleDateString('vi-VN') : new Date(t.dueDate).toLocaleDateString('vi-VN')) : ''}</span>
-                              </div>
+                          {teamNotifications.length === 0 && (
+                            <div className="text-center py-6 text-slate-400 text-[10px] font-black uppercase tracking-wider">
+                              Chưa có hoạt động nào 📌
                             </div>
-                          ))}
+                          )}
                         </div>
-                      )}
-
-                      {/* CATEGORY 3: TO DO (CẦN LÀM KHÁC) */}
-                      {combinedUserTasks.filter(t => t.status !== 'done' && !checkOverdue(t) && !checkDueSoon(t)).length > 0 && (
-                        <div className="space-y-1">
-                          <p className="text-[8px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded-md w-max">
-                            📋 CÔNG VIỆC CẦN LÀM
-                          </p>
-                          {combinedUserTasks.filter(t => t.status !== 'done' && !checkOverdue(t) && !checkDueSoon(t)).map((t, index) => (
-                            <div 
-                              key={`todo-${t.isCrmReminder ? 'crm' : 'proj'}-${t.id || index}-${index}`} 
-                              onClick={() => {
-                                setActiveView('tasks');
-                                setShowNotifications(false);
-                              }}
-                              className="p-2 bg-slate-50/30 border border-thin border-slate-100 rounded-xl text-xs text-left cursor-pointer hover:bg-slate-50 transition-colors space-y-1"
-                            >
-                              <p className="font-extrabold text-slate-800 uppercase tracking-tight line-clamp-1">
-                                {t.title}
-                              </p>
-                              {t.isCrmReminder && (
-                                <p className="text-[9px] font-bold text-slate-400">Khách: {t.customerName}</p>
-                              )}
-                              <div className="flex justify-between items-center text-[9px] font-bold mt-0.5 text-slate-400">
-                                <span>Hạn: {t.dueDate ? (t.dueDate.seconds ? new Date(t.dueDate.seconds * 1000).toLocaleDateString('vi-VN') : new Date(t.dueDate).toLocaleDateString('vi-VN')) : 'Không có hạn'}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {combinedUserTasks.filter(t => t.status !== 'done').length === 0 && (
-                        <div className="text-center py-6 text-slate-400 text-[10px] font-black uppercase tracking-wider">
-                          Không có việc tồn đọng 🎉
-                        </div>
-                      )}
-                    </div>
+                      </>
+                    )}
 
                     <button
                       onClick={() => {
@@ -825,6 +954,47 @@ export default function App() {
 
       {/* Responsive Overlay for Alerts/Modals */}
       <div className="fixed top-0 pointer-events-none w-full h-full z-[100]" />
+
+      {/* Floating Team Push Notifications (Toasts) */}
+      <div className="fixed top-6 right-6 z-[100] pointer-events-none flex flex-col gap-3 font-sans max-w-sm w-full">
+        <AnimatePresence>
+          {activeToasts.map((toast) => (
+            <motion.div
+              key={toast.id}
+              initial={{ opacity: 0, y: -20, scale: 0.9, x: 20 }}
+              animate={{ opacity: 1, y: 0, scale: 1, x: 0 }}
+              exit={{ opacity: 0, scale: 0.9, x: 50 }}
+              className="bg-slate-900/90 text-white p-4 rounded-2xl shadow-2xl border border-white/10 backdrop-blur-md pointer-events-auto flex gap-3 items-start relative overflow-hidden"
+            >
+              {/* Colored type outline strip */}
+              <div className={cn(
+                "absolute top-0 bottom-0 left-0 w-1",
+                toast.type === 'customer' && "bg-emerald-500",
+                toast.type === 'appointment' && "bg-purple-500",
+                toast.type === 'task' && "bg-blue-500"
+              )} />
+              
+              <div className="flex-1 space-y-1 pl-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[9px] font-black tracking-widest uppercase text-blue-400">
+                    {toast.title}
+                  </span>
+                  <button 
+                    onClick={() => setActiveToasts(prev => prev.filter(t => t.id !== toast.id))}
+                    className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+                <p className="text-xs font-semibold text-slate-100 pr-2">{toast.message}</p>
+                <div className="text-[8px] font-extrabold text-slate-400 uppercase tracking-tight">
+                  Tác vụ bởi: {toast.createdByName}
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

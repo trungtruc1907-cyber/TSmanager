@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db, handleFirestoreError, OperationType, auth } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType, auth, createNotification } from '../lib/firebase';
 import { 
   collection, 
   onSnapshot, 
@@ -259,6 +259,11 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
           ...payload,
           createdAt: serverTimestamp()
         });
+        await createNotification(
+          'customer',
+          'Khách hàng mới được thêm',
+          `Khách hàng "${newCustomer.name.trim()}" đã được thêm vào hệ thống.`
+        );
       }
       
       // Reset State
@@ -367,6 +372,13 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
         assignedToId: newRem.assignedToId || defaultAssigneeId,
         createdAt: serverTimestamp()
       });
+
+      const custName = activeCustomer?.name || 'Khách hàng';
+      await createNotification(
+        'appointment',
+        'Lịch hẹn mới được lên',
+        `Lịch hẹn chăm sóc khách hàng "${newRem.title.trim()}" cho khách hàng "${custName}" đã được lên lịch.`
+      );
 
       setNewRem({ title: '', dueDate: '', assignedToId: '' });
     } catch (error) {

@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, doc, getDocFromServer, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
@@ -65,3 +65,26 @@ async function testConnection() {
   }
 }
 testConnection();
+
+export async function createNotification(
+  type: 'customer' | 'appointment' | 'task',
+  title: string,
+  message: string
+) {
+  try {
+    const curUser = auth.currentUser;
+    const createdBy = curUser?.uid || 'system';
+    const createdByName = curUser?.displayName || curUser?.email?.split('@')[0] || 'Nhân viên';
+
+    await addDoc(collection(db, 'notifications'), {
+      type,
+      title,
+      message,
+      createdBy,
+      createdByName,
+      createdAt: serverTimestamp()
+    });
+  } catch (error) {
+    console.error("Failed to create unified notification:", error);
+  }
+}
