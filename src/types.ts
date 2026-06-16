@@ -52,6 +52,18 @@ export interface Equipment {
   capacity: number;
   unitPrice: number;
   isThreePhase?: boolean;
+  stock?: number;
+  minStock?: number;
+  location?: string;
+  history?: Array<{
+    id: string;
+    type: 'import' | 'export';
+    quantity: number;
+    note: string;
+    createdAt: string;
+    createdBy: string;
+    createdByName: string;
+  }>;
 }
 
 export interface SalesPerson {

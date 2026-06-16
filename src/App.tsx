@@ -77,7 +77,7 @@ export default function App() {
   const [notifTab, setNotifTab] = useState<'tasks' | 'team'>('tasks');
 
   useEffect(() => {
-    if (!user) {
+    if (!user || userStatus !== 'active') {
       setUserTasks([]);
       return;
     }
@@ -91,10 +91,10 @@ export default function App() {
       console.error("Error loading tasks for notification bar:", error);
     });
     return () => unsubTasks();
-  }, [user?.uid]);
+  }, [user?.uid, userStatus]);
 
   useEffect(() => {
-    if (!user) {
+    if (!user || userStatus !== 'active') {
       setCrmReminders([]);
       setCustomers([]);
       return;
@@ -128,10 +128,10 @@ export default function App() {
       unsubCust();
       unsubReminders();
     };
-  }, [user?.uid, userRole]);
+  }, [user?.uid, userRole, userStatus]);
 
   useEffect(() => {
-    if (!user) {
+    if (!user || userStatus !== 'active') {
       setTeamNotifications([]);
       return;
     }
@@ -186,7 +186,7 @@ export default function App() {
     });
 
     return () => unsubNotif();
-  }, [user?.uid]);
+  }, [user?.uid, userStatus]);
 
   const checkOverdue = React.useCallback((t: any) => {
     if (t.status === 'done' || !t.dueDate) return false;
@@ -267,8 +267,9 @@ export default function App() {
           const userDoc = await getDoc(userRef);
           if (!userDoc.exists()) {
             const username = u.email?.split('@')[0] || 'unknown';
-            const role: UserRole = username === 'mrhieu' ? 'admin' : 'sales_rep';
-            const status = username === 'mrhieu' ? 'active' : 'pending';
+            const isDefaultAdmin = username === 'mrhieu' || u.email === 'trungtruc1907@gmail.com';
+            const role: UserRole = isDefaultAdmin ? 'admin' : 'sales_rep';
+            const status = isDefaultAdmin ? 'active' : 'pending';
             
             await setDoc(userRef, {
               username,
@@ -280,7 +281,18 @@ export default function App() {
               status
             });
           } else {
-            await setDoc(userRef, { lastLogin: serverTimestamp() }, { merge: true });
+            const data = userDoc.data();
+            const username = u.email?.split('@')[0] || 'unknown';
+            const isDefaultAdmin = username === 'mrhieu' || u.email === 'trungtruc1907@gmail.com';
+            if (isDefaultAdmin && (data?.status !== 'active' || data?.role !== 'admin')) {
+              await setDoc(userRef, {
+                status: 'active',
+                role: 'admin',
+                lastLogin: serverTimestamp()
+              }, { merge: true });
+            } else {
+              await setDoc(userRef, { lastLogin: serverTimestamp() }, { merge: true });
+            }
           }
         } catch (error) {
           console.error("User sync error:", error);
@@ -537,7 +549,7 @@ export default function App() {
     { id: 'tasks', label: 'Lịch & Công việc', icon: ClipboardList },
     { id: 'profile', label: 'Cá nhân', icon: UserIcon },
     ...(userRole === 'admin' || userRole === 'manager' ? [
-      { id: 'catalog', label: 'Danh mục TB', icon: Box },
+      { id: 'catalog', label: 'Quản lý Kho', icon: Box },
       { id: 'users', label: 'Quản lý Nhân sự', icon: UserCog },
       { id: 'settings', label: 'Cấu hình', icon: Sliders }
     ] : []),

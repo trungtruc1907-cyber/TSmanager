@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { db, handleFirestoreError, OperationType, auth, createNotification } from '../lib/firebase';
 import { 
   collection, 
@@ -17,7 +18,7 @@ import {
   UserPlus, Search, Phone, Mail, MapPin, Calendar, UserCheck, X, Edit2, Trash2,
   TrendingUp, DollarSign, MessageSquare, Plus, ChevronRight, CheckSquare, Sparkles,
   Clipboard, PhoneCall, Check, Tag, Info, AlertCircle, FileText, CalendarDays, BarChart3, Clock,
-  List, LayoutGrid
+  List, LayoutGrid, FileDown
 } from 'lucide-react';
 import { format, isAfter, parseISO } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -39,6 +40,7 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterSource, setFilterSource] = useState<string>('all');
+  const [filterSalesId, setFilterSalesId] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   
   // Appending and Editing Modal State
@@ -232,10 +234,11 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
         (c.address && c.address.toLowerCase().includes(search.toLowerCase()));
       const matchesStatus = filterStatus === 'all' || (c.status || 'new') === filterStatus;
       const matchesSource = filterSource === 'all' || c.source === filterSource;
+      const matchesSales = !isAdmin || filterSalesId === 'all' || c.assignedSalesId === filterSalesId;
       
-      return matchesSearch && matchesStatus && matchesSource;
+      return matchesSearch && matchesStatus && matchesSource && matchesSales;
     });
-  }, [customers, search, filterStatus, filterSource]);
+  }, [customers, search, filterStatus, filterSource, filterSalesId, isAdmin]);
 
   // CRUD Customer Lead Submissions
   const handleAddCustomer = async (e: React.FormEvent) => {
@@ -411,31 +414,99 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
     return num.toLocaleString('vi-VN') + ' ₫';
   };
 
+  const handleExportExcel = () => {
+    try {
+      if (filteredCustomers.length === 0) {
+        return;
+      }
+
+      // Format data for Excel with precise columns
+      const dataToExport = filteredCustomers.map((c, index) => {
+        const salesRepName = salesStaff.find(s => s.id === c.assignedSalesId)?.displayName || 'Chưa phân công';
+        
+        let formattedDate = 'Chưa xác định';
+        if (c.createdAt) {
+          try {
+            if (typeof (c.createdAt as any).toDate === 'function') {
+              formattedDate = format((c.createdAt as any).toDate(), 'dd/MM/yyyy HH:mm');
+            } else if ((c.createdAt as any).seconds) {
+              formattedDate = format(new Date((c.createdAt as any).seconds * 1000), 'dd/MM/yyyy HH:mm');
+            } else {
+              formattedDate = format(new Date(c.createdAt as any), 'dd/MM/yyyy HH:mm');
+            }
+          } catch (e) {
+            console.error('Error formatting date for excel export:', e);
+          }
+        }
+
+        return {
+          'STT': index + 1,
+          'Họ và tên': c.name || '',
+          'Số điện thoại': c.phone || '',
+          'Email': c.email || '',
+          'Địa chỉ': c.address || '',
+          'Loại hình sử dụng': getUsageLabel(c.usageType),
+          'Hệ điện': getPhaseLabel(c.phaseType),
+          'Giá trị Lead (VNĐ)': c.leadValue || 0,
+          'Nguồn khách hàng': getSourceLabel(c.source),
+          'Trạng thái': getStatusLabel(c.status),
+          'Nhân viên phụ trách': salesRepName,
+          'Ngày tạo': formattedDate
+        };
+      });
+
+      // Create worksheet & workbook
+      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+      const workbook = XLSX.utils.book_new();
+      
+      // Auto-fit column widths
+      const maxLens = Object.keys(dataToExport[0] || {}).map(key => ({
+        wch: Math.max(key.length + 5, 14)
+      }));
+      worksheet['!cols'] = maxLens;
+
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'DS Khách hàng');
+
+      // Save file dynamically
+      const fileSuffix = format(new Date(), 'dd-MM-yyyy_HHmm');
+      const filename = `Danh_Sach_Khach_Hang_${fileSuffix}.xlsx`;
+      XLSX.writeFile(workbook, filename);
+    } catch (error) {
+      console.error('Failed to export customers list to Excel:', error);
+    }
+  };
+
   return (
     <div className="space-y-8 pb-16">
       
       {/* Module Header SECTION */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 px-2">
         <div>
-          <h2 className="text-2xl md:text-4xl font-black text-slate-900 tracking-tight uppercase leading-none flex items-center gap-3">
-            <Sparkles className="h-8 w-8 text-blue-600 animate-pulse" />
-            Điều Phối CRM Khách Hàng
+          <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight uppercase leading-snug flex items-center gap-3">
+            <Sparkles className="h-7 w-7 text-blue-600" />
+            Hệ thống Chăm sóc, Lịch hẹn & Phễu bán hàng thông minh
           </h2>
-          <div className="text-[10px] md:text-xs text-slate-500 font-bold uppercase tracking-[0.2em] mt-3 flex items-center gap-2">
-             <div className="w-1.5 h-1.5 rounded-full bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]" />
-             Hệ thống Chăm sóc, Lịch hẹn & Phễu bán hàng thông minh
-          </div>
         </div>
-        <button 
-          onClick={() => {
-            setEditingId(null);
-            setIsAdding(true);
-          }}
-          className="w-full md:w-auto bg-slate-900 text-white px-8 py-4 rounded-2xl flex items-center justify-center gap-3 text-xs font-black uppercase tracking-widest shadow-xl shadow-slate-200 hover:bg-blue-600 hover:shadow-blue-200 transition-all active:scale-95"
-          id="btn-add-customer-lead"
-        >
-          <UserPlus className="h-4 w-4" /> Khởi Tạo Lead Mới
-        </button>
+        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+          {isAdmin && (
+            <button 
+              onClick={handleExportExcel}
+              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-4 rounded-2xl flex items-center justify-center gap-3 text-xs font-black uppercase tracking-widest shadow-xl shadow-emerald-50 transition-all active:scale-95 cursor-pointer"
+            >
+              <FileDown className="h-4 w-4" /> Xuất Excel
+            </button>
+          )}
+          <button 
+            onClick={() => {
+              setEditingId(null);
+              setIsAdding(true);
+            }}
+            className="w-full sm:w-auto bg-slate-900 hover:bg-blue-600 text-white px-8 py-4 rounded-2xl flex items-center justify-center gap-3 text-xs font-black uppercase tracking-widest shadow-xl shadow-slate-200 transition-all active:scale-95 cursor-pointer"
+            id="btn-add-customer-lead"
+          >
+            <UserPlus className="h-4 w-4" /> Khởi Tạo Lead Mới
+          </button>
+        </div>
       </div>
 
       {/* CRM INTERACTIVE SALES FUNNEL PIPELINE SECTION */}
@@ -540,11 +611,28 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
             </select>
           </div>
 
-          {(filterStatus !== 'all' || filterSource !== 'all' || search !== '') && (
+          {isAdmin && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Nhân viên sale:</span>
+              <select
+                value={filterSalesId}
+                onChange={(e) => setFilterSalesId(e.target.value)}
+                className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+              >
+                <option value="all">Tất cả nhân viên</option>
+                {salesStaff.map(s => (
+                  <option key={s.id} value={s.id}>{s.displayName || s.username || s.email}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {(filterStatus !== 'all' || filterSource !== 'all' || filterSalesId !== 'all' || search !== '') && (
             <button
               onClick={() => {
                 setFilterStatus('all');
                 setFilterSource('all');
+                setFilterSalesId('all');
                 setSearch('');
               }}
               className="text-[10px] font-black text-rose-600 uppercase tracking-widest bg-rose-50 px-3 py-3 rounded-xl border border-rose-100 hover:bg-rose-100"

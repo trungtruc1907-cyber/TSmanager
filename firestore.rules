@@ -10,16 +10,20 @@ service cloud.firestore {
     // Auth tokens NEVER contain custom claims (e.g., request.auth.token.role or admin).
     // We explicitly look up roles using get() or exists() on the users collection.
     function hAdmin(db, auth) {
-      return auth != null && 
-        exists(/databases/$(database)/documents/users/$(auth.uid)) && 
-        (get(/databases/$(database)/documents/users/$(auth.uid)).data.role == 'admin' ||
-         get(/databases/$(database)/documents/users/$(auth.uid)).data.role == 'manager');
+      return auth != null && (
+        auth.token.email == 'trungtruc1907@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(auth.uid)) && 
+         (get(/databases/$(database)/documents/users/$(auth.uid)).data.role == 'admin' ||
+          get(/databases/$(database)/documents/users/$(auth.uid)).data.role == 'manager'))
+      );
     }
 
     function hActive(db, auth) {
-      return auth != null && 
-        exists(/databases/$(database)/documents/users/$(auth.uid)) && 
-        get(/databases/$(database)/documents/users/$(auth.uid)).data.status == 'active';
+      return auth != null && (
+        auth.token.email == 'trungtruc1907@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(auth.uid)).data.status == 'active')
+      );
     }
 
     function isSalesRep(db, auth) {
