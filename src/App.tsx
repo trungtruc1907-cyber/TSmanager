@@ -75,6 +75,20 @@ export default function App() {
   const [teamNotifications, setTeamNotifications] = useState<any[]>([]);
   const [activeToasts, setActiveToasts] = useState<any[]>([]);
   const [notifTab, setNotifTab] = useState<'tasks' | 'team'>('tasks');
+  const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? window.navigator.onLine : true);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   useEffect(() => {
     if (!user || userStatus !== 'active') {
@@ -264,38 +278,43 @@ export default function App() {
         setProfileLoading(true);
         const userRef = doc(db, 'users', u.uid);
         try {
-          const userDoc = await getDoc(userRef);
-          if (!userDoc.exists()) {
-            const username = u.email?.split('@')[0] || 'unknown';
-            const isDefaultAdmin = username === 'mrhieu' || u.email === 'trungtruc1907@gmail.com';
-            const role: UserRole = isDefaultAdmin ? 'admin' : 'sales_rep';
-            const status = isDefaultAdmin ? 'active' : 'pending';
-            
-            await setDoc(userRef, {
-              username,
-              email: u.email,
-              role,
-              displayName: username.toUpperCase(),
-              createdAt: serverTimestamp(),
-              lastLogin: serverTimestamp(),
-              status
-            });
-          } else {
-            const data = userDoc.data();
-            const username = u.email?.split('@')[0] || 'unknown';
-            const isDefaultAdmin = username === 'mrhieu' || u.email === 'trungtruc1907@gmail.com';
-            if (isDefaultAdmin && (data?.status !== 'active' || data?.role !== 'admin')) {
+          const userDoc = await getDoc(userRef).catch((err) => {
+            console.warn("Could not fetch user document from server (possibly offline):", err);
+            return null; // Gracefully return null if offline
+          });
+          
+          const username = u.email?.split('@')[0] || 'unknown';
+          const isDefaultAdmin = username === 'mrhieu' || u.email === 'trungtruc1907@gmail.com' || u.email === 'mrhieu@truongsonsolar.local';
+
+          if (userDoc) {
+            if (!userDoc.exists()) {
+              const role: UserRole = isDefaultAdmin ? 'admin' : 'sales_rep';
+              const status = isDefaultAdmin ? 'active' : 'pending';
+              
               await setDoc(userRef, {
-                status: 'active',
-                role: 'admin',
-                lastLogin: serverTimestamp()
-              }, { merge: true });
+                username,
+                email: u.email,
+                role,
+                displayName: username.toUpperCase(),
+                createdAt: serverTimestamp(),
+                lastLogin: serverTimestamp(),
+                status
+              });
             } else {
-              await setDoc(userRef, { lastLogin: serverTimestamp() }, { merge: true });
+              const data = userDoc.data();
+              if (isDefaultAdmin && (data?.status !== 'active' || data?.role !== 'admin')) {
+                await setDoc(userRef, {
+                  status: 'active',
+                  role: 'admin',
+                  lastLogin: serverTimestamp()
+                }, { merge: true });
+              } else {
+                await setDoc(userRef, { lastLogin: serverTimestamp() }, { merge: true });
+              }
             }
           }
         } catch (error) {
-          console.error("User sync error:", error);
+          console.warn("User sync error:", error);
         }
       } else {
         setProfileLoading(false);
@@ -312,6 +331,16 @@ export default function App() {
       return;
     }
 
+    const username = user.email?.split('@')[0] || 'unknown';
+    const isDefaultAdmin = username === 'mrhieu' || user.email === 'trungtruc1907@gmail.com' || user.email === 'mrhieu@truongsonsolar.local';
+
+    if (isDefaultAdmin) {
+      setUserRole('admin');
+      setUserStatus('active');
+      setProfileLoading(false);
+      return;
+    }
+
     const userRef = doc(db, 'users', user.uid);
     const unsubRole = onSnapshot(userRef, (doc) => {
       if (doc.exists()) {
@@ -321,12 +350,17 @@ export default function App() {
       }
       setProfileLoading(false);
     }, (error) => {
-      console.error("Role listener error:", error);
+      console.warn("Role listener read restricted or failed:", error);
+      // Fallback for default admin inside error (should already be covered by the client-side check above)
+      if (isDefaultAdmin) {
+        setUserRole('admin');
+        setUserStatus('active');
+      }
       setProfileLoading(false);
     });
 
     return () => unsubRole();
-  }, [user?.uid]);
+  }, [user?.uid, user?.email]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -348,7 +382,7 @@ export default function App() {
     try {
       await signInWithPopup(auth, provider);
     } catch (error: any) {
-      console.error("Login failed:", error);
+      console.warn("Login failed:", error);
       if (error.code === 'auth/popup-closed-by-user') {
         setAuthError("Popup đã bị đóng trước khi hoàn tất đăng nhập.");
       } else if (error.code === 'auth/cancelled-by-user') {
@@ -373,7 +407,7 @@ export default function App() {
         await signInWithEmailAndPassword(auth, internalEmail, password);
       }
     } catch (error: any) {
-      console.error("Auth failed:", error);
+      console.warn("Auth failed:", error);
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         setAuthError("Tên đăng nhập hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại thông tin.");
       } else if (error.code === 'auth/invalid-email') {
@@ -880,11 +914,38 @@ export default function App() {
               })}
             </nav>
 
-            <div className="pt-4 border-t border-slate-100 shrink-0">
-              <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100/50">
-                <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1">Hệ thống sẵn sàng</p>
-                <p className="text-[10px] text-blue-700 font-medium leading-tight">Mọi dữ liệu đã được đồng bộ hóa với Firestore.</p>
-              </div>
+            <div className="pt-4 border-t border-slate-100 shrink-0 font-sans">
+              {isOnline ? (
+                <div className="p-4 bg-emerald-50/60 rounded-2xl border border-emerald-100/60 flex flex-col gap-1">
+                  <div className="flex items-center gap-1.5 font-sans">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse animate-duration-1000" />
+                    <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest leading-none">HỆ THỐNG TRỰC TUYẾN</p>
+                  </div>
+                  <p className="text-[10px] text-emerald-700 font-medium leading-tight mt-1">Dữ liệu được đồng bộ liên tục với máy chủ đám mây.</p>
+                </div>
+              ) : (
+                <div className="p-4 bg-amber-50/80 rounded-2xl border border-amber-200/80 flex flex-col gap-1.5 shadow-sm">
+                  <div className="flex items-center gap-1.5 font-sans">
+                    <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest leading-none">CHẾ ĐỘ NGOẠI TUYẾN</p>
+                  </div>
+                  <p className="text-[10px] text-amber-800 font-medium leading-tight mt-1">Đang hiển thị dữ liệu từ bộ nhớ đệm. Ứng dụng vẫn hoạt động bình thường ngoại tuyến.</p>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const { reconnectFirestore } = await import('./lib/firebase');
+                        await reconnectFirestore();
+                      } catch (err) {
+                        console.warn(err);
+                      }
+                    }}
+                    type="button"
+                    className="mt-1 w-full bg-amber-600 hover:bg-amber-700 active:scale-95 transition-all text-white font-black text-[8px] uppercase tracking-widest py-1.5 rounded-lg text-center cursor-pointer"
+                  >
+                    Kết nối lại
+                  </button>
+                </div>
+              )}
             </div>
         </aside>
 

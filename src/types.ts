@@ -33,6 +33,12 @@ export interface CustomerInteraction {
   userId: string;
   userName: string;
   createdAt: any;
+  attachments?: {
+    name: string;
+    url: string;
+    type: string;
+    size?: number;
+  }[];
 }
 
 export interface CustomerReminder {
@@ -51,6 +57,8 @@ export interface Equipment {
   model: string;
   capacity: number;
   unitPrice: number;
+  sellingPrice?: number;
+  details?: string;
   isThreePhase?: boolean;
   stock?: number;
   minStock?: number;

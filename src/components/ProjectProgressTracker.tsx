@@ -68,14 +68,30 @@ export default function ProjectProgressTracker({ projectId, onClose, userId, use
     });
 
     const unsubTasks = onSnapshot(
-      query(collection(db, 'projectTasks'), where('projectId', '==', projectId), orderBy('createdAt', 'desc')),
-      (s) => setTasks(s.docs.map(d => ({ id: d.id, ...d.data() } as ProjectTask))),
+      query(collection(db, 'projectTasks'), where('projectId', '==', projectId)),
+      (s) => {
+        const rawTasks = s.docs.map(d => ({ id: d.id, ...d.data() } as ProjectTask));
+        rawTasks.sort((a, b) => {
+          const t1 = a.createdAt ? (a.createdAt as any).seconds || 0 : 0;
+          const t2 = b.createdAt ? (b.createdAt as any).seconds || 0 : 0;
+          return t2 - t1;
+        });
+        setTasks(rawTasks);
+      },
       (error) => handleFirestoreError(error, OperationType.GET, 'projectTasks')
     );
 
     const unsubActivities = onSnapshot(
-      query(collection(db, 'projectActivities'), where('projectId', '==', projectId), orderBy('createdAt', 'desc')),
-      (s) => setActivities(s.docs.map(d => ({ id: d.id, ...d.data() } as ProjectActivity))),
+      query(collection(db, 'projectActivities'), where('projectId', '==', projectId)),
+      (s) => {
+        const rawActivities = s.docs.map(d => ({ id: d.id, ...d.data() } as ProjectActivity));
+        rawActivities.sort((a, b) => {
+          const t1 = a.createdAt ? (a.createdAt as any).seconds || 0 : 0;
+          const t2 = b.createdAt ? (b.createdAt as any).seconds || 0 : 0;
+          return t2 - t1;
+        });
+        setActivities(rawActivities);
+      },
       (error) => handleFirestoreError(error, OperationType.GET, 'projectActivities')
     );
 

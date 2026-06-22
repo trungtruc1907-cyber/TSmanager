@@ -85,7 +85,15 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
     onSnapshot(collection(db, 'equipment'), (s) => setCatalog(s.docs.map(d => ({ id: d.id, ...d.data() } as Equipment))), (error) => {
       handleFirestoreError(error, OperationType.GET, 'equipment');
     });
-    onSnapshot(query(collection(db, 'users'), orderBy('displayName')), (s) => setSalesStaff(s.docs.map(d => ({ id: d.id, ...d.data() } as AppUser))), (error) => {
+    onSnapshot(collection(db, 'users'), (s) => {
+      const rawUsers = s.docs.map(d => ({ id: d.id, ...d.data() } as AppUser));
+      rawUsers.sort((a, b) => {
+        const nameA = a.displayName || '';
+        const nameB = b.displayName || '';
+        return nameA.localeCompare(nameB);
+      });
+      setSalesStaff(rawUsers);
+    }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'users');
     });
     onSnapshot(doc(db, 'settings', 'general'), (s) => {
@@ -97,6 +105,8 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
     if (projectId) {
       getDoc(doc(db, 'projects', projectId)).then(s => {
         if (s.exists()) setProject({ id: s.id, ...s.data() } as Project);
+      }).catch(err => {
+        console.warn("Could not load project in editor: client might be offline.", err);
       });
     }
     setLoading(false);

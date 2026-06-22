@@ -86,13 +86,19 @@ export default function WorkSchedulerHub({ userId, userRole }: Props) {
     setLoading(true);
     
     const qTasks = userRole === 'sales_rep'
-      ? query(collection(db, 'projectTasks'), where('assignedToId', '==', userId), orderBy('createdAt', 'desc'))
-      : query(collection(db, 'projectTasks'), orderBy('createdAt', 'desc'));
+      ? query(collection(db, 'projectTasks'), where('assignedToId', '==', userId))
+      : collection(db, 'projectTasks');
 
     const unsubTasks = onSnapshot(
       qTasks,
       (s) => {
-        setTasks(s.docs.map(d => ({ id: d.id, ...d.data() } as ProjectTask)));
+        const rawTasks = s.docs.map(d => ({ id: d.id, ...d.data() } as ProjectTask));
+        rawTasks.sort((a, b) => {
+          const t1 = a.createdAt ? (a.createdAt as any).seconds || 0 : 0;
+          const t2 = b.createdAt ? (b.createdAt as any).seconds || 0 : 0;
+          return t2 - t1;
+        });
+        setTasks(rawTasks);
         setLoading(false);
       },
       (error) => {

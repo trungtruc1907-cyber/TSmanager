@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { db, handleFirestoreError, OperationType, auth, createNotification } from '../lib/firebase';
 import { 
   collection, 
@@ -18,7 +19,7 @@ import {
   UserPlus, Search, Phone, Mail, MapPin, Calendar, UserCheck, X, Edit2, Trash2,
   TrendingUp, DollarSign, MessageSquare, Plus, ChevronRight, CheckSquare, Sparkles,
   Clipboard, PhoneCall, Check, Tag, Info, AlertCircle, FileText, CalendarDays, BarChart3, Clock,
-  List, LayoutGrid, FileDown
+  List, LayoutGrid, FileDown, SlidersHorizontal, User, Globe, Paperclip, FileUp, Loader2, Image as ImageIcon
 } from 'lucide-react';
 import { format, isAfter, parseISO } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -37,11 +38,13 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
   // States
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [salesStaff, setSalesStaff] = useState<AppUser[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterSource, setFilterSource] = useState<string>('all');
   const [filterSalesId, setFilterSalesId] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState<boolean>(false);
   
   // Appending and Editing Modal State
   const [isAdding, setIsAdding] = useState(false);
@@ -72,6 +75,23 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
     content: ''
   });
 
+  // Care log attachments handling states with Google Drive capability
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isUploadingToDrive, setIsUploadingToDrive] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [driveUploadError, setDriveUploadError] = useState<string | null>(null);
+
+  // Google Drive integration session state
+  const [googleDriveToken, setGoogleDriveToken] = useState<string | null>(() => {
+    return localStorage.getItem('gdrive_crm_token') || null;
+  });
+  const [googleDriveUser, setGoogleDriveUser] = useState<{ displayName?: string; email?: string } | null>(() => {
+    const saved = localStorage.getItem('gdrive_crm_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
   // New Reminder template
   const [newRem, setNewRem] = useState({
     title: '',
@@ -85,18 +105,33 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
     
     // Listen to customers
     const qCust = userRole === 'sales_rep'
-      ? query(collection(db, 'customers'), where('assignedSalesId', '==', userId), orderBy('createdAt', 'desc'))
-      : query(collection(db, 'customers'), orderBy('createdAt', 'desc'));
+      ? query(collection(db, 'customers'), where('assignedSalesId', '==', userId))
+      : collection(db, 'customers');
     const unsubCust = onSnapshot(qCust, (snapshot) => {
-      setCustomers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer)));
+      const rawCusts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer));
+      rawCusts.sort((a, b) => {
+        const t1 = a.createdAt ? (a.createdAt as any).seconds || 0 : 0;
+        const t2 = b.createdAt ? (b.createdAt as any).seconds || 0 : 0;
+        return t2 - t1; // desc
+      });
+      setCustomers(rawCusts);
+      setLoadError(null);
     }, (error) => {
+      console.warn("Error loading customers:", error);
+      setLoadError("Thiết bị ngoại tuyến hoặc chưa đồng bộ được danh sách khách hàng từ Firestore. Bạn vẫn có thể thao tác ngoại tuyến bình thường.");
       handleFirestoreError(error, OperationType.GET, 'customers');
     });
 
     // Listen to sales staff users
-    const qSales = query(collection(db, 'users'), orderBy('displayName'));
+    const qSales = collection(db, 'users');
     const unsubSales = onSnapshot(qSales, (snapshot) => {
-      setSalesStaff(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppUser)));
+      const rawSales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppUser));
+      rawSales.sort((a, b) => {
+        const nameA = a.displayName || '';
+        const nameB = b.displayName || '';
+        return nameA.localeCompare(nameB);
+      });
+      setSalesStaff(rawSales);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'users');
     });
@@ -117,9 +152,15 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
 
     // Set listener for interactions
     const unsubInt = onSnapshot(
-      query(collection(db, 'customers', selectedCustomerId, 'interactions'), orderBy('createdAt', 'desc')),
+      collection(db, 'customers', selectedCustomerId, 'interactions'),
       (snapshot) => {
-        setInteractions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CustomerInteraction)));
+        const rawInts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CustomerInteraction));
+        rawInts.sort((a, b) => {
+          const t1 = a.createdAt ? (a.createdAt as any).seconds || 0 : 0;
+          const t2 = b.createdAt ? (b.createdAt as any).seconds || 0 : 0;
+          return t2 - t1; // desc
+        });
+        setInteractions(rawInts);
       },
       (error) => {
         handleFirestoreError(error, OperationType.GET, `customers/${selectedCustomerId}/interactions`);
@@ -128,9 +169,15 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
 
     // Set listener for reminders
     const unsubRem = onSnapshot(
-      query(collection(db, 'customers', selectedCustomerId, 'reminders'), orderBy('dueDate', 'asc')),
+      collection(db, 'customers', selectedCustomerId, 'reminders'),
       (snapshot) => {
-        setReminders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CustomerReminder)));
+        const rawRems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CustomerReminder));
+        rawRems.sort((a, b) => {
+          const dateA = a.dueDate || '';
+          const dateB = b.dueDate || '';
+          return dateA.localeCompare(dateB); // asc
+        });
+        setReminders(rawRems);
       },
       (error) => {
         handleFirestoreError(error, OperationType.GET, `customers/${selectedCustomerId}/reminders`);
@@ -240,6 +287,15 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
     });
   }, [customers, search, filterStatus, filterSource, filterSalesId, isAdmin]);
 
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (search !== '') count++;
+    if (filterStatus !== 'all') count++;
+    if (filterSource !== 'all') count++;
+    if (filterSalesId !== 'all') count++;
+    return count;
+  }, [search, filterStatus, filterSource, filterSalesId]);
+
   // CRUD Customer Lead Submissions
   const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -330,24 +386,353 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
     }
   };
 
+  // Google Drive Integration & Care Log Processing Helpers
+  const handleDriveUnauthorized = () => {
+    setGoogleDriveToken(null);
+    setGoogleDriveUser(null);
+    localStorage.removeItem('gdrive_crm_token');
+    localStorage.removeItem('gdrive_crm_user');
+    localStorage.removeItem('gdrive_crm_folder_id');
+    alert('Phiên kết nối Google Drive đã hết hạn. Vui lòng kết nối lại tài khoản của bạn.');
+  };
+
+  const handleConnectGoogleDrive = async () => {
+    const provider = new GoogleAuthProvider();
+    provider.addScope('https://www.googleapis.com/auth/drive.file');
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        setGoogleDriveToken(credential.accessToken);
+        const u = {
+          displayName: result.user.displayName || result.user.email?.split('@')[0] || 'Unknown',
+          email: result.user.email || ''
+        };
+        setGoogleDriveUser(u);
+        localStorage.setItem('gdrive_crm_token', credential.accessToken);
+        localStorage.setItem('gdrive_crm_user', JSON.stringify(u));
+        alert('Đã kết nối thành công với tài khoản Google Drive của bạn!');
+      } else {
+        alert('Không nhận được Access Token từ liên kết Google.');
+      }
+    } catch (err: any) {
+      console.error('Lỗi liên kết Google Drive:', err);
+      alert('Kết nối Google Drive thất bại: ' + (err.message || err.code || ''));
+    }
+  };
+
+  const handleDisconnectGoogleDrive = () => {
+    if (confirm('Bạn có chắc chắn muốn ngắt kết nối với tài khoản Google Drive hiện tại?')) {
+      setGoogleDriveToken(null);
+      setGoogleDriveUser(null);
+      localStorage.removeItem('gdrive_crm_token');
+      localStorage.removeItem('gdrive_crm_user');
+      localStorage.removeItem('gdrive_crm_folder_id');
+    }
+  };
+
+  const uploadFileToGoogleDrive = async (file: File, accessToken: string) => {
+    let folderId = localStorage.getItem('gdrive_crm_folder_id');
+    
+    // Find or create 'Solar CRM Care Logs' folder inside Google Drive
+    if (!folderId) {
+      try {
+        const q = encodeURIComponent("name = 'Solar CRM Care Logs' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
+        const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (searchRes.ok) {
+          const searchData = await searchRes.json();
+          if (searchData.files && searchData.files.length > 0) {
+            folderId = searchData.files[0].id;
+            localStorage.setItem('gdrive_crm_folder_id', folderId);
+          }
+        }
+      } catch (err) {
+        console.error('Error finding folder on Drive:', err);
+      }
+    }
+
+    if (!folderId) {
+      try {
+        const createFolderRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: 'Solar CRM Care Logs',
+            mimeType: 'application/vnd.google-apps.folder'
+          })
+        });
+        if (createFolderRes.ok) {
+          const folderData = await createFolderRes.json();
+          folderId = folderData.id;
+          localStorage.setItem('gdrive_crm_folder_id', folderId);
+        } else if (createFolderRes.status === 401) {
+          throw new Error('Unauthorized');
+        }
+      } catch (err) {
+        console.error('Error creating folder on Drive:', err);
+      }
+    }
+
+    const metadata = {
+      name: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      parents: folderId ? [folderId] : undefined
+    };
+
+    const boundary = 'solar_crm_drive_upload_boundary';
+    const delimiter = `\r\n--${boundary}\r\n`;
+    const closeDelimiter = `\r\n--${boundary}--`;
+
+    const metadataPart = `${delimiter}Content-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`;
+
+    const reader = new FileReader();
+    const fileDataPromise = new Promise<ArrayBuffer>((resolve, reject) => {
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+    const fileData = await fileDataPromise;
+
+    const metadataEncoder = new TextEncoder();
+    const metadataBytes = metadataEncoder.encode(metadataPart + `Content-Type: ${metadata.mimeType}\r\n\r\n`);
+    const footerBytes = metadataEncoder.encode(closeDelimiter);
+
+    const multipartBlob = new Blob([metadataBytes, fileData, footerBytes], {
+      type: `multipart/related; boundary=${boundary}`
+    });
+
+    const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      },
+      body: multipartBlob
+    });
+
+    if (!uploadRes.ok) {
+      const errText = await uploadRes.text();
+      throw new Error(`Google Drive upload failed: ${errText} (Code: ${uploadRes.status})`);
+    }
+
+    const uploadData = await uploadRes.json();
+    const fileId = uploadData.id;
+
+    // Set permission to anyone with link can read (necessary for cross-team sharing inside of Solar CRM application)
+    try {
+      await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          role: 'reader',
+          type: 'anyone'
+        })
+      });
+    } catch (err) {
+      console.warn('Error setting file permissions:', err);
+    }
+
+    const fields = 'id,name,mimeType,size,webViewLink,webContentLink';
+    const fileDetailsRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=${encodeURIComponent(fields)}`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    if (fileDetailsRes.ok) {
+      const fileDetails = await fileDetailsRes.json();
+      return {
+        id: fileDetails.id,
+        name: fileDetails.name,
+        // Fallback structures to bypass Google login constraints for display if possible, or direct webViewLink
+        url: fileDetails.webContentLink || fileDetails.webViewLink || `https://drive.google.com/uc?export=view&id=${fileId}`,
+        webViewLink: fileDetails.webViewLink,
+        type: fileDetails.mimeType,
+        size: fileDetails.size ? parseInt(fileDetails.size) : file.size,
+        storage: 'gdrive'
+      };
+    }
+
+    return {
+      id: fileId,
+      name: file.name,
+      url: `https://drive.google.com/uc?export=view&id=${fileId}`,
+      type: file.type,
+      size: file.size,
+      storage: 'gdrive'
+    };
+  };
+
+  // Care log attachment processing helpers
+  const processFiles = async (files: FileList | null) => {
+    if (!files) return;
+    
+    const fileList: File[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      
+      // Limit file size based on destination storage
+      if (!googleDriveToken) {
+        if (file.size > 1.5 * 1024 * 1024) {
+          alert(`Tệp tin "${file.name}" quá lớn (${(file.size / 1024 / 1024).toFixed(1)}MB). Giới hạn tối đa 1.5MB khi lưu trực tiếp trên Firestore. Vui lòng kết nối tài khoản Google Drive để tải lên các tệp tin dung lượng lớn không giới hạn!`);
+          continue;
+        }
+      } else {
+        if (file.size > 25 * 1024 * 1024) {
+          alert(`Tệp tin "${file.name}" quá lớn (${(file.size / 1024 / 1024).toFixed(1)}MB). Vui lòng giới hạn tệp tối đa dưới 25MB.`);
+          continue;
+        }
+      }
+      fileList.push(file);
+    }
+
+    setPendingFiles(prev => [...prev, ...fileList]);
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      processFiles(e.dataTransfer.files);
+    }
+  };
+
   // Add interaction history logs
   const handleAddInteraction = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCustomerId || !newInt.content.trim()) return;
+    if (!selectedCustomerId || (!newInt.content.trim() && pendingFiles.length === 0)) return;
+
+    setIsUploading(true);
+    setDriveUploadError(null);
 
     try {
-      await addDoc(collection(db, 'customers', selectedCustomerId, 'interactions'), {
+      const attachmentsList: any[] = [];
+
+      if (pendingFiles.length > 0) {
+        if (googleDriveToken) {
+          setIsUploadingToDrive(true);
+          for (const file of pendingFiles) {
+            try {
+              const driveFile = await uploadFileToGoogleDrive(file, googleDriveToken);
+              attachmentsList.push(driveFile);
+            } catch (err: any) {
+              console.error('Lỗi tải tệp lên Google Drive:', err);
+              if (err.message && (err.message.includes('401') || err.message.toLowerCase().includes('unauthorized'))) {
+                handleDriveUnauthorized();
+                setIsUploadingToDrive(false);
+                setIsUploading(false);
+                return;
+              } else {
+                setDriveUploadError(`Không thể tải tệp "${file.name}" lên Drive. Đang hoàn tác...`);
+                setIsUploadingToDrive(false);
+                setIsUploading(false);
+                return;
+              }
+            }
+          }
+          setIsUploadingToDrive(false);
+        } else {
+          // Fallback to local Base64 storage in Firestore (compressed if images)
+          for (const file of pendingFiles) {
+            try {
+              let b64Data = '';
+              if (file.type.startsWith('image/')) {
+                b64Data = await new Promise<string>((resolve) => {
+                  const reader = new FileReader();
+                  reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                      const MAX_WIDTH = 800;
+                      const MAX_HEIGHT = 800;
+                      let width = img.width;
+                      let height = img.height;
+                      if (width > height) {
+                        if (width > MAX_WIDTH) {
+                          height *= MAX_WIDTH / width;
+                          width = MAX_WIDTH;
+                        }
+                      } else {
+                        if (height > MAX_HEIGHT) {
+                          width *= MAX_HEIGHT / height;
+                          height = MAX_HEIGHT;
+                        }
+                      }
+                      const canvas = document.createElement('canvas');
+                      canvas.width = width;
+                      canvas.height = height;
+                      const ctx = canvas.getContext('2d');
+                      if (ctx) {
+                        ctx.drawImage(img, 0, 0, width, height);
+                        resolve(canvas.toDataURL('image/jpeg', 0.7));
+                      } else {
+                        resolve(e.target?.result as string);
+                      }
+                    };
+                    img.onerror = () => resolve(e.target?.result as string);
+                    img.src = e.target?.result as string;
+                  };
+                  reader.readAsDataURL(file);
+                });
+              } else {
+                b64Data = await new Promise<string>((resolve) => {
+                  const reader = new FileReader();
+                  reader.onload = (e) => {
+                    resolve(e.target?.result as string);
+                  };
+                  reader.readAsDataURL(file);
+                });
+              }
+              attachmentsList.push({
+                name: file.name,
+                url: b64Data,
+                type: file.type || 'application/octet-stream',
+                size: file.size,
+                storage: 'firestore'
+              });
+            } catch (err) {
+              console.error('Lỗi khi biên dịch file base64:', err);
+            }
+          }
+        }
+      }
+
+      const interactionData: any = {
         customerId: selectedCustomerId,
         type: newInt.type,
-        content: newInt.content.trim(),
+        content: newInt.content.trim() || `[Tải lên ${pendingFiles.length} tệp đính kèm]`,
         userId: auth.currentUser?.uid || userId || 'system',
         userName: auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || 'Sales Rep',
         createdAt: serverTimestamp()
-      });
+      };
+
+      if (attachmentsList.length > 0) {
+        interactionData.attachments = attachmentsList;
+      }
+
+      await addDoc(collection(db, 'customers', selectedCustomerId, 'interactions'), interactionData);
 
       setNewInt({ ...newInt, content: '' });
+      setPendingFiles([]);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `customers/${selectedCustomerId}/interactions`);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -509,6 +894,34 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
         </div>
       </div>
 
+      {loadError && (
+        <div className="p-5 bg-amber-50 rounded-[2rem] border border-amber-200/80 text-amber-900 mx-2 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm font-sans">
+          <div className="flex gap-3">
+            <span className="p-2 bg-amber-200/60 rounded-xl text-amber-700 font-bold text-center self-start">⚠️</span>
+            <div>
+              <p className="text-xs font-black uppercase tracking-wider mb-0.5 text-amber-800">Ứng dụng đang hiển thị ngoại tuyến (Offline)</p>
+              <p className="text-xs text-amber-700 font-medium leading-relaxed">
+                Chúng tôi đang tải dữ liệu thông qua bộ nhớ đệm an toàn của thiết bị. Thao tác tạo, sửa đổi của bạn sẽ được lưu ngoại tuyến và đồng bộ lại với hệ thống máy chủ đám mây ngay khi kết nối hoạt động ổn định.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={async () => {
+              try {
+                const { reconnectFirestore } = await import('../lib/firebase');
+                await reconnectFirestore();
+              } catch (e) {
+                console.error(e);
+              }
+            }}
+            className="shrink-0 bg-amber-600 hover:bg-amber-700 text-white font-black text-[9px] uppercase tracking-widest px-5 py-3 rounded-xl transition-all active:scale-95 cursor-pointer max-w-full"
+            type="button"
+          >
+            Đồng bộ lại dữ liệu
+          </button>
+        </div>
+      )}
+
       {/* CRM INTERACTIVE SALES FUNNEL PIPELINE SECTION */}
       <div className="bg-slate-50/50 p-6 rounded-[2.5rem] border border-slate-100 shadow-inner">
         <div className="flex justify-between items-center mb-4 px-2">
@@ -561,73 +974,195 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
       </div>
 
       {/* FILTERS & SEARCH ROW */}
-      <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
-        
-        {/* Keywords text Search */}
-        <div className="relative group w-full md:max-w-md">
-          <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
-          <input 
-            type="text"
-            placeholder="Tìm theo tên, điện thoại, địa bàn..."
-            className="w-full pl-12 pr-5 py-3.5 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:bg-white focus:border-blue-500 transition-all"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      <div className="bg-slate-100/50 p-2 rounded-[2rem] border border-slate-200/50 shadow-sm space-y-2">
+        {/* Main Search and Mode Bar */}
+        <div className="bg-white p-3 rounded-2xl flex flex-col lg:flex-row gap-4 items-center justify-between shadow-sm">
+          {/* Keywords text Search */}
+          <div className="relative group w-full lg:max-w-md">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+            <input 
+              type="text"
+              placeholder="Tìm theo tên, điện thoại, địa bàn..."
+              className="w-full pl-11 pr-24 py-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all placeholder:text-slate-400"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {/* Realtime results indicator */}
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 bg-slate-150 text-slate-500 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider pointer-events-none">
+              {filteredCustomers.length} Lead
+            </div>
+          </div>
+
+          <div className="flex flex-wrap w-full lg:w-auto items-center gap-3 justify-end">
+            {/* Advanced Filters Trigger */}
+            <button
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+              className={`px-4 py-3 rounded-xl flex items-center gap-2.5 transition-all text-xs font-black uppercase tracking-widest border cursor-pointer select-none ${
+                showAdvancedFilters 
+                  ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100' 
+                  : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 shadow-sm'
+              }`}
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              <span>Bộ lọc nâng cao</span>
+              {activeFilterCount > 0 && (
+                <span className={`rounded-full w-5.5 h-5.5 flex items-center justify-center text-[10px] font-black ${
+                  showAdvancedFilters ? 'bg-white text-blue-600' : 'bg-blue-600 text-white'
+                }`}>
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+
+            {/* View Mode Switcher */}
+            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/50 shadow-inner">
+              <button
+                onClick={() => setViewMode('list')}
+                className={`px-3 py-2 rounded-lg flex items-center gap-1.5 transition-all text-[10px] font-extrabold uppercase tracking-wider cursor-pointer ${
+                  viewMode === 'list' 
+                    ? 'bg-white text-blue-600 shadow-sm border border-slate-200' 
+                    : 'text-slate-450 hover:text-slate-700'
+                }`}
+              >
+                <List className="h-3.5 w-3.5" />
+                <span>Danh sách</span>
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`px-3 py-2 rounded-lg flex items-center gap-1.5 transition-all text-[10px] font-extrabold uppercase tracking-wider cursor-pointer ${
+                  viewMode === 'grid' 
+                    ? 'bg-white text-blue-600 shadow-sm border border-slate-200' 
+                    : 'text-slate-450 hover:text-slate-700'
+                }`}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                <span>Lưới Thẻ</span>
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* Dynamic drop-down selectors */}
-        <div className="flex flex-wrap w-full md:w-auto items-center gap-3 justify-end">
-          
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Trạng thái:</span>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+        {/* Advanced Filters Expandable Container */}
+        <AnimatePresence initial={false}>
+          {showAdvancedFilters && (
+            <motion.div
+              initial={{ height: 0, opacity: 0, scaleY: 0.95 }}
+              animate={{ height: 'auto', opacity: 1, scaleY: 1 }}
+              exit={{ height: 0, opacity: 0, scaleY: 0.95 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="overflow-hidden origin-top"
             >
-              <option value="all">Tất cả trạng thái</option>
-              <option value="new">Mới nhận</option>
-              <option value="contacted">Đã liên hệ</option>
-              <option value="survey">Khảo sát</option>
-              <option value="negotiating">Thương thảo</option>
-              <option value="won">Thành công (Won)</option>
-              <option value="lost">Thất bại (Lost)</option>
-            </select>
-          </div>
+              <div className="bg-white p-5 rounded-2xl border border-slate-200/70 shadow-inner grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
+                
+                {/* Trạng thái Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <Tag className="h-3.5 w-3.5 text-blue-500" />
+                    Trạng thái Lead
+                  </label>
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-100 hover:border-slate-200/80 rounded-xl px-4 py-3 text-xs font-black text-slate-700 outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all cursor-pointer"
+                  >
+                    <option value="all">Tất cả trạng thái</option>
+                    <option value="new">Mới nhận (New)</option>
+                    <option value="contacted">Đã liên hệ</option>
+                    <option value="survey">Khảo sát dải nền</option>
+                    <option value="negotiating">Thương thảo báo giá</option>
+                    <option value="won">Thành công (Won)</option>
+                    <option value="lost">Thất bại (Lost)</option>
+                  </select>
+                </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Nguồn Leads:</span>
-            <select
-              value={filterSource}
-              onChange={(e) => setFilterSource(e.target.value)}
-              className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
-            >
-              <option value="all">Tất cả nguồn</option>
-              <option value="facebook">Facebook Ads</option>
-              <option value="google">Google Search</option>
-              <option value="referral">Khách giới thiệu</option>
-              <option value="hotline">Hotline</option>
-              <option value="other">Kênh khác</option>
-            </select>
-          </div>
+                {/* Nguồn Leads Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <Globe className="h-3.5 w-3.5 text-indigo-500" />
+                    Nguồn Khách Hàng
+                  </label>
+                  <select
+                    value={filterSource}
+                    onChange={(e) => setFilterSource(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-100 hover:border-slate-200/80 rounded-xl px-4 py-3 text-xs font-black text-slate-700 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all cursor-pointer"
+                  >
+                    <option value="all">Tất cả nguồn</option>
+                    <option value="facebook">Facebook Ads</option>
+                    <option value="google">Google Search</option>
+                    <option value="referral">Khách giới thiệu</option>
+                    <option value="hotline">Hotline trực tiếp</option>
+                    <option value="other">Kênh tiếp cận khác</option>
+                  </select>
+                </div>
 
-          {isAdmin && (
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Nhân viên sale:</span>
-              <select
-                value={filterSalesId}
-                onChange={(e) => setFilterSalesId(e.target.value)}
-                className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
-              >
-                <option value="all">Tất cả nhân viên</option>
-                {salesStaff.map(s => (
-                  <option key={s.id} value={s.id}>{s.displayName || s.username || s.email}</option>
-                ))}
-              </select>
-            </div>
+                {/* Nhân viên Sale Filter */}
+                {isAdmin && (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5 text-emerald-500" />
+                      Nhân viên Sale phụ trách
+                    </label>
+                    <select
+                      value={filterSalesId}
+                      onChange={(e) => setFilterSalesId(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-100 hover:border-slate-200/80 rounded-xl px-4 py-3 text-xs font-black text-slate-700 outline-none focus:bg-white focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500 transition-all cursor-pointer"
+                    >
+                      <option value="all">Tất cả nhân viên phụ trách</option>
+                      {salesStaff.map(s => (
+                        <option key={s.id} value={s.id}>{s.displayName || s.username || s.email}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+              </div>
+            </motion.div>
           )}
+        </AnimatePresence>
 
-          {(filterStatus !== 'all' || filterSource !== 'all' || filterSalesId !== 'all' || search !== '') && (
+        {/* Active Filter Chips / Badges Container */}
+        {activeFilterCount > 0 && (
+          <div className="bg-white/90 p-3 rounded-2xl border border-slate-200/60 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mr-1.5 select-none">Đang áp dụng:</span>
+              
+              {search !== '' && (
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-black text-slate-700 bg-slate-100 border border-slate-200 px-2.5 py-1.5 rounded-lg">
+                  <span>Từ khóa: "{search}"</span>
+                  <button onClick={() => setSearch('')} className="bg-slate-200 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-full p-0.5 transition-colors cursor-pointer">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+
+              {filterStatus !== 'all' && (
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-black text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1.5 rounded-lg animate-fade-in">
+                  <span>Trạng thái: {getStatusLabel(filterStatus).replace(' 🏆', '')}</span>
+                  <button onClick={() => setFilterStatus('all')} className="bg-blue-100 text-blue-500 hover:text-rose-600 hover:bg-rose-50 rounded-full p-0.5 transition-colors cursor-pointer">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+
+              {filterSource !== 'all' && (
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-black text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1.5 rounded-lg animate-fade-in">
+                  <span>Nguồn: {getSourceLabel(filterSource)}</span>
+                  <button onClick={() => setFilterSource('all')} className="bg-indigo-150 text-indigo-500 hover:text-rose-600 hover:bg-rose-50 rounded-full p-0.5 transition-colors cursor-pointer">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+
+              {filterSalesId !== 'all' && (
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1.5 rounded-lg animate-fade-in">
+                  <span>Phụ trách: {salesStaff.find(s => s.id === filterSalesId)?.displayName || 'N/A'}</span>
+                  <button onClick={() => setFilterSalesId('all')} className="bg-emerald-100 text-emerald-500 hover:text-rose-600 hover:bg-rose-50 rounded-full p-0.5 transition-colors cursor-pointer">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+            </div>
+
             <button
               onClick={() => {
                 setFilterStatus('all');
@@ -635,39 +1170,12 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
                 setFilterSalesId('all');
                 setSearch('');
               }}
-              className="text-[10px] font-black text-rose-600 uppercase tracking-widest bg-rose-50 px-3 py-3 rounded-xl border border-rose-100 hover:bg-rose-100"
+              className="w-full sm:w-auto text-[10px] font-black text-rose-600 hover:text-white hover:bg-rose-600 transition-all uppercase tracking-widest bg-rose-50 px-4 py-2 rounded-xl border border-rose-100 cursor-pointer text-center select-none"
             >
-              Đặt lại lọc
-            </button>
-          )}
-
-          {/* View Mode Switcher */}
-          <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 shadow-inner">
-            <button
-              onClick={() => setViewMode('list')}
-              className={`px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 transition-all text-[10px] font-black uppercase tracking-widest ${
-                viewMode === 'list' 
-                  ? 'bg-white text-blue-600 shadow-sm border border-slate-100' 
-                  : 'text-slate-400 hover:text-slate-700'
-              }`}
-            >
-              <List className="h-3.5 w-3.5" />
-              Danh sách
-            </button>
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 transition-all text-[10px] font-black uppercase tracking-widest ${
-                viewMode === 'grid' 
-                  ? 'bg-white text-blue-600 shadow-sm border border-slate-100' 
-                  : 'text-slate-400 hover:text-slate-700'
-              }`}
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              Lưới Thẻ
+              Đặt lại tất cả lọc
             </button>
           </div>
-
-        </div>
+        )}
       </div>
 
       {/* REACTIVE CUSTOMER LEADS LISTING GRID/LIST */}
@@ -1157,53 +1665,152 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
                       <div className="space-y-6">
                         
                         {/* New log addition block */}
-                        <form onSubmit={handleAddInteraction} className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-4">
-                          <div className="flex items-center gap-3">
-                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Ghi nhật ký:</span>
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {(['call', 'meeting', 'note', 'email', 'survey'] as const).map(type => (
-                                <button
-                                  key={type}
-                                  type="button"
-                                  onClick={() => setNewInt({ ...newInt, type })}
-                                  className={`px-3 py-1.5 rounded-lg text-[9px] uppercase tracking-wider font-extrabold border transition-all ${
-                                    newInt.type === type 
-                                      ? 'bg-blue-600 text-white border-blue-500' 
-                                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                                  }`}
-                                >
-                                  {type === 'call' && '📞 Gọi'}
-                                  {type === 'meeting' && '🤝 Gặp mặt'}
-                                  {type === 'note' && '📌 Ghi chú'}
-                                  {type === 'email' && '✉️ Thư gửi'}
-                                  {type === 'survey' && '📋 Khảo sát'}
-                                </button>
-                              ))}
+                        <form 
+                          onSubmit={handleAddInteraction} 
+                          onDragEnter={handleDrag}
+                          onDragOver={handleDrag}
+                          onDragLeave={handleDrag}
+                          onDrop={handleDrop}
+                          className={`bg-slate-50 p-5 rounded-2xl border transition-all duration-200 relative ${
+                            dragActive 
+                              ? 'border-blue-500 bg-blue-50/40 ring-4 ring-blue-100/50 scale-[1.01]' 
+                              : 'border-slate-100'
+                          } space-y-4`}
+                        >
+                          {dragActive && (
+                            <div className="absolute inset-0 bg-blue-50/80 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center pointer-events-none z-10 border-2 border-dashed border-blue-500">
+                              <FileUp className="h-8 w-8 text-blue-600 animate-bounce mb-2" />
+                              <p className="text-xs font-black text-blue-700 uppercase tracking-widest">Thả file vào đây để tải lên</p>
+                              <p className="text-[10px] font-bold text-slate-500 mt-1">Hỗ trợ hình ảnh & file văn bản</p>
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <div className="flex items-center gap-3">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Ghi nhật ký:</span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {(['call', 'meeting', 'note', 'email', 'survey'] as const).map(type => (
+                                  <button
+                                    key={type}
+                                    type="button"
+                                    onClick={() => setNewInt({ ...newInt, type })}
+                                    className={`px-3 py-1.5 rounded-lg text-[9px] uppercase tracking-wider font-extrabold border transition-all ${
+                                      newInt.type === type 
+                                        ? 'bg-blue-600 text-white border-blue-500' 
+                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    {type === 'call' && '📞 Gọi'}
+                                    {type === 'meeting' && '🤝 Gặp mặt'}
+                                    {type === 'note' && '📌 Ghi chú'}
+                                    {type === 'email' && '✉️ Thư gửi'}
+                                    {type === 'survey' && '📋 Khảo sát'}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Hidden file input */}
+                            <div>
+                              <input 
+                                type="file" 
+                                id="interaction-file-upload" 
+                                multiple 
+                                accept="image/*,application/pdf,text/*,.doc,.docx,.xls,.xlsx"
+                                className="hidden" 
+                                onChange={(e) => processFiles(e.target.files)} 
+                              />
+                              <label 
+                                htmlFor="interaction-file-upload" 
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] border border-slate-200 hover:border-slate-300 hover:bg-slate-100 text-slate-600 font-extrabold uppercase tracking-wider cursor-pointer transition-colors select-none"
+                              >
+                                <Paperclip className="h-3.5 w-3.5 text-slate-400" />
+                                <span>Đính kèm hình/file</span>
+                              </label>
                             </div>
                           </div>
 
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 items-start">
                             <textarea
                               rows={2}
-                              required
-                              placeholder="Nhập nội dung cuộc gọi, thông tin ghi lại cuộc họp hoặc yêu cầu thiết kế của chủ nhà..."
-                              className="flex-1 bg-white border border-slate-200 rounded-xl p-3.5 text-xs text-slate-800 font-medium outline-none focus:border-blue-500 resize-none h-16"
+                              required={pendingFiles.length === 0}
+                              placeholder="Nhập nội dung chăm sóc khách hành, nội dung cuộc họp hoặc đính kèm hóa đơn thiết kế, ảnh dải nền..."
+                              className="flex-1 bg-white border border-slate-200 rounded-xl p-3.5 text-xs text-slate-800 font-medium outline-none focus:border-blue-500 resize-none h-20"
                               value={newInt.content}
                               onChange={e => setNewInt({ ...newInt, content: e.target.value })}
                             />
                             <button
                               type="submit"
-                              className="bg-blue-600 hover:bg-blue-700 text-white px-5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center flex-shrink-0"
+                              disabled={isUploading}
+                              className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white h-20 px-5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center flex-shrink-0 transition-colors"
                             >
                               Ghi lại
                             </button>
                           </div>
+
+                          {/* Visual Feedback of reading files */}
+                          {isUploading && (
+                            <div className="flex items-center gap-2 text-[10px] font-black text-blue-600 uppercase tracking-widest mt-1 animate-pulse">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              <span>{isUploadingToDrive ? 'Đang tải lên tài liệu lên Google Drive...' : 'Đang xử lý & phân tích dữ liệu...'}</span>
+                            </div>
+                          )}
+
+                          {driveUploadError && (
+                            <p className="text-[10px] font-bold text-rose-600 uppercase tracking-widest bg-rose-50 border border-rose-100 rounded-xl p-2 mt-1">
+                              {driveUploadError}
+                            </p>
+                          )}
+
+                          {/* Pending files display list */}
+                          {pendingFiles.length > 0 && (
+                            <div className="pt-2 border-t border-slate-150 space-y-1.5">
+                              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Tệp đã chọn để tải lên ({pendingFiles.length}):</p>
+                              <div className="flex flex-wrap gap-2">
+                                {pendingFiles.map((f, i) => {
+                                  const isImg = f.type.startsWith('image/');
+                                  const prevUrl = isImg ? URL.createObjectURL(f) : '';
+                                  return (
+                                    <div 
+                                      key={i} 
+                                      className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl p-1.5 pl-2 shadow-sm animate-fade-in"
+                                    >
+                                      {isImg ? (
+                                        <div className="w-6 h-6 rounded overflow-hidden flex-shrink-0 bg-slate-50">
+                                          <img src={prevUrl} alt="thumbnail" className="w-full h-full object-cover" />
+                                        </div>
+                                      ) : (
+                                        <div className="w-6 h-6 rounded bg-slate-100 flex items-center justify-center text-slate-500 flex-shrink-0">
+                                          <FileText className="h-3 w-3" />
+                                        </div>
+                                      )}
+                                      <div className="max-w-[150px]">
+                                        <p className="text-[10px] font-bold text-slate-700 truncate line-clamp-1">{f.name}</p>
+                                        <span className="text-[8px] text-slate-400 font-semibold">{(f.size / 1024).toFixed(1)} KB</span>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setPendingFiles(prev => prev.filter((_, idx) => idx !== i));
+                                          if (isImg) URL.revokeObjectURL(prevUrl);
+                                        }}
+                                        className="text-slate-400 hover:text-rose-600 p-0.5 rounded-full hover:bg-rose-50 transition-colors cursor-pointer ml-1"
+                                        title="Gỡ bỏ"
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </form>
 
                         {/* Timeline Flow */}
                         <div className="relative pl-6 space-y-5 border-l-2 border-slate-100 ml-4">
                           {interactions.map((it) => (
-                            <div key={it.id} className="relative group">
+                            <div key={it.id} className="relative group animate-fade-in">
                               {/* Left icon marker overlay on stem */}
                               <div className="absolute -left-9.5 top-1 w-7 h-7 bg-white rounded-full border border-slate-200 flex items-center justify-center text-[10px] shadow-sm">
                                 {it.type === 'call' && '📞'}
@@ -1239,6 +1846,51 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
                                 <p className="text-xs text-slate-700 font-medium leading-relaxed whitespace-pre-line">
                                   {it.content}
                                 </p>
+
+                                {/* Display attachments list saved in the doc */}
+                                {it.attachments && it.attachments.length > 0 && (
+                                  <div className="mt-3 pt-3 border-t border-slate-100/80 flex flex-wrap gap-2">
+                                    {it.attachments.map((file, idx) => {
+                                      const isImage = file.type?.startsWith('image/');
+                                      return (
+                                        <div 
+                                          key={idx} 
+                                          className="flex items-center gap-2.5 bg-white border border-slate-200 rounded-xl p-2 max-w-[200px] shadow-sm hover:border-blue-400 hover:shadow-md transition-all group/file"
+                                        >
+                                          {isImage ? (
+                                            <div 
+                                              onClick={() => setLightboxImage(file.url)}
+                                              className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 cursor-zoom-in bg-slate-100 border border-slate-100 hover:scale-105 transition-transform"
+                                              title="Xem ảnh lớn"
+                                            >
+                                              <img src={file.url} alt={file.name} className="w-full h-full object-cover" />
+                                            </div>
+                                          ) : (
+                                            <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 border border-blue-100">
+                                              <FileText className="h-4.5 w-4.5" />
+                                            </div>
+                                          )}
+                                          <div className="flex-1 min-w-0 pr-1">
+                                            <p className="text-[10px] font-black text-slate-700 truncate block hover:text-blue-600 cursor-pointer" title={file.name}>
+                                              {file.name}
+                                            </p>
+                                            <span className="text-[8px] text-slate-400 font-bold block">
+                                              {file.size ? `${(file.size / 1024).toFixed(1)} KB` : 'Tệp văn bản'}
+                                            </span>
+                                          </div>
+                                          <a 
+                                            href={file.url} 
+                                            download={file.name} 
+                                            className="text-slate-400 hover:text-blue-600 p-1 flex-shrink-0 hover:bg-slate-50 rounded-lg transition-colors"
+                                            title="Tải tệp đính kèm về"
+                                          >
+                                            <FileDown className="h-4 w-4" />
+                                          </a>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -1665,6 +2317,40 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
               </form>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Lightbox Modal overlay for previewing Care Log full-size images */}
+      <AnimatePresence>
+        {lightboxImage && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setLightboxImage(null)}
+            className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 cursor-zoom-out"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative max-w-5xl max-h-[90vh] overflow-hidden rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl flex items-center justify-center"
+              onClick={e => e.stopPropagation()}
+            >
+              <button 
+                onClick={() => setLightboxImage(null)}
+                className="absolute top-4 right-4 bg-slate-950/65 hover:bg-rose-600 text-white rounded-full p-2.5 transition-colors cursor-pointer z-50 shadow"
+                title="Đóng xem thử"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <img 
+                src={lightboxImage} 
+                alt="Large scale review" 
+                className="max-w-full max-h-[85vh] object-contain rounded-xl p-2 select-none" 
+              />
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

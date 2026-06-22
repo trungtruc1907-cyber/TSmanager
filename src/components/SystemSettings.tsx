@@ -1,14 +1,41 @@
 import React, { useState, useEffect } from 'react';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { Save, Upload, Link, Building, MapPin, Phone, Globe, Image as ImageIcon, AlertCircle, Zap, FileText } from 'lucide-react';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { 
+  Save, 
+  Upload, 
+  Link, 
+  Building, 
+  MapPin, 
+  Phone, 
+  Globe, 
+  Image as ImageIcon, 
+  AlertCircle, 
+  Zap, 
+  FileText, 
+  Trash2, 
+  CheckCircle2, 
+  Cloud, 
+  Plus, 
+  HardDrive 
+} from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface SystemSettingsProps {
   userId: string;
 }
 
+interface LinkedDriveAccount {
+  email: string;
+  displayName: string;
+  photoURL: string;
+  token: string;
+  connectedAt: string;
+}
+
 export default function SystemSettings({ userId }: SystemSettingsProps) {
+  // General Corporate Settings State
   const [logoUrl, setLogoUrl] = useState('');
   const [companyName, setCompanyName] = useState('CÔNG TY CỔ PHẦN ĐẦU TƯ TM TRƯỜNG SƠN');
   const [companyBrandName, setCompanyBrandName] = useState('TRƯỜNG SƠN SOLAR');
@@ -21,8 +48,14 @@ export default function SystemSettings({ userId }: SystemSettingsProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  // Google Drive Integration State
+  const [driveAccounts, setDriveAccounts] = useState<LinkedDriveAccount[]>([]);
+  const [activeEmail, setActiveEmail] = useState<string | null>(null);
+  const [driveLoading, setDriveLoading] = useState(true);
+
+  // Fetch corporate & Google Drive settings on mount
   useEffect(() => {
-    const fetchSettings = async () => {
+    const fetchGeneralSettings = async () => {
       try {
         const docSnap = await getDoc(doc(db, 'settings', 'general'));
         if (docSnap.exists()) {
@@ -35,17 +68,81 @@ export default function SystemSettings({ userId }: SystemSettingsProps) {
           setPhone(data.phone || '');
           setWebsite(data.website || '');
         }
-      } catch (err) {
-        console.error("Error fetching settings:", err);
+      } catch (err: any) {
+        const isOffline = err instanceof Error && (
+          err.message.toLowerCase().includes('offline') ||
+          err.message.toLowerCase().includes('failed to get document')
+        );
+        if (isOffline) {
+          console.warn("Settings fetching is currently operating in offline mode or has some network limitations.");
+        } else {
+          console.warn("Setting load warning:", err);
+        }
       } finally {
         setLoading(false);
       }
     };
 
-    fetchSettings();
-  }, []);
+    const fetchDriveSettings = async () => {
+      try {
+        const docRef = doc(db, 'settings', `drive_${userId}`);
+        const snap = await getDoc(docRef);
+        let accounts: LinkedDriveAccount[] = [];
+        let activeMail: string | null = null;
 
-  const handleSave = async (e: React.FormEvent) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          accounts = data.accounts || [];
+          activeMail = data.activeEmail || null;
+        }
+
+        // Migrate local storage credentials if Firestore is empty
+        const localUserStr = localStorage.getItem('gdrive_crm_user');
+        const localToken = localStorage.getItem('gdrive_crm_token');
+        
+        if (accounts.length === 0 && localUserStr && localToken) {
+          try {
+            const u = JSON.parse(localUserStr);
+            const migratedAccount: LinkedDriveAccount = {
+              email: u.email || '',
+              displayName: u.displayName || '',
+              photoURL: '',
+              token: localToken,
+              connectedAt: new Date().toLocaleDateString('vi-VN')
+            };
+            accounts = [migratedAccount];
+            activeMail = migratedAccount.email;
+
+            // Persist migrated config to Firestore
+            await setDoc(docRef, {
+              accounts,
+              activeEmail: activeMail,
+              updatedAt: serverTimestamp()
+            });
+          } catch (e) {
+            console.error('Error migrating local Google Drive configurations:', e);
+          }
+        }
+
+        setDriveAccounts(accounts);
+        setActiveEmail(activeMail);
+      } catch (err) {
+        console.warn('Error fetching Google Drive accounts list:', err);
+      } finally {
+        setDriveLoading(false);
+      }
+    };
+
+    fetchGeneralSettings();
+    if (userId) {
+      fetchDriveSettings();
+    } else {
+      setDriveLoading(false);
+    }
+  }, [userId]);
+
+  // General configuration form submit handler
+  const handleSaveGeneral = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setError(null);
@@ -72,11 +169,145 @@ export default function SystemSettings({ userId }: SystemSettingsProps) {
     }
   };
 
+  // Google popup OAuth login flow to ADD/LINK a Google Drive account
+  const handleAddNewDriveAccount = async () => {
+    const provider = new GoogleAuthProvider();
+    provider.addScope('https://www.googleapis.com/auth/drive');
+    provider.addScope('https://www.googleapis.com/auth/userinfo.profile');
+    provider.addScope('https://www.googleapis.com/auth/userinfo.email');
+
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+
+      if (!credential?.accessToken) {
+        throw new Error('Không nhận được Access Token từ Google OAuth.');
+      }
+
+      const email = result.user.email || '';
+      const displayName = result.user.displayName || result.user.email?.split('@')[0] || 'Unknown User';
+      const photoURL = result.user.photoURL || '';
+      const token = credential.accessToken;
+      const connectedAt = new Date().toLocaleDateString('vi-VN');
+
+      const newAccount: LinkedDriveAccount = {
+        email,
+        displayName,
+        photoURL,
+        token,
+        connectedAt
+      };
+
+      // Add to list, update key if already existing
+      const updatedAccounts = [...driveAccounts];
+      const existingIdx = updatedAccounts.findIndex(acc => acc.email === email);
+      if (existingIdx >= 0) {
+        updatedAccounts[existingIdx] = newAccount;
+      } else {
+        updatedAccounts.push(newAccount);
+      }
+
+      // Automatically set as active storage account
+      const nextActiveEmail = email;
+
+      // Update Firestore
+      const docRef = doc(db, 'settings', `drive_${userId}`);
+      await setDoc(docRef, {
+        accounts: updatedAccounts,
+        activeEmail: nextActiveEmail,
+        updatedAt: serverTimestamp()
+      });
+
+      // Update Local State
+      setDriveAccounts(updatedAccounts);
+      setActiveEmail(nextActiveEmail);
+
+      // Save to localStorage for deep app compatibility
+      localStorage.setItem('gdrive_crm_token', token);
+      localStorage.setItem('gdrive_crm_user', JSON.stringify({ displayName, email }));
+      localStorage.removeItem('gdrive_crm_folder_id'); // Clear folder ID cache to recreate folder on new drive
+
+      alert(`Đã hoàn tất kết nối & kích hoạt tài khoản Google Drive: ${email}`);
+    } catch (err: any) {
+      console.error('Error linking Google Drive account:', err);
+      alert('Kết nối Google Drive thất bại: ' + (err.message || err.code || ''));
+    }
+  };
+
+  // Activate an existing Google Drive account in the list as the primary storage
+  const handleSetActiveAccount = async (account: LinkedDriveAccount) => {
+    try {
+      const docRef = doc(db, 'settings', `drive_${userId}`);
+      await setDoc(docRef, {
+        accounts: driveAccounts,
+        activeEmail: account.email,
+        updatedAt: serverTimestamp()
+      });
+
+      setActiveEmail(account.email);
+
+      // Sync to localStorage
+      localStorage.setItem('gdrive_crm_token', account.token);
+      localStorage.setItem('gdrive_crm_user', JSON.stringify({ displayName: account.displayName, email: account.email }));
+      localStorage.removeItem('gdrive_crm_folder_id'); // Clear folder ID cache so it searches in the new drive
+
+      alert(`Đã đổi kho lưu trữ mặc định sang tài khoản: ${account.email}`);
+    } catch (err: any) {
+      console.error('Error activating drive account:', err);
+      alert('Không thể đặt tài khoản làm mặc định: ' + err.message);
+    }
+  };
+
+  // Unlink/remove a Google Drive account connection
+  const handleRemoveAccount = async (email: string) => {
+    if (!confirm(`Bạn có chắc chắn muốn ngắt kết nối tài khoản Google Drive: ${email}? Các tệp đã tải sẽ không bị xóa, nhưng bạn tạm thời sẽ không thể thao tác tải lên drive này.`)) {
+      return;
+    }
+
+    try {
+      const updatedAccounts = driveAccounts.filter(acc => acc.email !== email);
+      let nextActiveEmail = activeEmail;
+
+      if (activeEmail === email) {
+        nextActiveEmail = updatedAccounts.length > 0 ? updatedAccounts[0].email : null;
+      }
+
+      // Update Firestore
+      const docRef = doc(db, 'settings', `drive_${userId}`);
+      await setDoc(docRef, {
+        accounts: updatedAccounts,
+        activeEmail: nextActiveEmail,
+        updatedAt: serverTimestamp()
+      });
+
+      setDriveAccounts(updatedAccounts);
+      setActiveEmail(nextActiveEmail);
+
+      // Update localStorage sync state
+      if (nextActiveEmail) {
+        const activeAcc = updatedAccounts.find(acc => acc.email === nextActiveEmail);
+        if (activeAcc) {
+          localStorage.setItem('gdrive_crm_token', activeAcc.token);
+          localStorage.setItem('gdrive_crm_user', JSON.stringify({ displayName: activeAcc.displayName, email: activeAcc.email }));
+        }
+      } else {
+        localStorage.removeItem('gdrive_crm_token');
+        localStorage.removeItem('gdrive_crm_user');
+      }
+      localStorage.removeItem('gdrive_crm_folder_id');
+
+      alert(`Đã ngắt kết nối Google Drive đối với tài khoản: ${email}`);
+    } catch (err: any) {
+      console.error('Error disconnecting drive account:', err);
+      alert('Lỗi ngắt kết nối: ' + err.message);
+    }
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 800000) { // Approx 800KB limit for base64 in Firestore document
+    if (file.size > 800000) { // Limit for Base64 document
       setError("Kích thước ảnh quá lớn (giới hạn 800KB). Vui lòng nén ảnh hoặc dùng URL.");
       return;
     }
@@ -92,11 +323,11 @@ export default function SystemSettings({ userId }: SystemSettingsProps) {
   if (loading) return <div className="p-8 text-center uppercase font-black text-slate-400 animate-pulse">Đang tải cấu hình hệ thống...</div>;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-4xl mx-auto space-y-8 font-sans">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Cấu hình hệ thống</h2>
-          <p className="text-slate-500 font-medium">Thiết lập thông tin công ty và nhận diện thương hiệu</p>
+          <p className="text-slate-500 font-medium">Thiết lập thông tin công ty, nhận diện thương hiệu và kho lưu trữ điện toán đám mây</p>
         </div>
         
         {success && (
@@ -107,7 +338,7 @@ export default function SystemSettings({ userId }: SystemSettingsProps) {
         )}
       </div>
 
-      <form onSubmit={handleSave} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <form onSubmit={handleSaveGeneral} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-1 space-y-6">
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Logo ứng dụng</p>
@@ -271,7 +502,7 @@ export default function SystemSettings({ userId }: SystemSettingsProps) {
                 type="submit"
                 disabled={saving}
                 className={cn(
-                  "flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-2xl font-bold text-sm uppercase tracking-widest transition-all shadow-xl shadow-blue-600/20 active:scale-95",
+                  "flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-2xl font-bold text-sm uppercase tracking-widest transition-all shadow-xl shadow-blue-600/20 active:scale-95 cursor-pointer",
                   saving ? "opacity-50 cursor-not-allowed" : "hover:bg-blue-700"
                 )}
               >
@@ -282,6 +513,131 @@ export default function SystemSettings({ userId }: SystemSettingsProps) {
           </div>
         </div>
       </form>
+
+      {/* Google Drive Integration Panel */}
+      <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+          <div className="flex items-center gap-3">
+            <div className="bg-gradient-to-tr from-blue-500 via-yellow-400 to-green-500 p-3 rounded-2xl text-white shadow-md">
+              <Cloud className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">KẾT NỐI ĐIỆN TOÁN ĐÁM MÂY</p>
+              <h3 className="text-xl font-black text-slate-900 uppercase">Liên kết tài khoản lưu trữ Google Drive</h3>
+            </div>
+          </div>
+
+          <button
+            onClick={handleAddNewDriveAccount}
+            type="button"
+            className="flex items-center gap-2 px-5 py-3.5 bg-slate-900 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-slate-800 transition-all active:scale-95 shadow-md hover:shadow-lg cursor-pointer"
+          >
+            <Plus className="h-4 w-4" />
+            Liên kết tài khoản mới
+          </button>
+        </div>
+
+        <p className="text-slate-600 text-sm leading-relaxed max-w-3xl">
+          Tích hợp Google Drive để lưu trữ trực tiếp các tệp đính kèm (ảnh chụp thi công, văn bản khảo sát, hóa đơn, báo giá) trong luồng chăm sóc khách hàng. Các tệp tin được tải lên sẽ tự động tổ chức thư mục một cách có hệ thống, sẵn sàng đồng bộ hoá dữ liệu đám mây tiện lợi.
+        </p>
+
+        {driveLoading ? (
+          <div className="p-8 text-center text-slate-400 uppercase font-black text-xs tracking-wider animate-pulse">
+            Đang tải dữ liệu liên kết dịch vụ Google Drive...
+          </div>
+        ) : driveAccounts.length === 0 ? (
+          <div className="p-10 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+            <HardDrive className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-700 font-bold text-sm">Chưa có tài khoản Google Drive nào được liên kết</p>
+            <p className="text-slate-400 text-xs mt-1.5 max-w-md mx-auto">
+              Bấm nút "Liên kết tài khoản mới" ở trên để kết nối không gian lưu trữ đám mây Google Drive cá nhân hoặc doanh nghiệp của bạn.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between px-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Tài khoản đã liên kết ({driveAccounts.length})</p>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Thư mục tổ chức: 'Solar CRM Care Logs'</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {driveAccounts.map((account) => {
+                const isActive = activeEmail === account.email;
+                return (
+                  <div 
+                    key={account.email} 
+                    className={cn(
+                      "p-5 rounded-2xl border transition-all flex items-start gap-4 shadow-sm relative group",
+                      isActive 
+                        ? "bg-emerald-50/40 border-emerald-500/30" 
+                        : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/30"
+                    )}
+                  >
+                    {/* Status indicator pin */}
+                    {isActive && (
+                      <div className="absolute top-4 right-4 bg-emerald-500 text-white rounded-full p-1 shadow-sm">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      </div>
+                    )}
+
+                    {/* Avatar Block */}
+                    <div className="shrink-0">
+                      {account.photoURL ? (
+                        <img 
+                          src={account.photoURL} 
+                          alt={account.displayName} 
+                          className="w-12 h-12 rounded-full border border-slate-100 object-cover shadow-inner"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-600 text-sm shadow-inner uppercase">
+                          {account.displayName ? account.displayName.substring(0, 2) : 'GD'}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Informational Details */}
+                    <div className="space-y-1 my-auto flex-1 min-w-0 pr-6">
+                      <p className="font-extrabold text-slate-800 text-sm truncate">{account.displayName}</p>
+                      <p className="text-slate-500 text-xs font-medium truncate">{account.email}</p>
+                      <p className="text-[10px] text-slate-400 font-bold">Liên kết từ: {account.connectedAt || 'Không rõ'}</p>
+                      
+                      {/* Active Actions */}
+                      <div className="flex items-center gap-3 pt-3">
+                        {!isActive ? (
+                          <button
+                            type="button"
+                            onClick={() => handleSetActiveAccount(account)}
+                            className="bg-slate-100 text-slate-800 hover:bg-blue-600 hover:text-white font-extrabold text-[10px] uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                          >
+                            Kích hoạt sử dụng
+                          </button>
+                        ) : (
+                          <span className="text-emerald-700 font-extrabold text-[9px] uppercase tracking-widest bg-emerald-100/50 border border-emerald-200/50 px-2.5 py-1 rounded-lg">
+                            Mặc định chính
+                          </span>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAccount(account.email)}
+                          className="text-red-500 hover:text-red-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer ml-auto"
+                          title="Hủy liên kết tài khoản này"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

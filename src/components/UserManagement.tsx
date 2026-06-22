@@ -135,7 +135,7 @@ export default function UserManagement({ userId }: UserManagementProps) {
     const tempAppName = `temp-user-creator-${Date.now()}`;
     const tempApp = initializeApp(firebaseConfig, tempAppName);
     const tempAuth = getAuth(tempApp);
-    const tempDb = getFirestore(tempApp, firebaseConfig.firestoreDatabaseId);
+    const tempDb = getFirestore(tempApp, (firebaseConfig as any).firestoreDatabaseId);
 
     try {
       const userCredential = await createUserWithEmailAndPassword(tempAuth, internalEmail, newUser.password);
@@ -180,9 +180,15 @@ export default function UserManagement({ userId }: UserManagementProps) {
 
   useEffect(() => {
     if (!userId) return;
-    const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+    const q = collection(db, 'users');
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppUser)));
+      const rawUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppUser));
+      rawUsers.sort((a, b) => {
+        const t1 = a.createdAt ? (a.createdAt as any).seconds || 0 : 0;
+        const t2 = b.createdAt ? (b.createdAt as any).seconds || 0 : 0;
+        return t2 - t1;
+      });
+      setUsers(rawUsers);
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'users');

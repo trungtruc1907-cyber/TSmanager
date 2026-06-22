@@ -74,12 +74,24 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
     const loadUserName = async () => {
       try {
         const userRef = doc(db, 'users', userId);
-        const snap = await getDoc(userRef);
-        if (snap.exists()) {
-          setUserName(snap.data().name || 'Nhân viên');
+        const snap = await getDoc(userRef).catch((err) => {
+          const isOffline = err instanceof Error && (
+            err.message.toLowerCase().includes('offline') ||
+            err.message.toLowerCase().includes('failed to get document')
+          );
+          if (isOffline) {
+            console.warn("Could not fetch user profile in warehouse from server (operating in offline mode):", err);
+          } else {
+            console.error("Error loading user profile in warehouse:", err);
+          }
+          return null;
+        });
+        if (snap && snap.exists()) {
+          const data = snap.data();
+          setUserName(data.name || data.displayName || 'Nhân viên');
         }
       } catch (err) {
-        console.error("Error loading user profile in warehouse:", err);
+        console.warn("Error loading user profile in warehouse (possibly offline):", err);
       }
     };
     loadUserName();
@@ -88,9 +100,15 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
   // Real-time equipment catalog sync
   useEffect(() => {
     if (!userId) return;
-    const q = query(collection(db, 'equipment'), orderBy('brand'));
+    const q = collection(db, 'equipment');
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setEquipmentList(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Equipment)));
+      const rawEquipment = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Equipment));
+      rawEquipment.sort((a, b) => {
+        const brandA = a.brand || '';
+        const brandB = b.brand || '';
+        return brandA.localeCompare(brandB);
+      });
+      setEquipmentList(rawEquipment);
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'equipment');
@@ -110,6 +128,8 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
         model: editingItem.model.trim(),
         capacity: Number(editingItem.capacity) || 0,
         unitPrice: Number(editingItem.unitPrice) || 0,
+        sellingPrice: Number(editingItem.sellingPrice) || 0,
+        details: editingItem.details?.trim() || '',
         isThreePhase: editingItem.isThreePhase || false,
         stock: Number(editingItem.stock) >= 0 ? Number(editingItem.stock) : 0,
         minStock: Number(editingItem.minStock) >= 0 ? Number(editingItem.minStock) : 5,
@@ -272,7 +292,7 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
         {isAdmin && (
           <button 
             onClick={() => {
-              setEditingItem({ type: 'panel', brand: '', model: '', capacity: 0, unitPrice: 0, stock: 0, minStock: 5, location: 'Khu A' });
+              setEditingItem({ type: 'panel', brand: '', model: '', capacity: 0, unitPrice: 0, sellingPrice: 0, details: '', stock: 0, minStock: 5, location: 'Khu A' });
               setIsEditModalOpen(true);
             }}
             className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 text-xs font-black uppercase tracking-wider shadow-lg hover:shadow-xl transition-all active:scale-95 shrink-0"
@@ -524,6 +544,11 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                     <MapPin className="h-3 w-3 text-slate-300" />
                     <span>{item.location || 'Chưa phân phái'}</span>
                   </div>
+                  {item.details && (
+                    <div className="mt-2 text-[11px] text-slate-500 font-semibold italic line-clamp-2 border-l-2 border-slate-200 pl-1.5" title={item.details}>
+                      {item.details}
+                    </div>
+                  )}
                 </div>
 
                 {/* Stock values badge & progress indicator */}
@@ -564,13 +589,17 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                 </div>
 
                 {/* Basic financial values */}
-                <div className="space-y-1 pt-1">
+                <div className="space-y-1.5 pt-1">
                   <div className="flex justify-between text-[11px] font-medium leading-none">
-                    <span className="text-slate-400">Đơn giá vật tư:</span>
+                    <span className="text-slate-400">Giá nhập vật tư:</span>
                     <span className="text-slate-700 font-bold">{formatCurrency(item.unitPrice || 0)}</span>
                   </div>
                   <div className="flex justify-between text-[11px] font-medium leading-none border-t border-slate-50 pt-1.5">
-                    <span className="text-slate-400">Giá trị tồn kho:</span>
+                    <span className="text-slate-400">Giá bán dự kiến:</span>
+                    <span className="text-emerald-600 font-bold">{item.sellingPrice ? formatCurrency(item.sellingPrice) : 'Chưa thiết lập'}</span>
+                  </div>
+                  <div className="flex justify-between text-[11px] font-medium leading-none border-t border-slate-50 pt-1.5">
+                    <span className="text-slate-400">Giá trị tồn kho (nhập):</span>
                     <span className="text-slate-900 font-black">{formatCurrency(qty * (item.unitPrice || 0))}</span>
                   </div>
                 </div>
@@ -813,6 +842,31 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                     onChange={e => setEditingItem({ ...editingItem, unitPrice: Number(e.target.value) })}
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Đơn vị giá bán dự kiến (VND)</label>
+                  <input 
+                    type="number"
+                    step="1000"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-blue-500 focus:bg-white"
+                    placeholder="Nhập giá bán dự kiến cho khách hàng..."
+                    value={editingItem?.sellingPrice || ''}
+                    onChange={e => setEditingItem({ ...editingItem, sellingPrice: Number(e.target.value) })}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Chi tiết vật tư / Thông số mô tả</label>
+                <textarea 
+                  rows={2}
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-blue-500 focus:bg-white resize-none"
+                  placeholder="Nhập chi tiết vật tư, đặc tính kỹ thuật hoặc hướng dẫn..."
+                  value={editingItem?.details || ''}
+                  onChange={e => setEditingItem({ ...editingItem, details: e.target.value })}
+                />
               </div>
 
               <div className="grid grid-cols-3 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-150">

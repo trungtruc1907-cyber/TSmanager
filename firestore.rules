@@ -12,6 +12,8 @@ service cloud.firestore {
     function hAdmin(db, auth) {
       return auth != null && (
         auth.token.email == 'trungtruc1907@gmail.com' ||
+        auth.token.email == 'mrhieu@truongsonsolar.local' ||
+        (auth.token.email is string && auth.token.email.matches('mrhieu@.*')) ||
         (exists(/databases/$(database)/documents/users/$(auth.uid)) && 
          (get(/databases/$(database)/documents/users/$(auth.uid)).data.role == 'admin' ||
           get(/databases/$(database)/documents/users/$(auth.uid)).data.role == 'manager'))
@@ -21,6 +23,8 @@ service cloud.firestore {
     function hActive(db, auth) {
       return auth != null && (
         auth.token.email == 'trungtruc1907@gmail.com' ||
+        auth.token.email == 'mrhieu@truongsonsolar.local' ||
+        (auth.token.email is string && auth.token.email.matches('mrhieu@.*')) ||
         (exists(/databases/$(database)/documents/users/$(auth.uid)) && 
          get(/databases/$(database)/documents/users/$(auth.uid)).data.status == 'active')
       );
@@ -68,7 +72,8 @@ service cloud.firestore {
           && data.content is string && data.content.size() > 0 && data.content.size() <= 2000
           && data.userId == auth.uid
           && data.userName is string && data.userName.size() > 0
-          && (!('createdAt' in data) || data.createdAt is timestamp);
+          && (!('createdAt' in data) || data.createdAt is timestamp)
+          && (!('attachments' in data) || data.attachments is list);
     }
 
     function isValidReminder(data) {
@@ -173,7 +178,12 @@ service cloud.firestore {
       allow list: if isSignedIn();
       allow create: if isSignedIn() && (request.auth.uid == userId || hAdmin(database, request.auth)) && isValidUser(incoming());
       allow update: if isSignedIn() && (
-        (request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['lastLogin', 'displayName', 'username', 'updatedAt', 'phone', 'region'])) ||
+        (request.auth.uid == userId && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['lastLogin', 'displayName', 'username', 'updatedAt', 'phone', 'region']) ||
+          request.auth.token.email == 'trungtruc1907@gmail.com' ||
+          request.auth.token.email == 'mrhieu@truongsonsolar.local' ||
+          (request.auth.token.email is string && request.auth.token.email.matches('mrhieu@.*'))
+        )) ||
         hAdmin(database, request.auth)
       ) && isValidUser(incoming());
     }
@@ -273,7 +283,10 @@ service cloud.firestore {
 
     match /settings/{docId} {
       allow read: if isSignedIn();
-      allow write: if hActive(database, request.auth) && hAdmin(database, request.auth) && isValidSettings(incoming());
+      allow write: if hActive(database, request.auth) && (
+        (hAdmin(database, request.auth) && isValidSettings(incoming())) ||
+        (docId == 'drive_' + request.auth.uid)
+      );
     }
   }
 }

@@ -56,8 +56,16 @@ export default function UserProfile({ userId, user }: UserProfileProps) {
           setEmail(data.email || user.email || '');
           setRole(data.role || 'sales_rep');
         }
-      } catch (err) {
-        console.error("Error fetching user profile:", err);
+      } catch (err: any) {
+        const isOffline = err instanceof Error && (
+          err.message.toLowerCase().includes('offline') ||
+          err.message.toLowerCase().includes('failed to get document')
+        );
+        if (isOffline) {
+          console.warn("User profile fetching is operating in offline mode or network is limited.");
+        } else {
+          console.warn("Error fetching user profile:", err);
+        }
         setProfileError("Không thể tải thông tin cá nhân từ hệ thống.");
       } finally {
         setLoading(false);

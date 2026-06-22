@@ -50,19 +50,21 @@ export default function ProjectDashboard({ onOpenProject, onOpenTracker, showAll
     if (userRole === 'sales_rep' && userId) {
       q = query(
         collection(db, 'projects'), 
-        where('assignedSalesId', '==', userId),
-        orderBy('updatedAt', 'desc')
+        where('assignedSalesId', '==', userId)
       );
     } else {
-      q = query(collection(db, 'projects'), orderBy('updatedAt', 'desc'));
-    }
-    
-    if (!showAll) {
-      q = query(q, limit(5));
+      q = collection(db, 'projects');
     }
       
     return onSnapshot(q, (snapshot) => {
-      setProjects(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Project)));
+      const rawProjs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Project));
+      rawProjs.sort((a, b) => {
+        const t1 = a.updatedAt ? (a.updatedAt as any).seconds || 0 : 0;
+        const t2 = b.updatedAt ? (b.updatedAt as any).seconds || 0 : 0;
+        return t2 - t1; // desc
+      });
+      const finalProjs = showAll ? rawProjs : rawProjs.slice(0, 5);
+      setProjects(finalProjs);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'projects');
     });

@@ -49,7 +49,9 @@ async function startServer() {
 
       const authAdmin = getAuth();
       const appInstance = getApps()[0];
-      const firestoreAdmin = getFirestore(appInstance, "ai-studio-b2d8e0e9-52cd-42ef-bb50-f9a1cebfcf8b");
+      const configJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'firebase-applet-config.json'), 'utf8'));
+      const dbIdVal = configJson.firestoreDatabaseId || "ai-studio-b2d8e0e9-52cd-42ef-bb50-f9a1cebfcf8b";
+      const firestoreAdmin = getFirestore(appInstance, dbIdVal);
 
       // Verify user's ID token through Firebase Admin auth
       const decodedToken = await authAdmin.verifyIdToken(idToken);
@@ -68,7 +70,7 @@ async function startServer() {
         try {
           const configJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'firebase-applet-config.json'), 'utf8'));
           const projectId = configJson.projectId;
-          const databaseId = configJson.firestoreDatabaseId;
+          const databaseId = configJson.firestoreDatabaseId || "ai-studio-b2d8e0e9-52cd-42ef-bb50-f9a1cebfcf8b";
           const apiKey = configJson.apiKey;
           const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${adminUid}?key=${apiKey}`;
           
