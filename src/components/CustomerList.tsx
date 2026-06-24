@@ -313,6 +313,13 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
           ...payload,
           updatedAt: serverTimestamp()
         });
+        if (payload.status === 'won') {
+          await createNotification(
+            'customer',
+            '🏆 CHỐT HỢP ĐỒNG THÀNH CÔNG',
+            `Kinh doanh ${auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || 'Kinh doanh'} đã chốt thành công hợp đồng với khách hàng "${payload.name.trim()}". Giá trị: ${payload.leadValue ? Number(payload.leadValue).toLocaleString('vi-VN') : '0'} VND. Kỹ thuật tiến hành chuẩn bị vật tư và khảo sát thi công!`
+          );
+        }
       } else {
         await addDoc(collection(db, 'customers'), {
           ...payload,
@@ -381,6 +388,15 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
         ...fields,
         updatedAt: serverTimestamp()
       });
+      if (fields.status === 'won') {
+        const custName = customers.find(c => c.id === selectedCustomerId)?.name || 'Khách hàng';
+        const leadVal = fields.leadValue || customers.find(c => c.id === selectedCustomerId)?.leadValue || 0;
+        await createNotification(
+          'customer',
+          '🏆 CHỐT HỢP ĐỒNG THÀNH CÔNG',
+          `Kinh doanh ${auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || 'Kinh doanh'} đã chốt thành công hợp đồng với khách hàng "${custName}". Giá trị: ${Number(leadVal).toLocaleString('vi-VN')} VND. Kỹ thuật tiến hành chuẩn bị vật tư và khảo sát thi công!`
+        );
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `customers/${selectedCustomerId}`);
     }
@@ -1809,8 +1825,8 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
 
                         {/* Timeline Flow */}
                         <div className="relative pl-6 space-y-5 border-l-2 border-slate-100 ml-4">
-                          {interactions.map((it) => (
-                            <div key={it.id} className="relative group animate-fade-in">
+                          {interactions.map((it, idx) => (
+                            <div key={`${it.id || 'inter'}-${idx}`} className="relative group animate-fade-in">
                               {/* Left icon marker overlay on stem */}
                               <div className="absolute -left-9.5 top-1 w-7 h-7 bg-white rounded-full border border-slate-200 flex items-center justify-center text-[10px] shadow-sm">
                                 {it.type === 'call' && '📞'}
@@ -1965,14 +1981,14 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
 
                         {/* Reminders layout list */}
                         <div className="space-y-3">
-                          {reminders.map((rem) => {
+                          {reminders.map((rem, idx) => {
                             const isCompleted = rem.status === 'completed';
                             const parsedDate = rem.dueDate ? parseISO(rem.dueDate) : new Date();
                             const isOverdue = !isCompleted && isAfter(new Date(), parsedDate);
 
                             return (
                               <div 
-                                key={rem.id}
+                                key={`${rem.id || 'rem'}-${idx}`}
                                 className={`p-4 rounded-2xl border flex items-center justify-between transition-all ${
                                   isCompleted 
                                     ? 'bg-emerald-50/20 border-emerald-100/50 opacity-70' 

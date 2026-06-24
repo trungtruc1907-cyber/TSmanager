@@ -63,6 +63,7 @@ export interface Equipment {
   stock?: number;
   minStock?: number;
   location?: string;
+  unit?: string;
   history?: Array<{
     id: string;
     type: 'import' | 'export';
@@ -111,7 +112,7 @@ export interface Project {
   updatedAt: any;
 }
 
-export type UserRole = 'admin' | 'manager' | 'sales_rep' | 'operator';
+export type UserRole = 'admin' | 'manager' | 'sales_rep' | 'operator' | 'accountant';
 
 export interface AppUser {
   id: string;

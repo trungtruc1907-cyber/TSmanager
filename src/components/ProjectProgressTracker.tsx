@@ -295,8 +295,8 @@ export default function ProjectProgressTracker({ projectId, onClose, userId, use
              <TrendingUp className="h-10 w-10 text-blue-500/50 absolute -right-2 -top-2 rotate-12" />
              <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-4">Thành viên tham gia</h3>
              <div className="space-y-4">
-                {users.filter(u => u.id === project.assignedSalesId || u.id === project.assignedOperatorId).map(u => (
-                  <div key={u.id} className="flex items-center gap-3">
+                {users.filter(u => u.id === project.assignedSalesId || u.id === project.assignedOperatorId).map((u, idx) => (
+                  <div key={`${u.id || 'staff'}-${idx}`} className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xs font-black uppercase">
                        {(u.displayName || u.username).substring(0, 2)}
                     </div>
@@ -354,13 +354,13 @@ export default function ProjectProgressTracker({ projectId, onClose, userId, use
                        </div>
                        
                        <AnimatePresence mode="popLayout">
-                         {tasks.filter(t => t.status === colStatus).map((task) => (
+                         {tasks.filter(t => t.status === colStatus).map((task, idx) => (
                            <motion.div 
                              layout
                              initial={{ opacity: 0, y: 10 }}
                              animate={{ opacity: 1, y: 0 }}
                              exit={{ opacity: 0, scale: 0.95 }}
-                             key={task.id}
+                             key={`${task.id || 'task'}-${idx}`}
                              className="group bg-slate-50 border border-slate-100 p-4 rounded-2xl hover:bg-white hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 transition-all cursor-pointer relative"
                            >
                               <div className="flex justify-between items-start mb-3">
@@ -411,8 +411,8 @@ export default function ProjectProgressTracker({ projectId, onClose, userId, use
                  <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Dòng hoạt động</h2>
               </div>
               <div className="relative pl-8 space-y-8 before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100">
-                 {activities.map((act) => (
-                    <div key={act.id} className="relative group">
+                 {activities.map((act, idx) => (
+                    <div key={`${act.id || 'act'}-${idx}`} className="relative group">
                        <div className="absolute -left-[27px] top-1 w-4 h-4 rounded-full bg-white border-2 border-slate-100 z-10 group-hover:border-blue-500 transition-colors" />
                        <div className="flex items-center gap-2 mb-1">
                           <span className="text-[10px] font-black text-slate-900 uppercase tracking-tight">{act.userName}</span>

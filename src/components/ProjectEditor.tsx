@@ -259,6 +259,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
     ];
 
     let stt = 1;
+    const isPriceViewer = userRole === 'admin' || userRole === 'accountant';
 
     // PV Panels
     if (project.panels?.equipmentId) {
@@ -272,8 +273,8 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
           `${item.capacity}W`,
           project.panels!.count,
           'Tấm',
-          item.unitPrice,
-          item.unitPrice * project.panels!.count
+          isPriceViewer ? item.unitPrice : '🔒 Bảo mật',
+          isPriceViewer ? item.unitPrice * project.panels!.count : '🔒 Bảo mật'
         ]);
       }
     }
@@ -290,8 +291,8 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
           `${item.capacity}KW`,
           project.inverters!.count,
           'Bộ',
-          item.unitPrice,
-          item.unitPrice * project.inverters!.count
+          isPriceViewer ? item.unitPrice : '🔒 Bảo mật',
+          isPriceViewer ? item.unitPrice * project.inverters!.count : '🔒 Bảo mật'
         ]);
       }
     }
@@ -308,8 +309,8 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
           `${item.capacity}KWH`,
           project.batteries!.count,
           'Bộ',
-          item.unitPrice,
-          item.unitPrice * project.batteries!.count
+          isPriceViewer ? item.unitPrice : '🔒 Bảo mật',
+          isPriceViewer ? item.unitPrice * project.batteries!.count : '🔒 Bảo mật'
         ]);
       }
     }
@@ -1139,6 +1140,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                       {project.panels?.equipmentId && (() => {
                         const item = catalog.find(e => e.id === project.panels?.equipmentId);
                         if (!item) return null;
+                        const isPriceViewer = userRole === 'admin' || userRole === 'accountant';
                         return (
                           <tr className="hover:bg-slate-50 transition-colors">
                             <td className="border border-slate-200 px-2 py-3 text-center">01</td>
@@ -1151,8 +1153,12 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                             <td className="border border-slate-200 px-2 py-3 text-center font-medium">{item.brand}</td>
                             <td className="border border-slate-200 px-2 py-3 text-center font-bold">{project.panels?.count}</td>
                             <td className="border border-slate-200 px-2 py-3 text-center">Tấm</td>
-                            <td className="border border-slate-200 px-2 py-3 text-right font-medium">{formatCurrency(item.unitPrice)}</td>
-                            <td className="border border-slate-200 px-2 py-3 text-right font-bold text-slate-900">{formatCurrency(item.unitPrice * (project.panels?.count || 0))}</td>
+                            <td className="border border-slate-200 px-2 py-3 text-right font-medium">
+                              {isPriceViewer ? formatCurrency(item.unitPrice) : '🔒 Bảo mật'}
+                            </td>
+                            <td className="border border-slate-200 px-2 py-3 text-right font-bold text-slate-900">
+                              {isPriceViewer ? formatCurrency(item.unitPrice * (project.panels?.count || 0)) : '🔒 Bảo mật'}
+                            </td>
                             <td className="border border-slate-200 px-2 py-3 text-center whitespace-nowrap">15-25 Năm</td>
                           </tr>
                         );
@@ -1160,6 +1166,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                       {project.inverters?.equipmentId && (() => {
                         const item = catalog.find(e => e.id === project.inverters?.equipmentId);
                         if (!item) return null;
+                        const isPriceViewer = userRole === 'admin' || userRole === 'accountant';
                         return (
                           <tr className="hover:bg-slate-50 transition-colors">
                             <td className="border border-slate-200 px-2 py-3 text-center">02</td>
@@ -1172,8 +1179,12 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                             <td className="border border-slate-200 px-2 py-3 text-center font-medium">{item.brand}</td>
                             <td className="border border-slate-200 px-2 py-3 text-center font-bold">{project.inverters?.count}</td>
                             <td className="border border-slate-200 px-2 py-3 text-center">Bộ</td>
-                            <td className="border border-slate-200 px-2 py-3 text-right font-medium">{formatCurrency(item.unitPrice)}</td>
-                            <td className="border border-slate-200 px-2 py-3 text-right font-bold text-slate-900">{formatCurrency(item.unitPrice * (project.inverters?.count || 0))}</td>
+                            <td className="border border-slate-200 px-2 py-3 text-right font-medium">
+                              {isPriceViewer ? formatCurrency(item.unitPrice) : '🔒 Bảo mật'}
+                            </td>
+                            <td className="border border-slate-200 px-2 py-3 text-right font-bold text-slate-900">
+                              {isPriceViewer ? formatCurrency(item.unitPrice * (project.inverters?.count || 0)) : '🔒 Bảo mật'}
+                            </td>
                             <td className="border border-slate-200 px-2 py-3 text-center whitespace-nowrap">5 Năm</td>
                           </tr>
                         );
@@ -1181,6 +1192,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                       {project.batteries?.equipmentId && (() => {
                         const item = catalog.find(e => e.id === project.batteries?.equipmentId);
                         if (!item) return null;
+                        const isPriceViewer = userRole === 'admin' || userRole === 'accountant';
                         return (
                           <tr className="hover:bg-slate-50 transition-colors">
                             <td className="border border-slate-200 px-2 py-3 text-center">03</td>
@@ -1193,8 +1205,12 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
                             <td className="border border-slate-200 px-2 py-3 text-center font-medium">{item.brand}</td>
                             <td className="border border-slate-200 px-2 py-3 text-center font-bold">{project.batteries?.count}</td>
                             <td className="border border-slate-200 px-2 py-3 text-center">Bộ</td>
-                            <td className="border border-slate-200 px-2 py-3 text-right font-medium">{formatCurrency(item.unitPrice)}</td>
-                            <td className="border border-slate-200 px-2 py-3 text-right font-bold text-slate-900">{formatCurrency(item.unitPrice * (project.batteries?.count || 0))}</td>
+                            <td className="border border-slate-200 px-2 py-3 text-right font-medium">
+                              {isPriceViewer ? formatCurrency(item.unitPrice) : '🔒 Bảo mật'}
+                            </td>
+                            <td className="border border-slate-200 px-2 py-3 text-right font-bold text-slate-900">
+                              {isPriceViewer ? formatCurrency(item.unitPrice * (project.batteries?.count || 0)) : '🔒 Bảo mật'}
+                            </td>
                             <td className="border border-slate-200 px-2 py-3 text-center whitespace-nowrap">5-10 Năm</td>
                           </tr>
                         );

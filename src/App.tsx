@@ -578,12 +578,16 @@ export default function App() {
 
   const navigation = [
     { id: 'dashboard', label: 'Tổng quan', icon: LayoutDashboard },
-    { id: 'customers', label: 'Khách hàng', icon: Users },
+    ...(userRole !== 'operator' && userRole !== 'accountant' ? [
+      { id: 'customers', label: 'Khách hàng', icon: Users },
+    ] : []),
     { id: 'projects', label: 'Công trình', icon: Sun },
     { id: 'tasks', label: 'Lịch & Công việc', icon: ClipboardList },
     { id: 'profile', label: 'Cá nhân', icon: UserIcon },
-    ...(userRole === 'admin' || userRole === 'manager' ? [
+    ...(userRole === 'admin' || userRole === 'manager' || userRole === 'operator' || userRole === 'accountant' ? [
       { id: 'catalog', label: 'Quản lý Kho', icon: Box },
+    ] : []),
+    ...(userRole === 'admin' || userRole === 'manager' ? [
       { id: 'users', label: 'Quản lý Nhân sự', icon: UserCog },
       { id: 'settings', label: 'Cấu hình', icon: Sliders }
     ] : []),
@@ -961,7 +965,7 @@ export default function App() {
               className="max-w-7xl mx-auto w-full"
             >
               {activeView === 'dashboard' && <ProjectDashboard onOpenProject={handleOpenProject} onOpenTracker={handleOpenTracker} userRole={userRole} userId={user.uid} />}
-              {activeView === 'customers' && <CustomerList onViewProject={handleViewCustomerProject} userId={user.uid} userRole={userRole} />}
+              {activeView === 'customers' && userRole !== 'operator' && userRole !== 'accountant' && <CustomerList onViewProject={handleViewCustomerProject} userId={user.uid} userRole={userRole} />}
               {activeView === 'projects' && <ProjectDashboard onOpenProject={handleOpenProject} onOpenTracker={handleOpenTracker} showAll userRole={userRole} userId={user.uid} />}
               {activeView === 'catalog' && <CatalogManager userId={user.uid} userRole={userRole} />}
               {activeView === 'tasks' && <WorkSchedulerHub userId={user.uid} userRole={userRole} />}

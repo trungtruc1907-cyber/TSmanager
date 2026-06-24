@@ -564,11 +564,11 @@ export default function SystemSettings({ userId }: SystemSettingsProps) {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {driveAccounts.map((account) => {
+              {driveAccounts.map((account, index) => {
                 const isActive = activeEmail === account.email;
                 return (
                   <div 
-                    key={account.email} 
+                    key={account.email || `drive-${index}`} 
                     className={cn(
                       "p-5 rounded-2xl border transition-all flex items-start gap-4 shadow-sm relative group",
                       isActive 

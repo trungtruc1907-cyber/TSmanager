@@ -8,15 +8,25 @@ import { getFirestore } from 'firebase-admin/firestore';
 
 // Instruct Google APIs / Firebase Admin SDK to charge quota and API enablement check to target Project ID,
 // avoiding the identitytoolkit API omission error on the container sandbox hosting project.
-process.env.GOOGLE_CLOUD_QUOTA_PROJECT = "gen-lang-client-0349240272";
+let projectId = "gen-lang-client-0349240272";
+try {
+  const configJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'firebase-applet-config.json'), 'utf8'));
+  if (configJson.projectId) {
+    projectId = configJson.projectId;
+  }
+} catch (e) {
+  console.warn("Could not read projectId dynamically from firebase-applet-config.json:", e);
+}
+
+process.env.GOOGLE_CLOUD_QUOTA_PROJECT = projectId;
 
 // Initialize Firebase Admin SDK using ES import syntax
 if (!getApps().length) {
   try {
     initializeApp({
-      projectId: "gen-lang-client-0349240272"
+      projectId: projectId
     });
-    console.log("Firebase Admin initialized successfully (Modular SDK).");
+    console.log(`Firebase Admin initialized successfully with projectId: ${projectId}`);
   } catch (error) {
     console.error("Firebase Admin initialization error:", error);
   }
@@ -113,14 +123,14 @@ async function startServer() {
       }
 
       if (!adminData) {
-        return res.status(403).json({ error: "Tài khoản quản trị không tồn tại trên hệ thống dữ liệu." });
+        return res.status(200).json({ success: false, error: "Tài khoản quản trị không tồn tại trên hệ thống dữ liệu." });
       }
 
       const role = adminData.role;
       const status = adminData.status;
 
       if (status !== 'active' || (role !== 'admin' && role !== 'manager')) {
-        return res.status(403).json({ error: "Tài khoản của bạn không có quyền thực hiện chức năng này." });
+        return res.status(200).json({ success: false, error: "Tài khoản của bạn không có quyền thực hiện chức năng này." });
       }
 
       // Reset the password in Firebase Auth using Admin SDK
@@ -144,16 +154,17 @@ async function startServer() {
 
       if (isIamError) {
         const scEmail = "711060358240-compute@developer.gserviceaccount.com";
-        return res.status(403).json({
+        return res.status(200).json({
+          success: false,
           error: "Service Account chưa được phân quyền trong dự án Firebase của bạn.",
           isIamError: true,
           serviceAccount: scEmail,
-          projectId: "gen-lang-client-0349240272",
+          projectId: projectId,
           instructions: `Vui lòng cấp quyền (IAM) cho Service Account sau trong bảng điều khiển dự án Google Cloud/Firebase của bạn:\n\nEmail: ${scEmail}\nRole: "Firebase Authentication Admin" hoặc "Editor".\n\nXem hướng dẫn chi tiết bên dưới.`
         });
       }
 
-      return res.status(500).json({ error: errMsg || "Lỗi máy chủ khi cập nhật mật khẩu." });
+      return res.status(200).json({ success: false, error: errMsg || "Lỗi máy chủ khi cập nhật mật khẩu." });
     }
   });
 

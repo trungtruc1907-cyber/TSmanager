@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, onSnapshot, query, orderBy, updateDoc, doc, setDoc, serverTimestamp, getFirestore } from 'firebase/firestore';
 import { initializeApp, deleteApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { AppUser, UserRole } from '../types';
 import { 
@@ -19,7 +19,8 @@ import {
   ShieldAlert,
   Settings,
   ClipboardList,
-  Key
+  Key,
+  Calculator
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -48,9 +49,33 @@ export default function UserManagement({ userId }: UserManagementProps) {
   const [resettingUser, setResettingUser] = useState<AppUser | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [isResetting, setIsResetting] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetSuccess, setResetSuccess] = useState<string | null>(null);
   const [iamDetails, setIamDetails] = useState<{ serviceAccount: string; projectId: string; instructions: string } | null>(null);
+
+  const handleSendResetEmail = async () => {
+    if (!resettingUser || !resettingUser.email) return;
+    setIsSendingEmail(true);
+    setResetError(null);
+    setResetSuccess(null);
+    try {
+      await sendPasswordResetEmail(auth, resettingUser.email);
+      setResetSuccess(`Đã gửi email khôi phục mật khẩu thành công đến "${resettingUser.email}". Hãy hướng dẫn nhân sự kiểm tra hộp thư.`);
+      setNewPassword('');
+    } catch (err: any) {
+      console.error("Error sending reset email:", err);
+      let msg = err.message || "Không thể gửi email khôi phục mật khẩu.";
+      if (err.code === "auth/user-not-found") {
+        msg = "Không tìm thấy người dùng với thuộc tính email này trên hệ thống Auth.";
+      } else if (err.code === "auth/invalid-email") {
+        msg = "Địa chỉ email của nhân sự không đúng định dạng.";
+      }
+      setResetError(msg);
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
 
   const handleResetPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,9 +107,20 @@ export default function UserManagement({ userId }: UserManagementProps) {
         })
       });
 
-      const result = await response.json();
+      let result: any = {};
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        result = await response.json().catch(() => ({}));
+      } else {
+        const text = await response.text().catch(() => '');
+        console.error("Non-JSON returned by password reset API:", text);
+        throw new Error(text.includes('permission') || text.includes('IAM') || text.includes('403')
+          ? "Thất bại: Lỗi phân quyền Service Account (IAM) trên Google Cloud / Firebase."
+          : "Lỗi kết nối máy chủ không trả về định dạng JSON hợp lệ."
+        );
+      }
 
-      if (!response.ok) {
+      if (!response.ok || result.success === false) {
         if (result.isIamError) {
           setIamDetails({
             serviceAccount: result.serviceAccount,
@@ -103,7 +139,7 @@ export default function UserManagement({ userId }: UserManagementProps) {
         setResettingUser(null);
         setResetSuccess(null);
         setIamDetails(null);
-      }, 1500);
+      }, 2000);
     } catch (err: any) {
       console.error("Reset password error:", err);
       setResetError(err.message || "Lỗi không xác định khi đổi mật khẩu.");
@@ -255,6 +291,7 @@ export default function UserManagement({ userId }: UserManagementProps) {
       case 'admin': return <ShieldAlert className="h-4 w-4 text-red-500" />;
       case 'manager': return <ShieldCheck className="h-4 w-4 text-blue-500" />;
       case 'operator': return <Settings className="h-4 w-4 text-amber-500" />;
+      case 'accountant': return <Calculator className="h-4 w-4 text-emerald-500" />;
       default: return <Shield className="h-4 w-4 text-slate-400" />;
     }
   };
@@ -335,12 +372,13 @@ export default function UserManagement({ userId }: UserManagementProps) {
                 <th className="px-6 py-4">Thông tin liên hệ</th>
                 <th className="px-6 py-4">Vai trò</th>
                 <th className="px-6 py-4">Trạng thái</th>
+                <th className="px-6 py-4">Truy cập cuối</th>
                 <th className="px-6 py-4 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filteredUsers.map((user) => (
-                <tr key={user.id} className="hover:bg-slate-50/50 transition-colors group">
+              {filteredUsers.map((user, index) => (
+                <tr key={user.id || `user-${index}`} className="hover:bg-slate-50/50 transition-colors group">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center border border-blue-100 text-blue-600 font-black text-xs uppercase relative">
@@ -391,6 +429,7 @@ export default function UserManagement({ userId }: UserManagementProps) {
                         <option value="manager">Quản lý</option>
                         <option value="sales_rep">Sale / Kinh doanh</option>
                         <option value="operator">Điều hành / KT</option>
+                        <option value="accountant">Kế toán</option>
                       </select>
                     </div>
                   </td>
@@ -494,6 +533,8 @@ export default function UserManagement({ userId }: UserManagementProps) {
             newPassword={newPassword}
             setNewPassword={setNewPassword}
             isSubmitting={isResetting}
+            isSendingEmail={isSendingEmail}
+            onSendResetEmail={handleSendResetEmail}
             errorMsg={resetError}
             successMsg={resetSuccess}
             iamDetails={iamDetails}
@@ -584,6 +625,7 @@ function AddUserModal({
                 >
                   <option value="sales_rep">Kinh doanh</option>
                   <option value="operator">Kỹ thuật</option>
+                  <option value="accountant">Kế toán</option>
                   <option value="manager">Quản lý</option>
                   <option value="admin">Quản trị</option>
                 </select>
@@ -631,6 +673,8 @@ interface ResetPasswordModalProps {
   newPassword: string;
   setNewPassword: (val: string) => void;
   isSubmitting: boolean;
+  isSendingEmail: boolean;
+  onSendResetEmail: () => void;
   errorMsg: string | null;
   successMsg: string | null;
   iamDetails: { serviceAccount: string; projectId: string; instructions: string } | null;
@@ -644,6 +688,8 @@ function ResetPasswordModal({
   newPassword,
   setNewPassword,
   isSubmitting,
+  isSendingEmail,
+  onSendResetEmail,
   errorMsg,
   successMsg,
   iamDetails
@@ -671,15 +717,20 @@ function ResetPasswordModal({
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Cấp lại Mật khẩu</h3>
-              <p className="text-xs text-slate-500 font-bold mt-1">Thay đổi mật khẩu cho: {user.displayName || user.username}</p>
+              <p className="text-xs text-slate-500 font-bold mt-1">Xử lý tài khoản cho: {user.displayName || user.username}</p>
             </div>
             <Key className="h-6 w-6 text-blue-600 shrink-0" />
           </div>
 
           {errorMsg && (
-            <div className="p-4 bg-red-50 rounded-2xl border border-red-100 flex items-center gap-3">
-              <ShieldAlert className="h-5 w-5 text-red-500 shrink-0" />
-              <p className="text-xs font-bold text-red-600">{errorMsg}</p>
+            <div className="space-y-2.5">
+              <div className="p-4 bg-red-50 rounded-2xl border border-red-100 flex items-center gap-3">
+                <ShieldAlert className="h-5 w-5 text-red-500 shrink-0" />
+                <p className="text-xs font-bold text-red-600">{errorMsg}</p>
+              </div>
+              <div className="p-3.5 bg-blue-50/70 border border-blue-100/50 rounded-2xl text-blue-800 text-[11px] font-semibold leading-relaxed">
+                💡 <strong>Mẹo khôi phục nhanh:</strong> Bạn có thể sử dụng giải pháp thay thế đơn giản bằng cách bấm nút <strong>"Gửi Email đặt lại mật khẩu"</strong> ở bên dưới để gửi liên kết đặt lại mật khẩu trực tiếp cho nhân viên qua email, không cần phải cấu hình phân quyền Google Cloud phức tạp!
+              </div>
             </div>
           )}
 
@@ -755,7 +806,7 @@ function ResetPasswordModal({
 
             <div className="space-y-2">
               <div className="flex justify-between items-center ml-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mật khẩu mới</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mật khẩu mới trực tiếp</label>
                 <button
                   type="button"
                   onClick={() => setNewPassword('TS@' + Math.floor(100000 + Math.random() * 900000))}
@@ -774,21 +825,38 @@ function ResetPasswordModal({
               />
             </div>
 
-            <div className="flex gap-4 pt-4">
-              <button 
+            <div className="flex flex-col gap-3 pt-2">
+              <div className="flex gap-4">
+                <button 
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 px-5 py-4 bg-slate-100 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all cursor-pointer"
+                  disabled={isSubmitting || isSendingEmail}
+                >
+                  Hủy
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isSubmitting || isSendingEmail || !!successMsg}
+                  className="flex-1 px-5 py-4 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 disabled:opacity-50 flex items-center justify-center cursor-pointer"
+                >
+                  {isSubmitting ? "Đang xử lý..." : "Đổi trực tiếp"}
+                </button>
+              </div>
+
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-slate-100"></div>
+                <span className="flex-shrink mx-4 text-[9px] font-black uppercase tracking-widest text-slate-400 select-none">Hoặc</span>
+                <div className="flex-grow border-t border-slate-100"></div>
+              </div>
+
+              <button
                 type="button"
-                onClick={onClose}
-                className="flex-1 px-8 py-4 bg-slate-100 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
-                disabled={isSubmitting}
+                onClick={onSendResetEmail}
+                disabled={isSubmitting || isSendingEmail || !!successMsg}
+                className="w-full py-4 px-6 bg-slate-50 border border-slate-200 text-slate-700 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-100 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
               >
-                Hủy
-              </button>
-              <button 
-                type="submit"
-                disabled={isSubmitting || !!successMsg}
-                className="flex-1 px-8 py-4 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 disabled:opacity-50 flex items-center justify-center"
-              >
-                {isSubmitting ? "Đang xử lý..." : "Cập nhật"}
+                <Mail className="h-4 w-4 text-blue-500" /> {isSendingEmail ? "Đang gửi email..." : "Gửi Email đặt lại mật khẩu"}
               </button>
             </div>
           </form>

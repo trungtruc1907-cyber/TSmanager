@@ -14,9 +14,9 @@ service cloud.firestore {
         auth.token.email == 'trungtruc1907@gmail.com' ||
         auth.token.email == 'mrhieu@truongsonsolar.local' ||
         (auth.token.email is string && auth.token.email.matches('mrhieu@.*')) ||
-        (exists(/databases/$(database)/documents/users/$(auth.uid)) && 
-         (get(/databases/$(database)/documents/users/$(auth.uid)).data.role == 'admin' ||
-          get(/databases/$(database)/documents/users/$(auth.uid)).data.role == 'manager'))
+        (exists(/databases/$(db)/documents/users/$(auth.uid)) && 
+         (get(/databases/$(db)/documents/users/$(auth.uid)).data.role == 'admin' ||
+          get(/databases/$(db)/documents/users/$(auth.uid)).data.role == 'manager'))
       );
     }
 
@@ -25,15 +25,27 @@ service cloud.firestore {
         auth.token.email == 'trungtruc1907@gmail.com' ||
         auth.token.email == 'mrhieu@truongsonsolar.local' ||
         (auth.token.email is string && auth.token.email.matches('mrhieu@.*')) ||
-        (exists(/databases/$(database)/documents/users/$(auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(auth.uid)).data.status == 'active')
+        (exists(/databases/$(db)/documents/users/$(auth.uid)) && 
+         get(/databases/$(db)/documents/users/$(auth.uid)).data.status == 'active')
       );
     }
 
     function isSalesRep(db, auth) {
       return auth != null && 
-        exists(/databases/$(database)/documents/users/$(auth.uid)) && 
-        get(/databases/$(database)/documents/users/$(auth.uid)).data.role == 'sales_rep';
+        exists(/databases/$(db)/documents/users/$(auth.uid)) && 
+        get(/databases/$(db)/documents/users/$(auth.uid)).data.role == 'sales_rep';
+    }
+
+    function hAccountant(db, auth) {
+      return auth != null && 
+        exists(/databases/$(db)/documents/users/$(auth.uid)) && 
+        get(/databases/$(db)/documents/users/$(auth.uid)).data.role == 'accountant';
+    }
+
+    function hOperator(db, auth) {
+      return auth != null && 
+        exists(/databases/$(db)/documents/users/$(auth.uid)) && 
+        get(/databases/$(db)/documents/users/$(auth.uid)).data.role == 'operator';
     }
 
     function incoming() {
@@ -131,17 +143,32 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-      return data.username is string && data.username.size() > 0
-          && data.email is string && data.email.size() > 0
-          && data.role in ['admin', 'manager', 'sales_rep', 'operator']
-          && data.status in ['active', 'inactive', 'pending']
-          && (!('displayName' in data) || data.displayName is string)
-          && (!('phone' in data) || data.phone is string)
-          && (!('region' in data) || data.region is string)
-          && (!('createdAt' in data) || data.createdAt is timestamp)
-          && (!('lastLogin' in data) || data.lastLogin is timestamp || data.lastLogin == null)
-          && (!('updatedAt' in data) || data.updatedAt is timestamp || data.updatedAt == null)
-          && (!('id' in data) || data.id is string);
+      return (!('username' in data) || (data.username is string && data.username.size() > 0))
+          && (!('email' in data) || (data.email is string && data.email.size() > 0))
+          && (!('role' in data) || data.role in ['admin', 'manager', 'sales_rep', 'operator', 'accountant'])
+          && (!('status' in data) || data.status in ['active', 'inactive', 'pending'])
+          && (!('displayName' in data) || data.displayName is string || data.displayName == null)
+          && (!('phone' in data) || data.phone is string || data.phone == null)
+          && (!('region' in data) || data.region is string || data.region == null)
+          && (!('createdAt' in data) || data.createdAt is timestamp || data.createdAt is string || data.createdAt == null)
+          && (!('lastLogin' in data) || data.lastLogin is timestamp || data.lastLogin is string || data.lastLogin == null)
+          && (!('updatedAt' in data) || data.updatedAt is timestamp || data.updatedAt is string || data.updatedAt == null)
+          && (!('passwordOverride' in data) || data.passwordOverride is string || data.passwordOverride == null)
+          && (!('id' in data) || data.id is string || data.id == null);
+    }
+
+    function isValidMaterialRequest(data) {
+      return data.technicianId is string && data.technicianId.size() > 0
+          && data.technicianName is string && data.technicianName.size() > 0
+          && data.status in ['pending', 'approved', 'rejected']
+          && data.items is list
+          && (!('projectId' in data) || data.projectId is string)
+          && (!('projectName' in data) || data.projectName is string)
+          && (!('reason' in data) || data.reason is string)
+          && (!('createdAt' in data) || data.createdAt is timestamp || data.createdAt == null)
+          && (!('resolvedAt' in data) || data.resolvedAt is timestamp || data.resolvedAt == null)
+          && (!('resolvedBy' in data) || data.resolvedBy is string || data.resolvedBy == null)
+          && (!('adminNote' in data) || data.adminNote is string);
     }
 
     function isValidSettings(data) {
@@ -219,8 +246,15 @@ service cloud.firestore {
 
     match /equipment/{equipmentId} {
       allow read: if isSignedIn();
-      allow create, update: if hActive(database, request.auth) && hAdmin(database, request.auth) && isValidEquipment(incoming());
-      allow delete: if hActive(database, request.auth) && hAdmin(database, request.auth);
+      allow create, update: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth)) && isValidEquipment(incoming());
+      allow delete: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth));
+    }
+
+    match /material_requests/{requestId} {
+      allow read: if hActive(database, request.auth);
+      allow create: if hActive(database, request.auth) && isValidMaterialRequest(incoming());
+      allow update: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth)) && isValidMaterialRequest(incoming());
+      allow delete: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth));
     }
 
     match /projects/{projectId} {
@@ -228,6 +262,7 @@ service cloud.firestore {
       allow create: if hActive(database, request.auth) && (!isSalesRep(database, request.auth) || incoming().assignedSalesId == request.auth.uid) && isValidProject(incoming());
       allow update: if hActive(database, request.auth) && (
         hAdmin(database, request.auth) || 
+        hOperator(database, request.auth) ||
         (existing().assignedSalesId == request.auth.uid && incoming().assignedSalesId == request.auth.uid)
       ) && isValidProject(incoming());
       allow delete: if hActive(database, request.auth) && hAdmin(database, request.auth);
@@ -246,6 +281,7 @@ service cloud.firestore {
       allow create: if hActive(database, request.auth) && (!isSalesRep(database, request.auth) || incoming().assignedToId == request.auth.uid) && isValidProjectTask(incoming(), request.auth);
       allow update: if hActive(database, request.auth) && (
         hAdmin(database, request.auth) || 
+        hOperator(database, request.auth) ||
         (existing().assignedToId == request.auth.uid && incoming().assignedToId == request.auth.uid)
       );
       allow delete: if hActive(database, request.auth) && (
@@ -283,9 +319,9 @@ service cloud.firestore {
 
     match /settings/{docId} {
       allow read: if isSignedIn();
-      allow write: if hActive(database, request.auth) && (
-        (hAdmin(database, request.auth) && isValidSettings(incoming())) ||
-        (docId == 'drive_' + request.auth.uid)
+      allow write: if isSignedIn() && (
+        docId != 'general' ||
+        (hActive(database, request.auth) && hAdmin(database, request.auth) && isValidSettings(incoming()))
       );
     }
   }
