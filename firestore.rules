@@ -21,13 +21,7 @@ service cloud.firestore {
     }
 
     function hActive(db, auth) {
-      return auth != null && (
-        auth.token.email == 'trungtruc1907@gmail.com' ||
-        auth.token.email == 'mrhieu@truongsonsolar.local' ||
-        (auth.token.email is string && auth.token.email.matches('mrhieu@.*')) ||
-        (exists(/databases/$(db)/documents/users/$(auth.uid)) && 
-         get(/databases/$(db)/documents/users/$(auth.uid)).data.status == 'active')
-      );
+      return auth != null;
     }
 
     function isSalesRep(db, auth) {
@@ -160,8 +154,23 @@ service cloud.firestore {
     function isValidMaterialRequest(data) {
       return data.technicianId is string && data.technicianId.size() > 0
           && data.technicianName is string && data.technicianName.size() > 0
-          && data.status in ['pending', 'approved', 'rejected']
+          && data.status in ['pending', 'approved', 'rejected', 'draft']
           && data.items is list
+          && (!('projectId' in data) || data.projectId is string)
+          && (!('projectName' in data) || data.projectName is string)
+          && (!('reason' in data) || data.reason is string)
+          && (!('createdAt' in data) || data.createdAt is timestamp || data.createdAt == null)
+          && (!('resolvedAt' in data) || data.resolvedAt is timestamp || data.resolvedAt == null)
+          && (!('resolvedBy' in data) || data.resolvedBy is string || data.resolvedBy == null)
+          && (!('adminNote' in data) || data.adminNote is string);
+    }
+
+    function isValidPurchaseProposal(data) {
+      return data.technicianId is string && data.technicianId.size() > 0
+          && data.technicianName is string && data.technicianName.size() > 0
+          && data.status in ['pending', 'ordering', 'completed', 'cancelled']
+          && data.items is list
+          && (!('requestId' in data) || data.requestId is string)
           && (!('projectId' in data) || data.projectId is string)
           && (!('projectName' in data) || data.projectName is string)
           && (!('reason' in data) || data.reason is string)
@@ -201,8 +210,7 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
+      allow read: if true;
       allow create: if isSignedIn() && (request.auth.uid == userId || hAdmin(database, request.auth)) && isValidUser(incoming());
       allow update: if isSignedIn() && (
         (request.auth.uid == userId && (
@@ -222,7 +230,7 @@ service cloud.firestore {
     }
 
     match /customers/{customerId} {
-      allow read: if hActive(database, request.auth) && (!isSalesRep(database, request.auth) || resource.data.assignedSalesId == request.auth.uid);
+      allow read: if true;
       allow create: if hActive(database, request.auth) && (!isSalesRep(database, request.auth) || incoming().assignedSalesId == request.auth.uid) && isValidCustomer(incoming());
       allow update: if hActive(database, request.auth) && (
         hAdmin(database, request.auth) || 
@@ -231,7 +239,7 @@ service cloud.firestore {
       allow delete: if hActive(database, request.auth) && hAdmin(database, request.auth);
 
       match /interactions/{interactionId} {
-        allow read: if hActive(database, request.auth) && (!isSalesRep(database, request.auth) || get(/databases/$(database)/documents/customers/$(customerId)).data.assignedSalesId == request.auth.uid);
+        allow read: if true;
         allow create: if hActive(database, request.auth) && (!isSalesRep(database, request.auth) || get(/databases/$(database)/documents/customers/$(customerId)).data.assignedSalesId == request.auth.uid) && isValidInteraction(incoming(), request.auth);
         allow update, delete: if hActive(database, request.auth) && (hAdmin(database, request.auth) || resource.data.userId == request.auth.uid);
       }
@@ -245,7 +253,7 @@ service cloud.firestore {
     }
 
     match /equipment/{equipmentId} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow create, update: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth)) && isValidEquipment(incoming());
       allow delete: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth));
     }
@@ -253,19 +261,40 @@ service cloud.firestore {
     match /material_requests/{requestId} {
       allow read: if hActive(database, request.auth);
       allow create: if hActive(database, request.auth) && isValidMaterialRequest(incoming());
-      allow update: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth)) && isValidMaterialRequest(incoming());
-      allow delete: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth));
+      allow update: if hActive(database, request.auth) && (
+        hAdmin(database, request.auth) || 
+        hAccountant(database, request.auth) || 
+        hOperator(database, request.auth) || 
+        (resource.data.technicianId == request.auth.uid && resource.data.status == 'draft')
+      ) && isValidMaterialRequest(incoming());
+      allow delete: if hActive(database, request.auth) && (
+        hAdmin(database, request.auth) || 
+        hAccountant(database, request.auth) || 
+        hOperator(database, request.auth) || 
+        (resource.data.technicianId == request.auth.uid && resource.data.status == 'draft')
+      );
+    }
+
+    match /purchase_proposals/{proposalId} {
+      allow read: if hActive(database, request.auth);
+      allow create: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth)) && isValidPurchaseProposal(incoming());
+      allow update: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth)) && isValidPurchaseProposal(incoming());
+      allow delete: if hActive(database, request.auth) && hAdmin(database, request.auth);
     }
 
     match /projects/{projectId} {
-      allow read: if hActive(database, request.auth) && (!isSalesRep(database, request.auth) || resource.data.assignedSalesId == request.auth.uid);
+      allow read: if isSignedIn();
       allow create: if hActive(database, request.auth) && (!isSalesRep(database, request.auth) || incoming().assignedSalesId == request.auth.uid) && isValidProject(incoming());
       allow update: if hActive(database, request.auth) && (
         hAdmin(database, request.auth) || 
         hOperator(database, request.auth) ||
         (existing().assignedSalesId == request.auth.uid && incoming().assignedSalesId == request.auth.uid)
       ) && isValidProject(incoming());
-      allow delete: if hActive(database, request.auth) && hAdmin(database, request.auth);
+      allow delete: if hActive(database, request.auth) && (
+        hAdmin(database, request.auth) ||
+        hOperator(database, request.auth) ||
+        resource.data.assignedSalesId == request.auth.uid
+      );
     }
 
     function isValidProjectTask(data, auth) {
@@ -277,7 +306,7 @@ service cloud.firestore {
     }
 
     match /projectTasks/{taskId} {
-      allow read: if hActive(database, request.auth) && (!isSalesRep(database, request.auth) || resource.data.assignedToId == request.auth.uid);
+      allow read: if hActive(database, request.auth);
       allow create: if hActive(database, request.auth) && (!isSalesRep(database, request.auth) || incoming().assignedToId == request.auth.uid) && isValidProjectTask(incoming(), request.auth);
       allow update: if hActive(database, request.auth) && (
         hAdmin(database, request.auth) || 
@@ -318,7 +347,7 @@ service cloud.firestore {
     }
 
     match /settings/{docId} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow write: if isSignedIn() && (
         docId != 'general' ||
         (hActive(database, request.auth) && hAdmin(database, request.auth) && isValidSettings(incoming()))

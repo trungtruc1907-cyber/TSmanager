@@ -185,9 +185,56 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["title", "message", "type", "createdBy", "createdByName"]
+    },
+    "MaterialRequest": {
+      "title": "Material Request",
+      "description": "Technician request for site materials.",
+      "type": "object",
+      "properties": {
+        "technicianId": { "type": "string" },
+        "technicianName": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected", "draft"] },
+        "items": { "type": "array" },
+        "projectId": { "type": "string" },
+        "projectName": { "type": "string" },
+        "reason": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "resolvedAt": { "type": "string", "format": "date-time" },
+        "resolvedBy": { "type": "string" },
+        "adminNote": { "type": "string" }
+      },
+      "required": ["technicianId", "technicianName", "status", "items"]
+    },
+    "PurchaseProposal": {
+      "title": "Purchase Proposal",
+      "description": "Proposal for purchase of out of stock equipment.",
+      "type": "object",
+      "properties": {
+        "requestId": { "type": "string" },
+        "technicianId": { "type": "string" },
+        "technicianName": { "type": "string" },
+        "projectId": { "type": "string" },
+        "projectName": { "type": "string" },
+        "reason": { "type": "string" },
+        "items": { "type": "array" },
+        "status": { "type": "string", "enum": ["pending", "ordering", "completed", "cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "resolvedAt": { "type": "string", "format": "date-time" },
+        "resolvedBy": { "type": "string" },
+        "adminNote": { "type": "string" }
+      },
+      "required": ["technicianId", "technicianName", "status", "items"]
     }
   },
   "firestore": {
+    "material_requests": {
+      "schema": "MaterialRequest",
+      "description": "Technician requests for equipment and panels."
+    },
+    "purchase_proposals": {
+      "schema": "PurchaseProposal",
+      "description": "Proposals for purchase of out of stock equipment."
+    },
     "notifications": {
       "schema": "Notification",
       "description": "Log of staff-generated real-time system alerts."

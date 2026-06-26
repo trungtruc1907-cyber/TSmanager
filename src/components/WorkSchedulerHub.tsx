@@ -83,6 +83,7 @@ export default function WorkSchedulerHub({ userId, userRole }: Props) {
 
   // Real-time Listeners
   useEffect(() => {
+    if (!userId) return;
     setLoading(true);
     
     const qTasks = userRole === 'sales_rep'

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, query, orderBy, updateDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { Equipment } from '../types';
+import { Equipment, Customer } from '../types';
 import * as XLSX from 'xlsx';
 import { 
   Plus, 
@@ -35,7 +35,12 @@ import {
   Download,
   ArrowLeft,
   ChevronDown,
-  Phone
+  Phone,
+  Truck,
+  Building,
+  Info,
+  Printer,
+  FolderOpen
 } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 
@@ -50,6 +55,470 @@ export const getUnit = (item: { type?: string; unit?: string } | undefined) => {
   return 'cái';
 };
 
+interface PrintRequestViewProps {
+  request: any;
+  onClose: () => void;
+}
+
+function PrintRequestView({ request, onClose }: PrintRequestViewProps) {
+  const mainItems = request.items?.filter((item: any) => 
+    ['panel', 'inverter', 'battery'].includes(item.type?.toLowerCase())
+  ) || [];
+
+  const subItems = request.items?.filter((item: any) => 
+    !['panel', 'inverter', 'battery'].includes(item.type?.toLowerCase())
+  ) || [];
+
+  const dateObj = request.createdAt?.toDate 
+    ? request.createdAt.toDate() 
+    : request.createdAt 
+      ? new Date(request.createdAt) 
+      : new Date();
+
+  const day = dateObj.getDate().toString().padStart(2, '0');
+  const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+  const year = dateObj.getFullYear();
+
+  return (
+    <div className="proposal-container flex flex-col gap-6">
+      {/* Top action bar - Hidden during print */}
+      <div className="no-print bg-white p-4 rounded-2xl border border-slate-200 flex justify-between items-center shadow-xs">
+        <button
+          onClick={onClose}
+          className="flex items-center gap-2 text-slate-600 hover:text-slate-900 font-bold text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer"
+        >
+          <ArrowLeft className="h-4 w-4" /> Quay lại
+        </button>
+        <button
+          onClick={() => {
+            window.focus();
+            window.print();
+          }}
+          className="bg-[#0054a6] hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 text-xs font-black uppercase tracking-wider shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+        >
+          <Printer className="h-4 w-4" /> In phiếu yêu cầu
+        </button>
+      </div>
+
+      {/* Printable Sheet */}
+      <div className="proposal-print bg-white p-8 border border-slate-200 rounded-2xl shadow-sm max-w-[850px] mx-auto w-full font-sans text-black leading-relaxed flex flex-col justify-between min-h-[1100px]">
+        {/* Header Block matching the image */}
+        <div>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-4">
+            {/* Logo area */}
+            <div className="flex items-center gap-3">
+              <div className="w-20 h-20 rounded-full border-4 border-[#0054a6] flex items-center justify-center relative shrink-0">
+                <div className="w-16 h-16 rounded-full border border-red-500 flex flex-col items-center justify-center">
+                  <span className="text-[#0054a6] font-extrabold text-2xl leading-none tracking-tight">TS</span>
+                  <span className="text-[5px] text-red-500 font-bold uppercase tracking-tighter mt-0.5">TRUONG SON</span>
+                </div>
+              </div>
+              <div className="text-[7px] text-slate-500 font-black uppercase tracking-widest text-center mt-1">
+                TRUONG SON COMPANY
+              </div>
+            </div>
+
+            {/* Title / Company Slogan info */}
+            <div className="flex-1 text-center md:text-left md:pl-4">
+              <h2 className="text-[#0054a6] text-xs font-bold uppercase tracking-wider leading-none">CÔNG TY CỔ PHẦN</h2>
+              <h1 className="text-[#0054a6] text-xl font-extrabold uppercase tracking-tight mt-1 leading-none">ĐẦU TƯ TM TRƯỜNG SƠN</h1>
+              <h3 className="text-[#40b04c] text-[10px] font-black uppercase tracking-widest mt-2 leading-none">GIẢI PHÁP ĐIỆN NĂNG LƯỢNG MẶT TRỜI</h3>
+              <p className="text-slate-500 text-[9px] italic font-medium mt-1">Hiệu quả hôm nay - Bền vững ngày mai</p>
+              
+              {/* Badges */}
+              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 text-[7px] font-extrabold text-slate-600 uppercase tracking-wider justify-center md:justify-start">
+                <span className="flex items-center gap-1">☀️ TƯ VẤN CHUYÊN NGHIỆP</span>
+                <span className="flex items-center gap-1">⚙️ THIẾT KẾ TỐI ƯU</span>
+                <span className="flex items-center gap-1">🛡️ THIẾT BỊ CHÍNH HÃNG</span>
+                <span className="flex items-center gap-1">⚡ TIẾT KIỆM ĐIỆN TỐI ƯU</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Contact Strip with exact colors */}
+          <div className="bg-[#0054a6] text-white py-1 px-4 rounded-md text-[9px] flex flex-col sm:flex-row justify-between items-center font-bold tracking-tight gap-2 shadow-xs mb-8">
+            <div className="flex items-center gap-1">
+              <MapPin className="h-3 w-3 text-amber-300" />
+              <span>Đường Nguyễn Thiếp, P. Hạc Thành, Thanh Hóa</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <ExternalLink className="h-3 w-3 text-amber-300" />
+              <span>solartruongson.vn</span>
+            </div>
+            <div className="bg-[#e30613] text-white px-2.5 py-0.5 flex items-center gap-1 rounded-sm font-black text-[9px] shrink-0">
+              <Phone className="h-2.5 w-2.5 text-white fill-white" />
+              <span>0945.880.386 - 0982.075.755</span>
+            </div>
+          </div>
+
+          {/* Sheet Title */}
+          <div className="text-center space-y-2 mb-8">
+            <h1 className="text-2xl font-black uppercase tracking-[0.2em] text-slate-900">PHIẾU YÊU CẦU VẬT TƯ</h1>
+            <div className="w-24 h-1 bg-[#0054a6] mx-auto rounded-full" />
+          </div>
+
+          {/* Meta Information (Tên dự án, Mã phiếu, Ghi chú) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-bold text-slate-800 mb-6 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+            <div className="space-y-1.5">
+              <p className="flex items-center gap-2">
+                <span className="text-slate-400 font-medium uppercase text-[10px] tracking-wider shrink-0 w-20">Tên dự án:</span>
+                <span className="text-slate-900 font-black">{request.projectName || 'Chưa liên kết'}</span>
+              </p>
+              <p className="flex items-center gap-2">
+                <span className="text-slate-400 font-medium uppercase text-[10px] tracking-wider shrink-0 w-20">Ghi Chú:</span>
+                <span className="text-slate-700 italic font-medium">"{request.reason || 'Không có ghi chú thêm'}"</span>
+              </p>
+            </div>
+            <div className="space-y-1.5 md:text-right">
+              <p className="flex md:justify-end items-center gap-2">
+                <span className="text-slate-400 font-medium uppercase text-[10px] tracking-wider shrink-0">Mã phiếu:</span>
+                <span className="text-[#0054a6] font-black tracking-tight text-sm uppercase">#{request.id?.substring(0, 6).toUpperCase()}</span>
+              </p>
+              <p className="flex md:justify-end items-center gap-2">
+                <span className="text-slate-400 font-medium uppercase text-[10px] tracking-wider shrink-0">Ngày tạo:</span>
+                <span className="text-slate-900 font-semibold">{dateObj.toLocaleString('vi-VN')}</span>
+              </p>
+            </div>
+          </div>
+
+          {/* Items Table */}
+          <div className="overflow-x-auto border border-black rounded-lg">
+            <table className="min-w-full divide-y divide-black border-collapse text-xs">
+              <thead className="bg-slate-50 font-black text-slate-900 uppercase tracking-wider text-[10px]">
+                <tr className="divide-x divide-black">
+                  <th scope="col" className="py-2.5 px-2 text-center w-12 border border-black font-extrabold bg-slate-100">Stt</th>
+                  <th scope="col" className="py-2.5 px-4 text-left border border-black font-extrabold bg-slate-100">Tên vật tư / Thiết bị</th>
+                  <th scope="col" className="py-2.5 px-2 text-center w-16 border border-black font-extrabold bg-slate-100">SL</th>
+                  <th scope="col" className="py-2.5 px-3 text-center w-20 border border-black font-extrabold bg-slate-100">Đơn vị</th>
+                  <th scope="col" className="py-2.5 px-4 text-center w-28 border border-black font-extrabold bg-slate-100">Trạng thái kho</th>
+                  <th scope="col" className="py-2.5 px-4 text-center w-36 border border-black font-extrabold bg-slate-100">Ghi chú</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-black bg-white text-slate-800 font-medium">
+                {/* GROUP I: THIẾT BỊ CHÍNH */}
+                {mainItems.length > 0 && (
+                  <>
+                    <tr className="bg-slate-50/80 divide-x divide-black font-extrabold text-slate-900">
+                      <td className="py-2 px-2 text-center border border-black font-extrabold text-slate-950">I</td>
+                      <td colSpan={5} className="py-2 px-4 border border-black text-[11px] uppercase tracking-wider font-extrabold text-slate-950">Thiết bị chính</td>
+                    </tr>
+                    {mainItems.map((item: any, idx: number) => (
+                      <tr key={`main-${idx}`} className="hover:bg-slate-50/50 divide-x divide-black">
+                        <td className="py-2 px-2 text-center border border-black font-semibold text-slate-900">{idx + 1}</td>
+                        <td className="py-2 px-4 border border-black">
+                          <div className="font-extrabold text-slate-950">{item.brand}</div>
+                          <div className="text-[11px] text-slate-600 font-medium mt-0.5">{item.model}</div>
+                        </td>
+                        <td className="py-2 px-2 text-center border border-black font-black text-slate-950 text-sm">{item.quantity}</td>
+                        <td className="py-2 px-3 text-center border border-black text-slate-600 font-bold uppercase">{item.unit || getUnit(item)}</td>
+                        <td className="py-2 px-4 border border-black text-center text-[10px] text-slate-400 italic">Sẵn sàng</td>
+                        <td className="py-2 px-4 border border-black"></td>
+                      </tr>
+                    ))}
+                  </>
+                )}
+
+                {/* GROUP II: THIẾT BỊ PHỤ & VẬT TƯ PHỤ */}
+                {subItems.length > 0 && (
+                  <>
+                    <tr className="bg-slate-50/80 divide-x divide-black font-extrabold text-slate-900">
+                      <td className="py-2 px-2 text-center border border-black font-extrabold text-slate-950">{mainItems.length > 0 ? 'II' : 'I'}</td>
+                      <td colSpan={5} className="py-2 px-4 border border-black text-[11px] uppercase tracking-wider font-extrabold text-slate-950">Thiết bị phụ & Vật tư phụ</td>
+                    </tr>
+                    {subItems.map((item: any, idx: number) => (
+                      <tr key={`sub-${idx}`} className="hover:bg-slate-50/50 divide-x divide-black">
+                        <td className="py-2 px-2 text-center border border-black font-semibold text-slate-900">{idx + 1}</td>
+                        <td className="py-2 px-4 border border-black">
+                          <div className="font-extrabold text-slate-950">{item.brand}</div>
+                          <div className="text-[11px] text-slate-600 font-medium mt-0.5">{item.model}</div>
+                        </td>
+                        <td className="py-2 px-2 text-center border border-black font-black text-slate-950 text-sm">{item.quantity}</td>
+                        <td className="py-2 px-3 text-center border border-black text-slate-600 font-bold uppercase">{item.unit || getUnit(item)}</td>
+                        <td className="py-2 px-4 border border-black text-center text-[10px] text-slate-400 italic">Sẵn sàng</td>
+                        <td className="py-2 px-4 border border-black"></td>
+                      </tr>
+                    ))}
+                  </>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Footer Area with Signatures */}
+        <div className="mt-12 pt-8 border-t border-dashed border-slate-200">
+          <div className="flex justify-between items-start text-xs font-bold text-slate-800">
+            <div className="text-center w-48 space-y-1">
+              <p className="uppercase text-slate-400 text-[10px] tracking-wider font-extrabold">Người phê duyệt</p>
+              <p className="text-[10px] text-slate-400 italic font-medium">(Ký, ghi rõ họ tên)</p>
+              <div className="h-16" />
+              <p className="text-slate-900 font-black">{request.resolvedBy || '...........................'}</p>
+            </div>
+            
+            <div className="text-center w-48 space-y-1">
+              <p className="text-slate-900 font-semibold italic text-[11px]">Ngày {day} Tháng {month} Năm {year}</p>
+              <p className="uppercase text-slate-500 text-[10px] tracking-wider font-extrabold">Người yêu cầu</p>
+              <p className="text-[10px] text-slate-400 italic font-medium">(Ký, ghi rõ họ tên)</p>
+              <div className="h-16" />
+              <p className="text-blue-600 font-black">{request.technicianName}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface PrintProposalsViewProps {
+  proposals: any[];
+  onClose: () => void;
+}
+
+function PrintProposalsView({ proposals, onClose }: PrintProposalsViewProps) {
+  // Aggregate items
+  const aggregatedItemsMap: Record<string, any> = {};
+  
+  proposals.forEach(p => {
+    p.items?.forEach((item: any) => {
+      const type = item.type || 'other';
+      const brand = item.brand || '';
+      const model = item.model || '';
+      const key = `${type.toLowerCase()}|${brand.toLowerCase()}|${model.toLowerCase()}`;
+      
+      if (!aggregatedItemsMap[key]) {
+        aggregatedItemsMap[key] = {
+          type,
+          brand,
+          model,
+          unit: item.unit || '',
+          quantity: 0,
+          projects: new Set<string>()
+        };
+      }
+      aggregatedItemsMap[key].quantity += Number(item.quantity) || 0;
+      if (p.projectName) {
+        aggregatedItemsMap[key].projects.add(p.projectName);
+      }
+    });
+  });
+
+  const allAggregatedItems = Object.values(aggregatedItemsMap);
+  const mainItems = allAggregatedItems.filter((item: any) => 
+    ['panel', 'inverter', 'battery'].includes(item.type?.toLowerCase())
+  );
+  const subItems = allAggregatedItems.filter((item: any) => 
+    !['panel', 'inverter', 'battery'].includes(item.type?.toLowerCase())
+  );
+
+  const dateObj = new Date();
+  const day = dateObj.getDate().toString().padStart(2, '0');
+  const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+  const year = dateObj.getFullYear();
+
+  const proposalCodes = proposals.map(p => `#${p.id?.substring(0, 6).toUpperCase()}`).join(', ');
+  const projectNames = Array.from(new Set(proposals.map(p => p.projectName).filter(Boolean))).join(', ');
+
+  return (
+    <div className="proposal-container flex flex-col gap-6">
+      {/* Top action bar - Hidden during print */}
+      <div className="no-print bg-white p-4 rounded-2xl border border-slate-200 flex justify-between items-center shadow-xs">
+        <button
+          onClick={onClose}
+          className="flex items-center gap-2 text-slate-600 hover:text-slate-900 font-bold text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer"
+        >
+          <ArrowLeft className="h-4 w-4" /> Quay lại
+        </button>
+        <button
+          onClick={() => {
+            window.focus();
+            window.print();
+          }}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 text-xs font-black uppercase tracking-wider shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+        >
+          <Printer className="h-4 w-4" /> In phiếu đề nghị ({proposals.length} phiếu)
+        </button>
+      </div>
+
+      {/* Printable Sheet */}
+      <div className="proposal-print bg-white p-8 border border-slate-200 rounded-2xl shadow-sm max-w-[850px] mx-auto w-full font-sans text-black leading-relaxed flex flex-col justify-between min-h-[1100px]">
+        {/* Header Block matching the image */}
+        <div>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-4">
+            {/* Logo area */}
+            <div className="flex items-center gap-3">
+              <div className="w-20 h-20 rounded-full border-4 border-[#0054a6] flex items-center justify-center relative shrink-0">
+                <div className="w-16 h-16 rounded-full border border-red-500 flex flex-col items-center justify-center">
+                  <span className="text-[#0054a6] font-extrabold text-2xl leading-none tracking-tight">TS</span>
+                  <span className="text-[5px] text-red-500 font-bold uppercase tracking-tighter mt-0.5">TRUONG SON</span>
+                </div>
+              </div>
+              <div className="text-[7px] text-slate-500 font-black uppercase tracking-widest text-center mt-1">
+                TRUONG SON COMPANY
+              </div>
+            </div>
+
+            {/* Title / Company Slogan info */}
+            <div className="flex-1 text-center md:text-left md:pl-4">
+              <h2 className="text-[#0054a6] text-xs font-bold uppercase tracking-wider leading-none">CÔNG TY CỔ PHẦN</h2>
+              <h1 className="text-[#0054a6] text-xl font-extrabold uppercase tracking-tight mt-1 leading-none">ĐẦU TƯ TM TRƯỜNG SƠN</h1>
+              <h3 className="text-[#40b04c] text-[10px] font-black uppercase tracking-widest mt-2 leading-none">GIẢI PHÁP ĐIỆN NĂNG LƯỢNG MẶT TRỜI</h3>
+              <p className="text-slate-500 text-[9px] italic font-medium mt-1">Hiệu quả hôm nay - Bền vững ngày mai</p>
+              
+              {/* Badges */}
+              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 text-[7px] font-extrabold text-slate-600 uppercase tracking-wider justify-center md:justify-start">
+                <span className="flex items-center gap-1">☀️ TƯ VẤN CHUYÊN NGHIỆP</span>
+                <span className="flex items-center gap-1">⚙️ THIẾT KẾ TỐI ƯU</span>
+                <span className="flex items-center gap-1">🛡️ THIẾT BỊ CHÍNH HÃNG</span>
+                <span className="flex items-center gap-1">⚡ TIẾT KIỆM ĐIỆN TỐI ƯU</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Contact Strip with exact colors */}
+          <div className="bg-[#0054a6] text-white py-1 px-4 rounded-md text-[9px] flex flex-col sm:flex-row justify-between items-center font-bold tracking-tight gap-2 shadow-xs mb-8">
+            <div className="flex items-center gap-1">
+              <MapPin className="h-3 w-3 text-amber-300" />
+              <span>Đường Nguyễn Thiếp, P. Hạc Thành, Thanh Hóa</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <ExternalLink className="h-3 w-3 text-amber-300" />
+              <span>solartruongson.vn</span>
+            </div>
+            <div className="bg-[#e30613] text-white px-2.5 py-0.5 flex items-center gap-1 rounded-sm font-black text-[9px] shrink-0">
+              <Phone className="h-2.5 w-2.5 text-white fill-white" />
+              <span>0945.880.386 - 0982.075.755</span>
+            </div>
+          </div>
+
+          {/* Sheet Title */}
+          <div className="text-center space-y-2 mb-8">
+            <h1 className="text-2xl font-black uppercase tracking-[0.1em] text-slate-900">PHIẾU ĐỀ NGHỊ NHẬP VẬT TƯ</h1>
+            <div className="w-24 h-1 bg-[#40b04c] mx-auto rounded-full" />
+          </div>
+
+          {/* Meta Information */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-bold text-slate-800 mb-6 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+            <div className="space-y-1.5">
+              <p className="flex items-start gap-2">
+                <span className="text-slate-400 font-medium uppercase text-[10px] tracking-wider shrink-0 w-24">Dự án liên quan:</span>
+                <span className="text-slate-900 font-black">{projectNames || 'Tổng hợp nhiều dự án'}</span>
+              </p>
+              <p className="flex items-start gap-2">
+                <span className="text-slate-400 font-medium uppercase text-[10px] tracking-wider shrink-0 w-24">Số lượng phiếu:</span>
+                <span className="text-slate-700 font-bold">{proposals.length} phiếu yêu cầu</span>
+              </p>
+            </div>
+            <div className="space-y-1.5 md:text-right">
+              <p className="flex md:justify-end items-start gap-2">
+                <span className="text-slate-400 font-medium uppercase text-[10px] tracking-wider shrink-0">Các mã đề xuất:</span>
+                <span className="text-[#0054a6] font-black tracking-tight uppercase text-right max-w-xs">{proposalCodes}</span>
+              </p>
+              <p className="flex md:justify-end items-center gap-2">
+                <span className="text-slate-400 font-medium uppercase text-[10px] tracking-wider shrink-0">Ngày lập bảng:</span>
+                <span className="text-slate-900 font-semibold">{dateObj.toLocaleString('vi-VN')}</span>
+              </p>
+            </div>
+          </div>
+
+          {/* Items Table */}
+          <div className="overflow-x-auto border border-black rounded-lg">
+            <table className="min-w-full divide-y divide-black border-collapse text-xs">
+              <thead className="bg-slate-50 font-black text-slate-900 uppercase tracking-wider text-[10px]">
+                <tr className="divide-x divide-black">
+                  <th scope="col" className="py-2.5 px-2 text-center w-12 border border-black font-extrabold bg-slate-100">Stt</th>
+                  <th scope="col" className="py-2.5 px-4 text-left border border-black font-extrabold bg-slate-100">Tên vật tư / Thiết bị đề xuất</th>
+                  <th scope="col" className="py-2.5 px-2 text-center w-16 border border-black font-extrabold bg-slate-100">Tổng SL</th>
+                  <th scope="col" className="py-2.5 px-3 text-center w-20 border border-black font-extrabold bg-slate-100">Đơn vị</th>
+                  <th scope="col" className="py-2.5 px-4 text-left border border-black font-extrabold bg-slate-100">Dự án yêu cầu</th>
+                  <th scope="col" className="py-2.5 px-4 text-center w-32 border border-black font-extrabold bg-slate-100">Ghi chú</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-black bg-white text-slate-800 font-medium">
+                {/* GROUP I: THIẾT BỊ CHÍNH */}
+                {mainItems.length > 0 && (
+                  <>
+                    <tr className="bg-slate-50/80 divide-x divide-black font-extrabold text-slate-900">
+                      <td className="py-2 px-2 text-center border border-black font-extrabold text-slate-950">I</td>
+                      <td colSpan={5} className="py-2 px-4 border border-black text-[11px] uppercase tracking-wider font-extrabold text-slate-950">Thiết bị chính</td>
+                    </tr>
+                    {mainItems.map((item: any, idx: number) => (
+                      <tr key={`main-${idx}`} className="hover:bg-slate-50/50 divide-x divide-black">
+                        <td className="py-2 px-2 text-center border border-black font-semibold text-slate-900">{idx + 1}</td>
+                        <td className="py-2 px-4 border border-black">
+                          <div className="font-extrabold text-slate-950">{item.brand}</div>
+                          <div className="text-[11px] text-slate-600 font-medium mt-0.5">{item.model}</div>
+                        </td>
+                        <td className="py-2 px-2 text-center border border-black font-black text-rose-600 text-sm">{item.quantity}</td>
+                        <td className="py-2 px-3 text-center border border-black text-slate-600 font-bold uppercase">{item.unit || getUnit(item)}</td>
+                        <td className="py-2 px-4 border border-black text-left text-[11px] font-semibold text-slate-700">
+                          {Array.from(item.projects).join(', ') || 'Chưa rõ'}
+                        </td>
+                        <td className="py-2 px-4 border border-black"></td>
+                      </tr>
+                    ))}
+                  </>
+                )}
+
+                {/* GROUP II: THIẾT BỊ PHỤ & VẬT TƯ PHỤ */}
+                {subItems.length > 0 && (
+                  <>
+                    <tr className="bg-slate-50/80 divide-x divide-black font-extrabold text-slate-900">
+                      <td className="py-2 px-2 text-center border border-black font-extrabold text-slate-950">{mainItems.length > 0 ? 'II' : 'I'}</td>
+                      <td colSpan={5} className="py-2 px-4 border border-black text-[11px] uppercase tracking-wider font-extrabold text-slate-950">Thiết bị phụ & Vật tư phụ</td>
+                    </tr>
+                    {subItems.map((item: any, idx: number) => (
+                      <tr key={`sub-${idx}`} className="hover:bg-slate-50/50 divide-x divide-black">
+                        <td className="py-2 px-2 text-center border border-black font-semibold text-slate-900">{idx + 1}</td>
+                        <td className="py-2 px-4 border border-black">
+                          <div className="font-extrabold text-slate-950">{item.brand}</div>
+                          <div className="text-[11px] text-slate-600 font-medium mt-0.5">{item.model}</div>
+                        </td>
+                        <td className="py-2 px-2 text-center border border-black font-black text-rose-600 text-sm">{item.quantity}</td>
+                        <td className="py-2 px-3 text-center border border-black text-slate-600 font-bold uppercase">{item.unit || getUnit(item)}</td>
+                        <td className="py-2 px-4 border border-black text-left text-[11px] font-semibold text-slate-700">
+                          {Array.from(item.projects).join(', ') || 'Chưa rõ'}
+                        </td>
+                        <td className="py-2 px-4 border border-black"></td>
+                      </tr>
+                    ))}
+                  </>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Footer Area with Signatures */}
+        <div className="mt-12 pt-8 border-t border-dashed border-slate-200">
+          <div className="flex justify-between items-start text-xs font-bold text-slate-800">
+            <div className="text-center w-48 space-y-1">
+              <p className="uppercase text-slate-400 text-[10px] tracking-wider font-extrabold">Ban giám đốc</p>
+              <p className="text-[10px] text-slate-400 italic font-medium">(Ký, duyệt)</p>
+              <div className="h-16" />
+              <p className="text-slate-900 font-black">...........................</p>
+            </div>
+
+            <div className="text-center w-48 space-y-1">
+              <p className="uppercase text-slate-400 text-[10px] tracking-wider font-extrabold">Phòng kế toán</p>
+              <p className="text-[10px] text-slate-400 italic font-medium">(Ký, duyệt)</p>
+              <div className="h-16" />
+              <p className="text-slate-900 font-black">...........................</p>
+            </div>
+            
+            <div className="text-center w-48 space-y-1">
+              <p className="text-slate-900 font-semibold italic text-[11px]">Ngày {day} Tháng {month} Năm {year}</p>
+              <p className="uppercase text-slate-500 text-[10px] tracking-wider font-extrabold">Người đề nghị nhập</p>
+              <p className="text-[10px] text-slate-400 italic font-medium">(Ký, ghi rõ họ tên)</p>
+              <div className="h-16" />
+              <p className="text-blue-600 font-black">...........................</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface CatalogManagerProps {
   userId?: string;
   userRole?: string;
@@ -63,12 +532,15 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
   const [userName, setUserName] = useState<string>('Nhân viên');
   
   // Tabs for general warehouse vs material requests
-  const [activeTab, setActiveTab] = useState<'inventory' | 'requests'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'requests' | 'proposals'>('inventory');
 
   // Real-time collections for material requests
   const [projectsList, setProjectsList] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<Record<string, Customer>>({});
   const [materialRequests, setMaterialRequests] = useState<any[]>([]);
   const [requestsLoading, setRequestsLoading] = useState(true);
+  const [purchaseProposals, setPurchaseProposals] = useState<any[]>([]);
+  const [proposalsLoading, setProposalsLoading] = useState(true);
 
   // Request creation modal states
   const [isCreatingRequest, setIsCreatingRequest] = useState(false);
@@ -83,6 +555,10 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
     type: string;
     quantity: number;
   }[]>([]);
+  const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
+  const [printingRequest, setPrintingRequest] = useState<any | null>(null);
+  const [selectedProposals, setSelectedProposals] = useState<string[]>([]);
+  const [printingProposals, setPrintingProposals] = useState<any[] | null>(null);
   
   // Selection states inside request creation modal
   const [selectedEqId, setSelectedEqId] = useState('');
@@ -190,6 +666,22 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
     return () => unsubscribe();
   }, [userId]);
 
+  // Load Customers for mapping project names
+  useEffect(() => {
+    if (!userId) return;
+    const q = collection(db, 'customers');
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data: Record<string, Customer> = {};
+      snapshot.docs.forEach(doc => {
+        data[doc.id] = { id: doc.id, ...doc.data() } as Customer;
+      });
+      setCustomers(data);
+    }, (error) => {
+      console.error("Error loading customers for mapping project names:", error);
+    });
+    return () => unsubscribe();
+  }, [userId]);
+
   // Load Material Requests sync
   useEffect(() => {
     if (!userId) return;
@@ -201,6 +693,21 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
     }, (error) => {
       console.error("Error loading material requests:", error);
       setRequestsLoading(false);
+    });
+    return () => unsubscribe();
+  }, [userId]);
+
+  // Load Purchase Proposals sync
+  useEffect(() => {
+    if (!userId) return;
+    const q = query(collection(db, 'purchase_proposals'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setPurchaseProposals(list);
+      setProposalsLoading(false);
+    }, (error) => {
+      console.error("Error loading purchase proposals:", error);
+      setProposalsLoading(false);
     });
     return () => unsubscribe();
   }, [userId]);
@@ -364,40 +871,64 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
     setRequestItems(prev => prev.filter(ri => ri.equipmentId !== eqId));
   };
 
-  // Create material request in database
-  const handleCreateMaterialRequest = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Create or Update material request in database
+  const handleCreateMaterialRequest = async (e?: React.FormEvent, status: 'pending' | 'draft' = 'pending') => {
+    if (e) e.preventDefault();
     if (requestItems.length === 0) return;
 
     const project = projectsList.find(p => p.id === requestProjectId);
-    const projectName = project ? (project.name || project.customerName || 'Dự án') : '';
+    const cust = project ? customers[project.customerId] : null;
+    const projectName = cust ? `Công trình ${cust.name}` : (project ? (project.name || project.customerName || 'Dự án') : '');
 
     try {
+      const resolvedStatus = (status === 'draft') ? 'draft' : 'pending';
       const requestData = {
-        technicianId: userId!,
-        technicianName: userName,
-        projectId: requestProjectId,
-        projectName: projectName,
-        reason: requestReason.trim(),
-        items: requestItems,
-        status: 'pending' as const,
+        technicianId: userId || '',
+        technicianName: userName || 'Nhân viên',
+        projectId: requestProjectId || '',
+        projectName: projectName || '',
+        reason: (requestReason || '').trim(),
+        items: (requestItems || [])
+          .filter(Boolean)
+          .filter(item => !!item.equipmentId)
+          .map(item => {
+            const eq = equipmentList.find(e => e.id === item.equipmentId);
+            const isOutOfStock = eq ? (eq.stock || 0) <= 0 : true;
+            return {
+              equipmentId: item.equipmentId || '',
+              brand: item.brand || '',
+              model: item.model || '',
+              type: item.type || '',
+              quantity: item.quantity || 1,
+              unit: item.unit || 'cái',
+              isOutOfStock,
+              currentStock: eq ? (eq.stock || 0) : 0
+            };
+          }),
+        status: resolvedStatus,
         createdAt: serverTimestamp(),
         resolvedAt: null,
         resolvedBy: null,
         adminNote: ''
       };
 
-      await addDoc(collection(db, 'material_requests'), requestData);
+      if (editingRequestId) {
+        await updateDoc(doc(db, 'material_requests', editingRequestId), requestData);
+      } else {
+        await addDoc(collection(db, 'material_requests'), requestData);
+      }
 
-      // Notification to admin & manager
-      await addDoc(collection(db, 'notifications'), {
-        title: '📋 YÊU CẦU VẬT TƯ MỚI',
-        message: `Kỹ thuật ${userName} đã tạo phiếu yêu cầu vật tư mới cho công trình: ${projectName || 'Chưa liên kết'}. Nội dung: ${requestReason.trim()}`,
-        type: 'task',
-        createdAt: serverTimestamp(),
-        createdBy: userId!,
-        createdByName: userName
-      });
+      if (resolvedStatus === 'pending') {
+        // Notification to admin & manager
+        await addDoc(collection(db, 'notifications'), {
+          title: '📋 YÊU CẦU VẬT TƯ MỚI',
+          message: `Kỹ thuật ${userName || 'Nhân viên'} đã ${editingRequestId ? 'cập nhật' : 'tạo'} phiếu yêu cầu vật tư mới cho công trình: ${projectName || 'Chưa liên kết'}. Nội dung: ${(requestReason || '').trim()}`,
+          type: 'task',
+          createdAt: serverTimestamp(),
+          createdBy: userId || '',
+          createdByName: userName || 'Nhân viên'
+        });
+      }
 
       setIsRequestModalOpen(false);
       setIsCreatingRequest(false);
@@ -406,8 +937,15 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
       setRequestItems([]);
       setSelectedEqId('');
       setSelectedEqQty(1);
+      setEditingRequestId(null);
+
+      if (status === 'draft') {
+        alert("Đã lưu tạm dự thảo phiếu yêu cầu thành công!");
+      } else {
+        alert("Đã gửi phiếu yêu cầu vật tư thành công!");
+      }
     } catch (err) {
-      console.error("Error creating material request:", err);
+      console.error("Error creating/updating material request:", err);
     }
   };
 
@@ -428,6 +966,8 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
 
       // Deduct stock if approved
       if (isApproved) {
+        const outOfStockItems: any[] = [];
+
         for (const reqItem of resolvingRequest.items) {
           const eqDocRef = doc(db, 'equipment', reqItem.equipmentId);
           const eqSnap = await getDoc(eqDocRef);
@@ -435,13 +975,142 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
           if (eqSnap.exists()) {
             const currentData = eqSnap.data();
             const currentStock = currentData.stock || 0;
-            const newStock = Math.max(0, currentStock - reqItem.quantity);
+
+            if (currentStock > 0) {
+              // Còn tồn kho: Trừ tồn kho tối đa có thể
+              const deductQty = Math.min(reqItem.quantity, currentStock);
+              const newStock = currentStock - deductQty;
+
+              const transactionLog = {
+                id: Math.random().toString(36).substring(7),
+                type: 'export' as const,
+                quantity: deductQty,
+                note: `Cấp phát theo phiếu yêu cầu của ${resolvingRequest.technicianName || 'Nhân viên'}. Ghi chú: ${resolvingRequest.reason || ''}`,
+                createdAt: new Date().toISOString(),
+                createdBy: userId || '',
+                createdByName: userName || 'Nhân viên'
+              };
+
+              const updatedHistory = [transactionLog, ...(currentData.history || [])].slice(0, 50);
+
+              await updateDoc(eqDocRef, {
+                stock: newStock,
+                history: updatedHistory
+              });
+
+              // Nếu số lượng yêu cầu lớn hơn tồn kho có sẵn, phần còn lại chuyển thành hết hàng để đề nghị nhập kho
+              if (reqItem.quantity > deductQty) {
+                outOfStockItems.push({
+                  ...reqItem,
+                  quantity: reqItem.quantity - deductQty
+                });
+              }
+            } else {
+              // Hết tồn kho hoàn toàn
+              outOfStockItems.push(reqItem);
+            }
+          } else {
+            // Không tồn tại trong kho
+            outOfStockItems.push(reqItem);
+          }
+        }
+
+        // Tạo phiếu đề nghị nhập vật tư gửi kế toán nếu có hàng hết tồn kho
+        if (outOfStockItems.length > 0) {
+          const proposalData = {
+            requestId: resolvingRequest.id,
+            technicianId: resolvingRequest.technicianId || '',
+            technicianName: resolvingRequest.technicianName || 'Nhân viên',
+            projectId: resolvingRequest.projectId || '',
+            projectName: resolvingRequest.projectName || '',
+            reason: `Đề xuất mua vật tư hết hàng cho dự án ${resolvingRequest.projectName || 'Chưa liên kết'} (Theo phiếu yêu cầu gốc #${resolvingRequest.id.substring(0, 6).toUpperCase()})`,
+            items: outOfStockItems
+              .filter(Boolean)
+              .filter(item => !!item.equipmentId)
+              .map(item => ({
+                equipmentId: item.equipmentId || '',
+                brand: item.brand || '',
+                model: item.model || '',
+                type: item.type || '',
+                quantity: item.quantity || 1,
+                unit: item.unit || 'cái'
+              })),
+            status: 'pending', // pending, ordering, completed, cancelled
+            createdAt: serverTimestamp(),
+            resolvedAt: null,
+            resolvedBy: null,
+            adminNote: ''
+          };
+
+          await addDoc(collection(db, 'purchase_proposals'), proposalData);
+
+          // Thông báo cho kế toán
+          await addDoc(collection(db, 'notifications'), {
+            title: '💰 ĐỀ NGHỊ NHẬP VẬT TƯ MỚI',
+            message: `Hệ thống tự động đề xuất nhập vật tư hết tồn kho cho công trình: ${resolvingRequest.projectName || 'Chưa liên kết'} từ phiếu yêu cầu của ${resolvingRequest.technicianName || 'Nhân viên'}.`,
+            type: 'task',
+            createdAt: serverTimestamp(),
+            createdBy: userId || '',
+            createdByName: userName || 'Nhân viên'
+          });
+        }
+      }
+
+      // Live update notification
+      await addDoc(collection(db, 'notifications'), {
+        title: isApproved ? '✅ PHÊ DUYỆT YÊU CẦU VẬT TƯ' : '❌ TỪ CHỐI YÊU CẦU VẬT TƯ',
+        message: `Phiếu yêu cầu vật tư của ${resolvingRequest.technicianName || 'Nhân viên'} đã được ${userName || 'Nhân viên'} ${isApproved ? 'PHÊ DUYỆT' : 'TỪ CHỐI'}. Ghi chú: ${(adminNote || '').trim() || 'Không có ghi chú thêm'}`,
+        type: 'task',
+        createdAt: serverTimestamp(),
+        createdBy: userId || '',
+        createdByName: userName || 'Nhân viên'
+      });
+
+      setIsResolveModalOpen(false);
+      setResolvingRequest(null);
+      setResolveAction(null);
+      setAdminNote('');
+    } catch (err) {
+      console.error("Error resolving material request:", err);
+    }
+  };
+
+  // Resolve purchase proposal (for Accountant/Admin)
+  const handleResolveProposal = async (proposalId: string, action: 'order' | 'complete' | 'cancel') => {
+    try {
+      const proposalRef = doc(db, 'purchase_proposals', proposalId);
+      const proposalSnap = await getDoc(proposalRef);
+
+      if (!proposalSnap.exists()) return;
+      const proposalData = proposalSnap.data();
+
+      let newStatus = 'pending';
+      if (action === 'order') newStatus = 'ordering';
+      if (action === 'cancel') newStatus = 'cancelled';
+      if (action === 'complete') newStatus = 'completed';
+
+      await updateDoc(proposalRef, {
+        status: newStatus,
+        resolvedAt: serverTimestamp(),
+        resolvedBy: userName
+      });
+
+      // Nếu chuyển thành đã hoàn thành nhập kho (completed): Cộng thêm số lượng vào kho và ghi nhận lịch sử nhập kho
+      if (action === 'complete') {
+        for (const pItem of proposalData.items) {
+          const eqDocRef = doc(db, 'equipment', pItem.equipmentId);
+          const eqSnap = await getDoc(eqDocRef);
+
+          if (eqSnap.exists()) {
+            const currentData = eqSnap.data();
+            const currentStock = currentData.stock || 0;
+            const newStock = currentStock + pItem.quantity;
 
             const transactionLog = {
               id: Math.random().toString(36).substring(7),
-              type: 'export' as const,
-              quantity: reqItem.quantity,
-              note: `Cấp phát theo phiếu yêu cầu của ${resolvingRequest.technicianName}. Ghi chú: ${resolvingRequest.reason}`,
+              type: 'import' as const,
+              quantity: pItem.quantity,
+              note: `Nhập kho hoàn thành từ phiếu đề nghị mua hàng #${proposalId.substring(0, 6).toUpperCase()}`,
               createdAt: new Date().toISOString(),
               createdBy: userId!,
               createdByName: userName
@@ -455,24 +1124,30 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
             });
           }
         }
+
+        // Tạo thông báo hoàn thành nhập kho
+        await addDoc(collection(db, 'notifications'), {
+          title: '📦 VẬT TƯ ĐÃ NHẬP KHO THÀNH CÔNG',
+          message: `Kế toán ${userName} đã hoàn thành mua hàng và nhập kho các vật tư hết hàng cho công trình: ${proposalData.projectName || 'Chưa liên kết'}. Vật tư đã có sẵn để thi công!`,
+          type: 'task',
+          createdAt: serverTimestamp(),
+          createdBy: userId!,
+          createdByName: userName
+        });
+      } else {
+        // Thông báo đổi trạng thái khác
+        const actionStr = action === 'order' ? 'XÁC NHẬN ĐANG MUA HÀNG' : 'HỦY BỎ ĐỀ NGHỊ';
+        await addDoc(collection(db, 'notifications'), {
+          title: `💰 CẬP NHẬT ĐỀ NGHỊ NHẬP VẬT TƯ`,
+          message: `Kế toán ${userName} đã ${actionStr} phiếu đề nghị nhập vật tư #${proposalId.substring(0, 6).toUpperCase()} cho công trình: ${proposalData.projectName || 'Chưa liên kết'}.`,
+          type: 'task',
+          createdAt: serverTimestamp(),
+          createdBy: userId!,
+          createdByName: userName
+        });
       }
-
-      // Live update notification
-      await addDoc(collection(db, 'notifications'), {
-        title: isApproved ? '✅ PHÊ DUYỆT YÊU CẦU VẬT TƯ' : '❌ TỪ CHỐI YÊU CẦU VẬT TƯ',
-        message: `Phiếu yêu cầu vật tư của ${resolvingRequest.technicianName} đã được ${userName} ${isApproved ? 'PHÊ DUYỆT' : 'TỪ CHỐI'}. Ghi chú: ${adminNote.trim() || 'Không có ghi chú thêm'}`,
-        type: 'task',
-        createdAt: serverTimestamp(),
-        createdBy: userId!,
-        createdByName: userName
-      });
-
-      setIsResolveModalOpen(false);
-      setResolvingRequest(null);
-      setResolveAction(null);
-      setAdminNote('');
     } catch (err) {
-      console.error("Error resolving material request:", err);
+      console.error("Error resolving purchase proposal:", err);
     }
   };
 
@@ -975,6 +1650,24 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
             </span>
           )}
         </button>
+        {(userRole === 'accountant' || userRole === 'admin' || userRole === 'manager') && (
+          <button
+            onClick={() => setActiveTab('proposals')}
+            className={cn(
+              "px-6 py-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 relative",
+              activeTab === 'proposals' 
+                ? "border-blue-600 text-blue-600 bg-blue-50/25" 
+                : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"
+            )}
+          >
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600" /> Đề nghị nhập vật tư
+            {purchaseProposals.filter(p => p.status === 'pending').length > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-white font-black text-[9px] w-5 h-5 rounded-full flex items-center justify-center animate-bounce shadow-md">
+                {purchaseProposals.filter(p => p.status === 'pending').length}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {activeTab === 'inventory' && (
@@ -1365,14 +2058,24 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
       )}
 
       {activeTab === 'requests' && (
-        isCreatingRequest ? (
+        printingRequest ? (
+          <PrintRequestView request={printingRequest} onClose={() => setPrintingRequest(null)} />
+        ) : isCreatingRequest ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 animate-in fade-in slide-in-from-bottom-2 duration-200">
             {/* Left Column (Selector & Items Table) */}
             <div className="lg:col-span-8 bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden flex flex-col min-h-[500px]">
               {/* Header block with F3 Search */}
               <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3">
                 <button 
-                  onClick={() => setIsCreatingRequest(false)}
+                  onClick={() => {
+                    setIsCreatingRequest(false);
+                    setRequestReason('');
+                    setRequestProjectId('');
+                    setRequestItems([]);
+                    setSelectedEqId('');
+                    setSelectedEqQty(1);
+                    setEditingRequestId(null);
+                  }}
                   className="flex items-center gap-2 text-[#1e3a8a] hover:text-blue-700 font-extrabold transition-all group shrink-0"
                 >
                   <ArrowLeft className="h-5 w-5 group-hover:-translate-x-0.5 transition-transform" />
@@ -1397,12 +2100,25 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                       ::
                     </span>
                     <button 
+                      type="button"
                       onClick={() => {
-                        const searchInput = document.getElementById('request-search-input');
-                        if (searchInput) searchInput.focus();
+                        setEditingItem({
+                          brand: searchQueryInRequest.trim() || '',
+                          model: '',
+                          type: 'panel',
+                          capacity: 0,
+                          unitPrice: 0,
+                          sellingPrice: 0,
+                          details: '',
+                          stock: 0,
+                          minStock: 5,
+                          location: 'Chưa định vị',
+                          unit: 'cái'
+                        });
+                        setIsEditModalOpen(true);
                       }}
-                      className="text-slate-400 hover:text-blue-500 font-black p-0.5 text-xs"
-                      title="Focus ô tìm kiếm"
+                      className="text-slate-500 hover:text-blue-600 font-black p-1 text-sm bg-slate-200/40 hover:bg-slate-200/80 rounded transition-all cursor-pointer h-5 w-5 flex items-center justify-center font-sans"
+                      title="Thêm mới vật tư"
                     >
                       +
                     </button>
@@ -1416,7 +2132,32 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                         eq.model.toLowerCase().includes(searchQueryInRequest.toLowerCase()) ||
                         (eq.type || '').toLowerCase().includes(searchQueryInRequest.toLowerCase())
                       ).length === 0 ? (
-                        <div className="p-3 text-center text-slate-400 text-xs italic">Không tìm thấy vật tư phù hợp</div>
+                        <div className="p-4 text-center text-slate-500 text-xs flex flex-col items-center gap-2">
+                          <p className="italic font-medium">Không tìm thấy vật tư phù hợp</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingItem({
+                                brand: searchQueryInRequest.trim() || '',
+                                model: '',
+                                type: 'panel',
+                                capacity: 0,
+                                unitPrice: 0,
+                                sellingPrice: 0,
+                                details: '',
+                                stock: 0,
+                                minStock: 5,
+                                location: 'Chưa định vị',
+                                unit: 'cái'
+                              });
+                              setIsEditModalOpen(true);
+                              setSearchQueryInRequest('');
+                            }}
+                            className="mt-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg font-black text-[10px] uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <Plus className="h-3 w-3 stroke-[2.5]" /> Khai báo vật tư mới
+                          </button>
+                        </div>
                       ) : (
                         equipmentList.filter(eq => 
                           eq.brand.toLowerCase().includes(searchQueryInRequest.toLowerCase()) ||
@@ -1428,7 +2169,6 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                             <button
                               key={eq.id}
                               type="button"
-                              disabled={isOutOfStock}
                               onClick={() => {
                                 const existing = requestItems.find(ri => ri.equipmentId === eq.id);
                                 if (existing) {
@@ -1448,8 +2188,8 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                                 setSearchQueryInRequest('');
                               }}
                               className={cn(
-                                "w-full text-left p-2.5 hover:bg-slate-50 transition-colors flex items-center justify-between text-xs",
-                                isOutOfStock && "opacity-50 cursor-not-allowed bg-slate-50/50"
+                                "w-full text-left p-2.5 hover:bg-slate-50 transition-colors flex items-center justify-between text-xs cursor-pointer",
+                                isOutOfStock && "bg-rose-50/60 hover:bg-rose-100/60 text-rose-900 border-l-2 border-rose-500"
                               )}
                             >
                               <div>
@@ -1512,15 +2252,26 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                 ) : (
                   /* List of added items in table rows */
                   <div className="divide-y divide-slate-100 flex-1">
-                    {requestItems.map((item, index) => (
-                      <div key={item.equipmentId} className="grid grid-cols-12 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50/40 transition-colors items-center animate-in fade-in duration-100">
-                        <div className="col-span-1 text-center font-bold text-slate-400">{index + 1}</div>
-                        <div className="col-span-2 font-mono text-slate-500 font-bold uppercase">{item.equipmentId.substring(0, 8).toUpperCase()}</div>
-                        <div className="col-span-5">
-                          <span className="font-extrabold text-slate-800">{item.brand}</span>
-                          <span className="mx-1.5 text-slate-400">•</span>
-                          <span className="font-medium text-slate-600">{item.model}</span>
-                        </div>
+                    {requestItems.map((item, index) => {
+                      const eq = equipmentList.find(e => e.id === item.equipmentId);
+                      const isOutOfStock = eq ? (eq.stock || 0) <= 0 : true;
+                      return (
+                        <div key={item.equipmentId} className={cn(
+                          "grid grid-cols-12 px-4 py-2.5 text-xs font-semibold hover:bg-slate-50/40 transition-colors items-center animate-in fade-in duration-100",
+                          isOutOfStock 
+                            ? "bg-rose-50/80 text-rose-900 border-l-4 border-rose-500" 
+                            : "text-slate-700"
+                        )}>
+                          <div className="col-span-1 text-center font-bold text-slate-400">{index + 1}</div>
+                          <div className="col-span-2 font-mono text-slate-500 font-bold uppercase">{item.equipmentId.substring(0, 8).toUpperCase()}</div>
+                          <div className="col-span-5">
+                            <span className="font-extrabold text-slate-800">{item.brand}</span>
+                            <span className="mx-1.5 text-slate-400">•</span>
+                            <span className="font-medium text-slate-600">{item.model}</span>
+                            {isOutOfStock && (
+                              <span className="ml-2 text-[9px] font-black uppercase text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded tracking-wider">Hết tồn kho</span>
+                            )}
+                          </div>
                         <div className="col-span-2 text-center uppercase tracking-wider text-[11px] text-slate-500 font-bold">
                           {item.unit || getUnit(item)}
                         </div>
@@ -1573,50 +2324,11 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                           </button>
                         </div>
                       </div>
-                    ))}
+                    ); })}
                   </div>
                 )}
 
-                {/* Direct quick item dropdown selection */}
-                {requestItems.length > 0 && (
-                  <div className="p-3 bg-slate-50 border-t border-slate-100 flex flex-col md:flex-row gap-2 items-center mt-auto">
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest shrink-0">Thêm thiết bị nhanh:</span>
-                    <select
-                      value={selectedEqId}
-                      onChange={e => {
-                        const val = e.target.value;
-                        if (!val) return;
-                        const item = equipmentList.find(eq => eq.id === val);
-                        if (!item) return;
-                        
-                        const existing = requestItems.find(ri => ri.equipmentId === val);
-                        if (existing) {
-                          setRequestItems(prev => prev.map(ri => 
-                            ri.equipmentId === val ? { ...ri, quantity: ri.quantity + 1 } : ri
-                          ));
-                        } else {
-                          setRequestItems(prev => [...prev, {
-                            equipmentId: item.id,
-                            brand: item.brand,
-                            model: item.model,
-                            type: item.type,
-                            quantity: 1,
-                            unit: item.unit
-                          }]);
-                        }
-                        setSelectedEqId('');
-                      }}
-                      className="flex-1 p-2 border border-slate-200 bg-white rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-blue-500 transition-all"
-                    >
-                      <option value="">-- Chọn thiết bị trong kho cần cấp phát thêm --</option>
-                      {equipmentList.map(eq => (
-                        <option key={eq.id} value={eq.id} disabled={(eq.stock || 0) <= 0}>
-                          {eq.brand} - {eq.model} (Sẵn có: {eq.stock || 0} {getUnit(eq)})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+
               </div>
             </div>
 
@@ -1668,9 +2380,13 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                     className="w-full p-2.5 border border-slate-200 bg-slate-50 focus:bg-white rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-blue-500 transition-all"
                   >
                     <option value="">-- Chọn công trình cần liên kết --</option>
-                    {projectsList.map(p => (
-                      <option key={p.id} value={p.id}>{p.name || p.customerName || 'Dự án không tên'}</option>
-                    ))}
+                    {projectsList.map(p => {
+                      const cust = customers[p.customerId];
+                      const name = cust ? `Công trình ${cust.name}` : (p.name || p.customerName || 'Dự án không tên');
+                      return (
+                        <option key={p.id} value={p.id}>{name}</option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -1679,7 +2395,7 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Mã phiếu</label>
                   <input
                     type="text"
-                    value="Mã phiếu tự động"
+                    value={editingRequestId ? `Bản nháp: #${editingRequestId.substring(0, 6).toUpperCase()}` : "Mã phiếu tự động"}
                     disabled
                     className="w-full p-2.5 border border-slate-200 bg-slate-50 rounded-xl text-xs font-bold text-slate-400 select-none outline-none"
                   />
@@ -1688,7 +2404,9 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                 {/* Trạng thái row */}
                 <div className="flex justify-between items-center border-y border-dashed border-slate-100 py-3 text-xs">
                   <span className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Trạng thái</span>
-                  <span className="text-[#1e3a8a] font-black bg-blue-50 border border-blue-100 px-2.5 py-0.5 rounded-lg text-[10px] uppercase">Phiếu tạm</span>
+                  <span className="text-[#1e3a8a] font-black bg-blue-50 border border-blue-100 px-2.5 py-0.5 rounded-lg text-[10px] uppercase">
+                    {editingRequestId ? "Bản nháp" : "Phiếu tạm"}
+                  </span>
                 </div>
 
                 {/* Reason/Notes block */}
@@ -1708,19 +2426,23 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                 <div className="grid grid-cols-2 gap-2.5 pt-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      alert("Đã lưu tạm dự thảo phiếu yêu cầu thành công!");
-                    }}
-                    className="py-2.5 border border-blue-600 bg-white hover:bg-blue-50 text-blue-600 rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95"
+                    disabled={requestItems.length === 0}
+                    onClick={() => handleCreateMaterialRequest(undefined, 'draft')}
+                    className={cn(
+                      "py-2.5 border rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer",
+                      requestItems.length === 0
+                        ? "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed"
+                        : "border-blue-600 bg-white hover:bg-blue-50 text-blue-600"
+                    )}
                   >
                     Lưu tạm
                   </button>
                   <button
                     type="button"
                     disabled={requestItems.length === 0}
-                    onClick={handleCreateMaterialRequest}
+                    onClick={(e) => handleCreateMaterialRequest(e, 'pending')}
                     className={cn(
-                      "py-2.5 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-md",
+                      "py-2.5 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-md cursor-pointer",
                       requestItems.length === 0 
                         ? "bg-slate-300 cursor-not-allowed shadow-none" 
                         : "bg-[#0066ff] hover:bg-blue-600 shadow-blue-100 hover:shadow-lg"
@@ -1733,7 +2455,7 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                 {/* Hotline bar */}
                 <div className="flex justify-center items-center gap-1.5 text-slate-500 text-[11px] font-black uppercase tracking-wider pt-3 border-t border-slate-100">
                   <Phone className="h-3.5 w-3.5 text-blue-500 stroke-[3]" />
-                  <span>Tổng đài: 1900 6520</span>
+                  <span>Tổng đài: 0915 586 234</span>
                 </div>
               </div>
             </div>
@@ -1791,6 +2513,7 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                         "bg-white rounded-2xl border p-5 shadow-xs transition-all flex flex-col justify-between",
                         req.status === 'pending' ? "border-amber-200 hover:shadow-amber-50" : 
                         req.status === 'approved' ? "border-emerald-200 hover:shadow-emerald-50" : 
+                        req.status === 'draft' ? "border-blue-200 hover:shadow-blue-50" :
                         "border-rose-200 hover:shadow-rose-50"
                       )}
                     >
@@ -1802,10 +2525,12 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                               "px-2.5 py-1 text-[10px] font-black uppercase rounded-lg border",
                               req.status === 'pending' ? "bg-amber-50 border-amber-200 text-amber-700" :
                               req.status === 'approved' ? "bg-emerald-50 border-emerald-200 text-emerald-700" :
+                              req.status === 'draft' ? "bg-blue-50 border-blue-200 text-blue-700" :
                               "bg-rose-50 border-rose-200 text-rose-700"
                             )}>
                               {req.status === 'pending' ? '🟡 Chờ duyệt' : 
-                               req.status === 'approved' ? '🟢 Đã duyệt' : '🔴 Từ chối'}
+                               req.status === 'approved' ? '🟢 Đã duyệt' : 
+                               req.status === 'draft' ? '🔵 Bản nháp' : '🔴 Từ chối'}
                             </span>
                             <span className="text-xs font-black text-slate-800 uppercase tracking-tight">
                               Mã phiếu: #{req.id?.substring(0, 6).toUpperCase()}
@@ -1859,26 +2584,42 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                       <div className="py-4 space-y-3">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Danh sách thiết bị yêu cầu cấp phát:</p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {req.items?.map((item: any, idx: number) => (
-                            <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex items-center justify-between">
-                              <div className="flex items-center gap-2.5">
-                                <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center shrink-0">
-                                  {item.type === 'panel' ? <Package className="h-4 w-4 text-amber-500" /> :
-                                   item.type === 'inverter' ? <Cpu className="h-4 w-4 text-blue-500" /> :
-                                   item.type === 'battery' ? <Battery className="h-4 w-4 text-emerald-500" /> :
-                                   <Box className="h-4 w-4 text-slate-500" />}
+                          {req.items?.map((item: any, idx: number) => {
+                            const isOutOfStock = item.isOutOfStock || false;
+                            return (
+                              <div key={idx} className={cn(
+                                "p-3 rounded-xl border flex items-center justify-between transition-all",
+                                isOutOfStock 
+                                  ? "bg-rose-50 border-rose-200 text-rose-900 shadow-3xs" 
+                                  : "bg-slate-50 border-slate-100 text-slate-800"
+                              )}>
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center shrink-0">
+                                    {item.type === 'panel' ? <Package className="h-4 w-4 text-amber-500" /> :
+                                     item.type === 'inverter' ? <Cpu className="h-4 w-4 text-blue-500" /> :
+                                     item.type === 'battery' ? <Battery className="h-4 w-4 text-emerald-500" /> :
+                                     <Box className="h-4 w-4 text-slate-500" />}
+                                  </div>
+                                  <div>
+                                    <span className={cn(
+                                      "text-[8px] font-black tracking-widest uppercase block",
+                                      isOutOfStock ? "text-rose-400" : "text-slate-400"
+                                    )}>{item.brand}</span>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs font-black line-clamp-1">{item.model}</span>
+                                      {isOutOfStock && (
+                                        <span className="text-[8px] font-black uppercase text-rose-600 bg-rose-100 px-1 rounded">Hết hàng</span>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
-                                <div>
-                                  <span className="text-[8px] font-black tracking-widest text-slate-400 uppercase block">{item.brand}</span>
-                                  <span className="text-xs font-black text-slate-800 line-clamp-1">{item.model}</span>
+                                <div className="text-right">
+                                  <span className="text-[10px] font-black text-slate-400 block uppercase">Số lượng</span>
+                                  <span className="text-sm font-black">{item.quantity} {getUnit(item)}</span>
                                 </div>
                               </div>
-                              <div className="text-right">
-                                <span className="text-[10px] font-black text-slate-400 block uppercase">Số lượng</span>
-                                <span className="text-sm font-black text-slate-800">{item.quantity} {getUnit(item)}</span>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
 
                         <div className="bg-slate-50/50 p-3.5 rounded-xl border border-dashed mt-3">
@@ -1887,8 +2628,54 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                         </div>
                       </div>
 
+                      {/* Unified Actions Footer */}
+                      <div className="flex gap-2 justify-end pt-3 border-t border-slate-100 mt-3">
+                        <button
+                          type="button"
+                          onClick={() => setPrintingRequest(req)}
+                          className="bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer"
+                        >
+                          <Printer className="h-3.5 w-3.5" /> In phiếu
+                        </button>
+
+                        {(req.status === 'draft' || req.status === 'pending') && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                // Populate form with request values to edit/update
+                                setRequestProjectId(req.projectId || '');
+                                setRequestReason(req.reason || '');
+                                setRequestItems(req.items || []);
+                                setEditingRequestId(req.id);
+                                setIsCreatingRequest(true);
+                              }}
+                              className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer"
+                            >
+                              <FolderOpen className="h-3.5 w-3.5" /> Mở phiếu
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (confirm("Bạn có chắc chắn muốn xóa phiếu yêu cầu vật tư này?")) {
+                                  try {
+                                    await deleteDoc(doc(db, 'material_requests', req.id));
+                                    alert("Đã xóa phiếu yêu cầu thành công!");
+                                  } catch (err) {
+                                    console.error("Error deleting material request:", err);
+                                  }
+                                }
+                              }}
+                              className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" /> Xóa phiếu
+                            </button>
+                          </>
+                        )}
+                      </div>
+
                       {/* Slip Resolution details */}
-                      {req.status !== 'pending' && (
+                      {req.status !== 'pending' && req.status !== 'draft' && (
                         <div className={cn(
                           "mt-2 p-3.5 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs",
                           req.status === 'approved' ? "bg-emerald-50/40 border-emerald-100" : "bg-rose-50/40 border-rose-100"
@@ -1906,10 +2693,231 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                         </div>
                       )}
                     </div>
-                  );
-                })
+                );
+              })
+            )}
+            </div>
+          </div>
+        )
+      )}
+
+      {activeTab === 'proposals' && (userRole === 'accountant' || userRole === 'admin' || userRole === 'manager') && (
+        printingProposals ? (
+          <PrintProposalsView proposals={printingProposals} onClose={() => setPrintingProposals(null)} />
+        ) : (
+          <div className="space-y-6 animate-in fade-in duration-150">
+            {/* Header block */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div>
+                <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                  <FileSpreadsheet className="h-5 w-5 text-emerald-600" /> Đề nghị nhập vật tư (Kế toán)
+                </h2>
+                <p className="text-slate-500 text-xs mt-1.5 font-medium">
+                  Danh sách các yêu cầu mua sắm, nhập kho tự động được tách ra từ phiếu yêu cầu thi công của Kỹ thuật do sản phẩm đã hết hàng trong kho.
+                </p>
+              </div>
+
+              {/* Multi-select printing controls */}
+              {purchaseProposals.length > 0 && (
+                <div className="flex items-center gap-2 self-stretch md:self-auto justify-end shrink-0">
+                  {selectedProposals.length > 0 ? (
+                    <>
+                      <button
+                        onClick={() => setSelectedProposals([])}
+                        className="text-slate-500 hover:text-slate-800 text-[10px] font-black uppercase tracking-wider px-3.5 py-2 rounded-xl border border-slate-200 transition-all active:scale-95 cursor-pointer bg-white shadow-xs"
+                      >
+                        Bỏ chọn ({selectedProposals.length})
+                      </button>
+                      <button
+                        onClick={() => {
+                          const proposalsToPrint = purchaseProposals.filter(p => selectedProposals.includes(p.id));
+                          setPrintingProposals(proposalsToPrint);
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-wider px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer"
+                      >
+                        <Printer className="h-3.5 w-3.5" /> In nhóm ({selectedProposals.length})
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setSelectedProposals(purchaseProposals.map(p => p.id))}
+                      className="text-[#0054a6] hover:text-blue-700 border border-blue-200 bg-blue-50/50 hover:bg-blue-50 text-[10px] font-black uppercase tracking-wider px-4 py-2 rounded-xl transition-all active:scale-95 cursor-pointer"
+                    >
+                      Chọn tất cả ({purchaseProposals.length})
+                    </button>
+                  )}
+                </div>
               )}
             </div>
+
+            {proposalsLoading ? (
+              <div className="bg-white py-16 text-center border rounded-2xl">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent mb-3" />
+                <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Đang tải danh sách đề xuất mua hàng...</p>
+              </div>
+            ) : purchaseProposals.length === 0 ? (
+              <div className="bg-white py-16 text-center border border-dashed border-slate-200 rounded-2xl shadow-xs">
+                <CheckCircle className="h-12 w-12 text-emerald-500 mx-auto mb-3" />
+                <p className="text-slate-700 text-sm font-extrabold">Không có đề xuất mua hàng nào cần xử lý</p>
+                <p className="text-slate-400 text-xs mt-1">Tất cả vật tư hiện đang có đủ hoặc chưa có phiếu yêu cầu nào bị thiếu hàng.</p>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {purchaseProposals.map((proposal) => {
+                  const createdDate = proposal.createdAt?.seconds 
+                    ? new Date(proposal.createdAt.seconds * 1000) 
+                    : proposal.createdAt ? new Date(proposal.createdAt) : new Date();
+                  const createdDateStr = createdDate.toLocaleString('vi-VN', {
+                    hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric'
+                  });
+
+                  const statusLabels: Record<string, { label: string, color: string }> = {
+                    pending: { label: 'Chờ mua sắm', color: 'bg-amber-50 border-amber-200 text-amber-700' },
+                    ordering: { label: 'Đang mua sắm', color: 'bg-blue-50 border-blue-200 text-blue-700' },
+                    completed: { label: 'Đã nhập kho', color: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+                    cancelled: { label: 'Đã hủy', color: 'bg-slate-100 border-slate-200 text-slate-500' }
+                  };
+
+                  const currentStatus = statusLabels[proposal.status || 'pending'] || statusLabels.pending;
+
+                  return (
+                    <div key={proposal.id} className="bg-white rounded-2xl border border-slate-200 shadow-3xs overflow-hidden transition-all hover:shadow-2xs">
+                      {/* Header of proposal slip */}
+                      <div className="bg-slate-50/50 px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                        <div className="flex items-start gap-3">
+                          <div className="pt-1.5">
+                            <input
+                              type="checkbox"
+                              checked={selectedProposals.includes(proposal.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedProposals(prev => [...prev, proposal.id]);
+                                } else {
+                                  setSelectedProposals(prev => prev.filter(id => id !== proposal.id));
+                                }
+                              }}
+                              className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-slate-300 rounded cursor-pointer"
+                            />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[10px] font-black tracking-widest text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase">
+                                Đề nghị mua hàng
+                              </span>
+                              <span className="font-mono text-[11px] font-extrabold text-slate-500 uppercase">
+                                #{proposal.id.substring(0, 8).toUpperCase()}
+                              </span>
+                              <span className={cn(
+                                "px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-full border",
+                                currentStatus.color
+                              )}>
+                                {currentStatus.label}
+                              </span>
+                            </div>
+                            <div className="text-slate-800 text-[11px] font-extrabold uppercase mt-1 flex items-center gap-1">
+                              <Building className="h-3.5 w-3.5 text-slate-400" />
+                              <span>Dự án: <span className="text-blue-600">{proposal.projectName || 'Chưa liên kết'}</span></span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-left sm:text-right shrink-0">
+                          <span className="text-[9px] font-black text-slate-400 block uppercase tracking-wider">Ngày đề xuất</span>
+                          <span className="text-xs font-black text-slate-700 font-mono">{createdDateStr}</span>
+                        </div>
+                      </div>
+
+                      {/* Body - items to purchase */}
+                      <div className="p-5 space-y-4">
+                        <div>
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Danh sách vật tư đề nghị mua mới:</span>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {proposal.items?.map((item: any, idx: number) => (
+                              <div key={idx} className="bg-rose-50/40 border border-rose-100 p-3.5 rounded-xl flex items-center justify-between">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 h-8 rounded-lg bg-white border border-rose-100 flex items-center justify-center shrink-0 text-rose-500">
+                                    {item.type === 'panel' ? <Package className="h-4 w-4" /> :
+                                     item.type === 'inverter' ? <Cpu className="h-4 w-4" /> :
+                                     item.type === 'battery' ? <Battery className="h-4 w-4" /> :
+                                     <Box className="h-4 w-4" />}
+                                  </div>
+                                  <div>
+                                    <span className="text-[8px] font-black tracking-widest text-rose-400 uppercase block">{item.brand}</span>
+                                    <span className="text-xs font-black text-rose-950 line-clamp-1">{item.model}</span>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-[9px] font-black text-rose-400 block uppercase">Cần mua</span>
+                                  <span className="text-sm font-black text-rose-900">{item.quantity} {item.unit || getUnit(item)}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="bg-slate-50 p-3 rounded-xl border border-dashed flex items-start gap-2">
+                          <Info className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Nguồn gốc đề xuất:</p>
+                            <p className="text-xs text-slate-600 font-semibold mt-0.5">
+                              Do <span className="text-blue-600">{proposal.technicianName}</span> đề xuất cấp phát thi công. {proposal.reason}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Unified Actions Footer */}
+                        <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-2 justify-between items-center">
+                          <div>
+                            <button
+                              onClick={() => setPrintingProposals([proposal])}
+                              className="bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer"
+                            >
+                              <Printer className="h-3.5 w-3.5" /> In phiếu đề xuất
+                            </button>
+                          </div>
+
+                          {/* Action buttons (only for accountant or admin) */}
+                          {(proposal.status === 'pending' || proposal.status === 'ordering') && (userRole === 'accountant' || userRole === 'admin') && (
+                            <div className="flex flex-wrap gap-2 justify-end">
+                              {proposal.status === 'pending' && (
+                                <button
+                                  onClick={() => handleResolveProposal(proposal.id, 'order')}
+                                  className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer"
+                                >
+                                  <Truck className="h-3.5 w-3.5" /> Xác nhận đặt mua hàng
+                                </button>
+                              )}
+                              <button
+                                  onClick={() => handleResolveProposal(proposal.id, 'complete')}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer"
+                              >
+                                <CheckCircle className="h-3.5 w-3.5" /> Hoàn thành nhập kho
+                              </button>
+                              <button
+                                  onClick={() => handleResolveProposal(proposal.id, 'cancel')}
+                                  className="bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer"
+                              >
+                                <X className="h-3.5 w-3.5" /> Hủy yêu cầu
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Display solver information if resolved */}
+                        {proposal.status === 'completed' && (
+                          <div className="bg-emerald-50/40 border border-emerald-100 p-3.5 rounded-xl flex items-center justify-between text-xs text-emerald-800">
+                            <p className="font-semibold flex items-center gap-1.5">
+                              <CheckCircle className="h-4 w-4 text-emerald-500" />
+                              Đã được mua sắm & nhập kho thành công bởi <span className="font-black text-blue-600">{proposal.resolvedBy || 'Kế toán'}</span>
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )
       )}
@@ -2385,9 +3393,13 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                   className="w-full p-2.5 border border-slate-200 rounded-xl text-xs font-medium bg-slate-50 outline-none focus:border-amber-500"
                 >
                   <option value="">-- Chọn công trình cần cấp phát (Không bắt buộc) --</option>
-                  {projectsList.map(p => (
-                    <option key={p.id} value={p.id}>{p.name || p.customerName || 'Dự án không tên'}</option>
-                  ))}
+                  {projectsList.map(p => {
+                    const cust = customers[p.customerId];
+                    const name = cust ? `Công trình ${cust.name}` : (p.name || p.customerName || 'Dự án không tên');
+                    return (
+                      <option key={p.id} value={p.id}>{name}</option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -2403,8 +3415,8 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
                     >
                       <option value="">-- Chọn thiết bị kỹ thuật --</option>
                       {equipmentList.map(eq => (
-                        <option key={eq.id} value={eq.id} disabled={(eq.stock || 0) <= 0}>
-                          {eq.brand} - {eq.model} (Còn lại: {eq.stock || 0})
+                        <option key={eq.id} value={eq.id}>
+                          {eq.brand} - {eq.model} ({(eq.stock || 0) <= 0 ? 'Hết hàng' : `Còn lại: ${eq.stock}`})
                         </option>
                       ))}
                     </select>

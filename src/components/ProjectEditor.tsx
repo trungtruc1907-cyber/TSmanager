@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, doc, getDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, doc, getDoc, serverTimestamp, query, orderBy, where } from 'firebase/firestore';
 import { Project, Customer, Equipment, ProjectStatus, AppUser, UserRole } from '../types';
 import { 
   Calculator, 
@@ -79,13 +79,21 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
   );
 
   useEffect(() => {
-    onSnapshot(collection(db, 'customers'), (s) => setCustomers(s.docs.map(d => ({ id: d.id, ...d.data() } as Customer))), (error) => {
+    if (!userId) return;
+
+    const qCustomers = userRole === 'sales_rep'
+      ? query(collection(db, 'customers'), where('assignedSalesId', '==', userId))
+      : collection(db, 'customers');
+
+    const unsubCustomers = onSnapshot(qCustomers, (s) => setCustomers(s.docs.map(d => ({ id: d.id, ...d.data() } as Customer))), (error) => {
       handleFirestoreError(error, OperationType.GET, 'customers');
     });
-    onSnapshot(collection(db, 'equipment'), (s) => setCatalog(s.docs.map(d => ({ id: d.id, ...d.data() } as Equipment))), (error) => {
+
+    const unsubEquipment = onSnapshot(collection(db, 'equipment'), (s) => setCatalog(s.docs.map(d => ({ id: d.id, ...d.data() } as Equipment))), (error) => {
       handleFirestoreError(error, OperationType.GET, 'equipment');
     });
-    onSnapshot(collection(db, 'users'), (s) => {
+
+    const unsubUsers = onSnapshot(collection(db, 'users'), (s) => {
       const rawUsers = s.docs.map(d => ({ id: d.id, ...d.data() } as AppUser));
       rawUsers.sort((a, b) => {
         const nameA = a.displayName || '';
@@ -96,7 +104,8 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'users');
     });
-    onSnapshot(doc(db, 'settings', 'general'), (s) => {
+
+    const unsubSettings = onSnapshot(doc(db, 'settings', 'general'), (s) => {
       if (s.exists()) setSettings(s.data());
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'settings/general');
@@ -110,7 +119,14 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
       });
     }
     setLoading(false);
-  }, [projectId]);
+
+    return () => {
+      unsubCustomers();
+      unsubEquipment();
+      unsubUsers();
+      unsubSettings();
+    };
+  }, [projectId, userId, userRole]);
 
   // Set default sales rep when customer changes
   useEffect(() => {

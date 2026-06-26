@@ -606,7 +606,7 @@ export default function App() {
   const handleViewCustomerProject = async (customerId: string) => {
     try {
       let q;
-      if (userRole === 'admin' || userRole === 'manager') {
+      if (userRole !== 'sales_rep') {
         q = query(
           collection(db, 'projects'), 
           where('customerId', '==', customerId),

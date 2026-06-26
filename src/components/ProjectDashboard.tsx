@@ -75,7 +75,7 @@ export default function ProjectDashboard({ onOpenProject, onOpenTracker, showAll
         const t2 = b.updatedAt ? (b.updatedAt as any).seconds || 0 : 0;
         return t2 - t1; // desc
       });
-      const finalProjs = showAll ? rawProjs : rawProjs.slice(0, 5);
+      const finalProjs = (showAll || userRole === 'operator' || userRole === 'accountant') ? rawProjs : rawProjs.slice(0, 5);
       setProjects(finalProjs);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'projects');
@@ -410,14 +410,14 @@ export default function ProjectDashboard({ onOpenProject, onOpenTracker, showAll
                 <div className="w-1 h-4 bg-orange-500 rounded-full" />
                 <h3 className="font-black text-xs uppercase tracking-widest text-slate-900 flex items-center gap-2">
                   <Activity className="h-4 w-4 text-orange-500" />
-                  Các Công Trình Đang Triển Khai ({projects.filter(p => p.status !== 'completed' && p.status !== 'lead').length})
+                  Các Công Trình Đang Triển Khai ({projects.filter(p => p.status === 'contract' || p.status === 'installation').length})
                 </h3>
               </div>
             </div>
 
             {/* Render deploying projects */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {projects.filter(p => p.status !== 'completed' && p.status !== 'lead').map((project) => {
+              {projects.filter(p => p.status === 'contract' || p.status === 'installation').map((project) => {
                 const customer = customers[project.customerId];
                 const status = getStatusInfo(project.status);
                 const StatusIcon = status.icon;
@@ -491,7 +491,7 @@ export default function ProjectDashboard({ onOpenProject, onOpenTracker, showAll
                 );
               })}
               
-              {projects.filter(p => p.status !== 'completed' && p.status !== 'lead').length === 0 && (
+              {projects.filter(p => p.status === 'contract' || p.status === 'installation').length === 0 && (
                 <div className="col-span-full py-16 text-center bg-white rounded-3xl border border-slate-100 space-y-3">
                    <Clock className="mx-auto h-8 w-8 text-slate-300" />
                    <p className="text-slate-400 text-xs font-black uppercase tracking-[0.2em]">Hiện không có công trình nào đang triển khai</p>
