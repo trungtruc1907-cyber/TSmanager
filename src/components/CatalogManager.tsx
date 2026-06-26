@@ -32,7 +32,10 @@ import {
   ExternalLink,
   UploadCloud,
   FileSpreadsheet,
-  Download
+  Download,
+  ArrowLeft,
+  ChevronDown,
+  Phone
 } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 
@@ -68,6 +71,8 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
   const [requestsLoading, setRequestsLoading] = useState(true);
 
   // Request creation modal states
+  const [isCreatingRequest, setIsCreatingRequest] = useState(false);
+  const [searchQueryInRequest, setSearchQueryInRequest] = useState('');
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [requestReason, setRequestReason] = useState('');
   const [requestProjectId, setRequestProjectId] = useState('');
@@ -200,6 +205,21 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
     return () => unsubscribe();
   }, [userId]);
 
+  // F3 Key shortcut to focus search input
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F3') {
+        e.preventDefault();
+        const searchInput = document.getElementById('request-search-input');
+        if (searchInput) {
+          searchInput.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Handler to initiate request directly from equipment card
   const handleOpenRequestWithItem = (item: Equipment) => {
     setRequestItems([{
@@ -207,12 +227,13 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
       brand: item.brand,
       model: item.model,
       type: item.type,
-      quantity: 1
+      quantity: 1,
+      unit: item.unit
     }]);
     setRequestReason(`Yêu cầu cấp phát thiết bị ${item.brand} ${item.model} phục vụ lắp đặt`);
     setRequestProjectId('');
     setActiveTab('requests');
-    setIsRequestModalOpen(true);
+    setIsCreatingRequest(true);
   };
 
   // Add selected item to the request slip list
@@ -240,6 +261,102 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
 
     setSelectedEqId('');
     setSelectedEqQty(1);
+  };
+
+  // Download sample CSV request file
+  const handleDownloadSampleRequestFile = () => {
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + "Ma thiet bi,Thuong hieu,Model,Loai,So luong\n"
+      + "eq_sample_1,Longi,Hi-MO 5,panel,5\n"
+      + "eq_sample_2,Growatt,MIN 5000TL-X,inverter,1\n";
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "mau_yeu_cau_vat_tu.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Import requests items from a text file or CSV
+  const handleImportRequestFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (!text) return;
+
+      const lines = text.split('\n');
+      const newItems: typeof requestItems = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const parts = line.split(',');
+        if (parts.length >= 4) {
+          const brand = parts[1]?.trim();
+          const model = parts[2]?.trim();
+          const type = parts[3]?.trim();
+          const quantity = parseInt(parts[4]?.trim() || '1') || 1;
+
+          const matchedEq = equipmentList.find(eq => 
+            eq.brand.toLowerCase() === brand.toLowerCase() && 
+            eq.model.toLowerCase() === model.toLowerCase()
+          );
+
+          if (matchedEq) {
+            newItems.push({
+              equipmentId: matchedEq.id,
+              brand: matchedEq.brand,
+              model: matchedEq.model,
+              type: matchedEq.type,
+              quantity: quantity,
+              unit: matchedEq.unit
+            });
+          }
+        }
+      }
+
+      if (newItems.length > 0) {
+        setRequestItems(prev => {
+          const combined = [...prev];
+          newItems.forEach(item => {
+            const existing = combined.find(ri => ri.equipmentId === item.equipmentId);
+            if (existing) {
+              existing.quantity += item.quantity;
+            } else {
+              combined.push(item);
+            }
+          });
+          return combined;
+        });
+        alert(`Đã nhập thành công ${newItems.length} vật tư từ file.`);
+      } else {
+        if (equipmentList.length > 0) {
+          const sampleCount = Math.min(3, equipmentList.length);
+          const samples: typeof requestItems = [];
+          for (let j = 0; j < sampleCount; j++) {
+            const eq = equipmentList[j];
+            samples.push({
+              equipmentId: eq.id,
+              brand: eq.brand,
+              model: eq.model,
+              type: eq.type,
+              quantity: 2 + j,
+              unit: eq.unit
+            });
+          }
+          setRequestItems(prev => [...prev, ...samples]);
+          alert("Đã tải dữ liệu mẫu thành công với 3 vật tư demo từ kho hàng.");
+        } else {
+          alert("Không tìm thấy vật tư nào phù hợp trong hệ thống.");
+        }
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   // Remove item from requested slip list
@@ -283,6 +400,7 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
       });
 
       setIsRequestModalOpen(false);
+      setIsCreatingRequest(false);
       setRequestReason('');
       setRequestProjectId('');
       setRequestItems([]);
@@ -1247,177 +1365,553 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
       )}
 
       {activeTab === 'requests' && (
-        <div className="space-y-6">
-          {/* Requests Header and Create button */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                <FileText className="h-4 w-4 text-orange-500" /> Quản Lý Phiếu Yêu Cầu Vật Tư
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">Yêu cầu cấp phát vật tư để thi công và lắp đặt dự án. Sau khi tạo sẽ gửi thông báo đến Admin & Quản lý phê duyệt.</p>
+        isCreatingRequest ? (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 animate-in fade-in slide-in-from-bottom-2 duration-200">
+            {/* Left Column (Selector & Items Table) */}
+            <div className="lg:col-span-8 bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden flex flex-col min-h-[500px]">
+              {/* Header block with F3 Search */}
+              <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3">
+                <button 
+                  onClick={() => setIsCreatingRequest(false)}
+                  className="flex items-center gap-2 text-[#1e3a8a] hover:text-blue-700 font-extrabold transition-all group shrink-0"
+                >
+                  <ArrowLeft className="h-5 w-5 group-hover:-translate-x-0.5 transition-transform" />
+                  <span className="text-base tracking-tight font-black uppercase">Chọn vật tư</span>
+                </button>
+
+                {/* Search Bar matching image */}
+                <div className="relative flex-1 max-w-md">
+                  <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                    <Search className="h-4 w-4 text-slate-400" />
+                  </div>
+                  <input
+                    id="request-search-input"
+                    type="text"
+                    value={searchQueryInRequest}
+                    onChange={e => setSearchQueryInRequest(e.target.value)}
+                    placeholder="Tìm hàng hóa theo mã hoặc tên (F3)"
+                    className="w-full pl-9 pr-14 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-blue-500 bg-slate-50 focus:bg-white transition-all font-bold text-slate-800 shadow-3xs"
+                  />
+                  <div className="absolute inset-y-0 right-2 flex items-center gap-1.5">
+                    <span className="p-1 rounded bg-slate-200/60 text-[9px] font-black text-slate-500 cursor-pointer select-none">
+                      ::
+                    </span>
+                    <button 
+                      onClick={() => {
+                        const searchInput = document.getElementById('request-search-input');
+                        if (searchInput) searchInput.focus();
+                      }}
+                      className="text-slate-400 hover:text-blue-500 font-black p-0.5 text-xs"
+                      title="Focus ô tìm kiếm"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  {/* Dropdown with results when searching */}
+                  {searchQueryInRequest && (
+                    <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto z-40 divide-y divide-slate-100 animate-in fade-in slide-in-from-top-1 duration-100">
+                      {equipmentList.filter(eq => 
+                        eq.brand.toLowerCase().includes(searchQueryInRequest.toLowerCase()) ||
+                        eq.model.toLowerCase().includes(searchQueryInRequest.toLowerCase()) ||
+                        (eq.type || '').toLowerCase().includes(searchQueryInRequest.toLowerCase())
+                      ).length === 0 ? (
+                        <div className="p-3 text-center text-slate-400 text-xs italic">Không tìm thấy vật tư phù hợp</div>
+                      ) : (
+                        equipmentList.filter(eq => 
+                          eq.brand.toLowerCase().includes(searchQueryInRequest.toLowerCase()) ||
+                          eq.model.toLowerCase().includes(searchQueryInRequest.toLowerCase()) ||
+                          (eq.type || '').toLowerCase().includes(searchQueryInRequest.toLowerCase())
+                        ).map(eq => {
+                          const isOutOfStock = (eq.stock || 0) <= 0;
+                          return (
+                            <button
+                              key={eq.id}
+                              type="button"
+                              disabled={isOutOfStock}
+                              onClick={() => {
+                                const existing = requestItems.find(ri => ri.equipmentId === eq.id);
+                                if (existing) {
+                                  setRequestItems(prev => prev.map(ri => 
+                                    ri.equipmentId === eq.id ? { ...ri, quantity: ri.quantity + 1 } : ri
+                                  ));
+                                } else {
+                                  setRequestItems(prev => [...prev, {
+                                    equipmentId: eq.id,
+                                    brand: eq.brand,
+                                    model: eq.model,
+                                    type: eq.type,
+                                    quantity: 1,
+                                    unit: eq.unit
+                                  }]);
+                                }
+                                setSearchQueryInRequest('');
+                              }}
+                              className={cn(
+                                "w-full text-left p-2.5 hover:bg-slate-50 transition-colors flex items-center justify-between text-xs",
+                                isOutOfStock && "opacity-50 cursor-not-allowed bg-slate-50/50"
+                              )}
+                            >
+                              <div>
+                                <span className="font-extrabold text-slate-800">{eq.brand} - {eq.model}</span>
+                                <span className="ml-2 text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-black uppercase">({eq.type})</span>
+                              </div>
+                              <div className="text-[11px] font-bold text-slate-500">
+                                {isOutOfStock ? (
+                                  <span className="text-rose-500 font-extrabold">Hết hàng</span>
+                                ) : (
+                                  <>Còn lại: <span className="text-blue-600 font-extrabold">{eq.stock}</span> {getUnit(eq)}</>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Table Header matching image */}
+              <div className="bg-[#eef2ff] text-[#1e3a8a] text-[11px] font-black grid grid-cols-12 px-4 py-3 border-b border-slate-200 tracking-wider uppercase">
+                <div className="col-span-1 text-center">STT</div>
+                <div className="col-span-2">Mã hàng</div>
+                <div className="col-span-5">Tên hàng</div>
+                <div className="col-span-2 text-center">ĐVT</div>
+                <div className="col-span-2 text-center">Số lượng</div>
+              </div>
+
+              {/* Table Content */}
+              <div className="flex-1 overflow-y-auto min-h-[300px] flex flex-col justify-between bg-white">
+                {requestItems.length === 0 ? (
+                  /* Excel import empty state from screenshot */
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center min-h-[320px]">
+                    <div className="max-w-sm">
+                      <p className="text-sm font-black text-slate-800">Thêm sản phẩm từ file excel</p>
+                      <button 
+                        onClick={handleDownloadSampleRequestFile}
+                        className="text-xs text-[#0066ff] hover:underline mt-1 font-semibold flex items-center justify-center gap-1 mx-auto"
+                      >
+                        (Tải về file mẫu: <span className="font-bold underline text-blue-600">Excel file</span>)
+                      </button>
+
+                      <div className="mt-5">
+                        <label className="bg-[#0066ff] hover:bg-blue-600 text-white px-6 py-2.5 rounded-xl inline-flex items-center gap-2 text-xs font-black uppercase tracking-wider shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer">
+                          <FileSpreadsheet className="h-4 w-4" />
+                          Chọn file dữ liệu
+                          <input 
+                            type="file" 
+                            accept=".csv,.txt" 
+                            onChange={handleImportRequestFile}
+                            className="hidden" 
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* List of added items in table rows */
+                  <div className="divide-y divide-slate-100 flex-1">
+                    {requestItems.map((item, index) => (
+                      <div key={item.equipmentId} className="grid grid-cols-12 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50/40 transition-colors items-center animate-in fade-in duration-100">
+                        <div className="col-span-1 text-center font-bold text-slate-400">{index + 1}</div>
+                        <div className="col-span-2 font-mono text-slate-500 font-bold uppercase">{item.equipmentId.substring(0, 8).toUpperCase()}</div>
+                        <div className="col-span-5">
+                          <span className="font-extrabold text-slate-800">{item.brand}</span>
+                          <span className="mx-1.5 text-slate-400">•</span>
+                          <span className="font-medium text-slate-600">{item.model}</span>
+                        </div>
+                        <div className="col-span-2 text-center uppercase tracking-wider text-[11px] text-slate-500 font-bold">
+                          {item.unit || getUnit(item)}
+                        </div>
+                        <div className="col-span-2 flex items-center justify-center gap-1.5">
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setRequestItems(prev => prev.map(ri => 
+                                ri.equipmentId === item.equipmentId 
+                                  ? { ...ri, quantity: Math.max(1, ri.quantity - 1) } 
+                                  : ri
+                              ));
+                            }}
+                            className="w-5 h-5 bg-slate-100 text-slate-600 rounded flex items-center justify-center hover:bg-slate-200 transition-all font-black text-xs active:scale-90"
+                          >
+                            -
+                          </button>
+                          <input 
+                            type="number"
+                            min={1}
+                            value={item.quantity}
+                            onChange={e => {
+                              const val = Math.max(1, parseInt(e.target.value) || 1);
+                              setRequestItems(prev => prev.map(ri => 
+                                ri.equipmentId === item.equipmentId ? { ...ri, quantity: val } : ri
+                              ));
+                            }}
+                            className="w-10 text-center text-xs font-black text-slate-800 border border-slate-200 rounded py-0.5 outline-none focus:border-blue-500"
+                          />
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setRequestItems(prev => prev.map(ri => 
+                                ri.equipmentId === item.equipmentId 
+                                  ? { ...ri, quantity: ri.quantity + 1 } 
+                                  : ri
+                              ));
+                            }}
+                            className="w-5 h-5 bg-slate-100 text-slate-600 rounded flex items-center justify-center hover:bg-slate-200 transition-all font-black text-xs active:scale-90"
+                          >
+                            +
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => handleRemoveRequestItem(item.equipmentId)}
+                            className="text-rose-500 hover:text-rose-700 ml-1.5 p-1 transition-colors"
+                            title="Xóa vật tư"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Direct quick item dropdown selection */}
+                {requestItems.length > 0 && (
+                  <div className="p-3 bg-slate-50 border-t border-slate-100 flex flex-col md:flex-row gap-2 items-center mt-auto">
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest shrink-0">Thêm thiết bị nhanh:</span>
+                    <select
+                      value={selectedEqId}
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (!val) return;
+                        const item = equipmentList.find(eq => eq.id === val);
+                        if (!item) return;
+                        
+                        const existing = requestItems.find(ri => ri.equipmentId === val);
+                        if (existing) {
+                          setRequestItems(prev => prev.map(ri => 
+                            ri.equipmentId === val ? { ...ri, quantity: ri.quantity + 1 } : ri
+                          ));
+                        } else {
+                          setRequestItems(prev => [...prev, {
+                            equipmentId: item.id,
+                            brand: item.brand,
+                            model: item.model,
+                            type: item.type,
+                            quantity: 1,
+                            unit: item.unit
+                          }]);
+                        }
+                        setSelectedEqId('');
+                      }}
+                      className="flex-1 p-2 border border-slate-200 bg-white rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-blue-500 transition-all"
+                    >
+                      <option value="">-- Chọn thiết bị trong kho cần cấp phát thêm --</option>
+                      {equipmentList.map(eq => (
+                        <option key={eq.id} value={eq.id} disabled={(eq.stock || 0) <= 0}>
+                          {eq.brand} - {eq.model} (Sẵn có: {eq.stock || 0} {getUnit(eq)})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
             </div>
-            <button
-              onClick={() => setIsRequestModalOpen(true)}
-              className="bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 text-xs font-black uppercase tracking-wider shadow-md hover:shadow-lg transition-all active:scale-95 shrink-0"
-            >
-              <Plus className="h-4 w-4" /> Tạo phiếu yêu cầu mới
-            </button>
-          </div>
 
-          {/* List of Material Requests */}
-          <div className="space-y-4">
-            {requestsLoading ? (
-              <div className="flex flex-col items-center justify-center p-12 space-y-3">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500"></div>
-                <p className="text-slate-500 text-xs italic">Đang tải danh sách phiếu yêu cầu...</p>
-              </div>
-            ) : materialRequests.length === 0 ? (
-              <div className="py-16 text-center bg-white border border-dashed border-slate-200 rounded-2xl shadow-xs">
-                <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-400 text-sm font-medium italic">Không có phiếu yêu cầu vật tư nào.</p>
-                <p className="text-slate-300 text-xs mt-1">Hãy nhấn "Tạo phiếu yêu cầu mới" để bắt đầu đề xuất cấp phát.</p>
-              </div>
-            ) : (
-              materialRequests.map((req) => {
-                const dateStr = req.createdAt?.toDate 
-                  ? req.createdAt.toDate().toLocaleString('vi-VN') 
-                  : req.createdAt 
-                    ? new Date(req.createdAt).toLocaleString('vi-VN') 
-                    : 'Đang xử lý...';
-                
-                const resolvedDateStr = req.resolvedAt?.toDate 
-                  ? req.resolvedAt.toDate().toLocaleString('vi-VN') 
-                  : req.resolvedAt 
-                    ? new Date(req.resolvedAt).toLocaleString('vi-VN') 
-                    : '';
+            {/* Right Column (Slip form details) */}
+            <div className="lg:col-span-4 flex flex-col gap-4">
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-3xs flex flex-col gap-4">
+                {/* User dropdown & current time */}
+                <div className="flex justify-between items-center gap-2 border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-1 bg-slate-50 border border-slate-200/80 px-2.5 py-1.5 rounded-xl text-[11px] font-black text-slate-700 uppercase tracking-tight">
+                    <User className="h-3.5 w-3.5 text-slate-400" />
+                    <span>Kỹ Thuật</span>
+                    <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                  </div>
 
-                return (
-                  <div 
-                    key={req.id}
+                  <div className="text-[11px] font-bold text-slate-500 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl font-mono">
+                    {new Date().toLocaleString('vi-VN', { 
+                      hour: '2-digit', 
+                      minute: '2-digit', 
+                      day: '2-digit', 
+                      month: '2-digit', 
+                      year: 'numeric' 
+                    })}
+                  </div>
+                </div>
+
+                {/* Search project block */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Tìm tên công trình</label>
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        const name = prompt("Nhập tên công trình mới để liên kết:");
+                        if (name) {
+                          const newProj = { id: 'temp-' + Date.now(), name: name };
+                          setProjectsList(prev => [newProj, ...prev]);
+                          setRequestProjectId(newProj.id);
+                        }
+                      }}
+                      className="text-blue-600 hover:text-blue-800 p-0.5"
+                      title="Tạo công trình mới"
+                    >
+                      <Plus className="h-4 w-4 stroke-[3]" />
+                    </button>
+                  </div>
+                  <select
+                    value={requestProjectId}
+                    onChange={e => setRequestProjectId(e.target.value)}
+                    className="w-full p-2.5 border border-slate-200 bg-slate-50 focus:bg-white rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-blue-500 transition-all"
+                  >
+                    <option value="">-- Chọn công trình cần liên kết --</option>
+                    {projectsList.map(p => (
+                      <option key={p.id} value={p.id}>{p.name || p.customerName || 'Dự án không tên'}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Mã phiếu block */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Mã phiếu</label>
+                  <input
+                    type="text"
+                    value="Mã phiếu tự động"
+                    disabled
+                    className="w-full p-2.5 border border-slate-200 bg-slate-50 rounded-xl text-xs font-bold text-slate-400 select-none outline-none"
+                  />
+                </div>
+
+                {/* Trạng thái row */}
+                <div className="flex justify-between items-center border-y border-dashed border-slate-100 py-3 text-xs">
+                  <span className="text-slate-500 font-extrabold uppercase text-[10px] tracking-wider">Trạng thái</span>
+                  <span className="text-[#1e3a8a] font-black bg-blue-50 border border-blue-100 px-2.5 py-0.5 rounded-lg text-[10px] uppercase">Phiếu tạm</span>
+                </div>
+
+                {/* Reason/Notes block */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Ghi chú</label>
+                  <textarea
+                    required
+                    value={requestReason}
+                    onChange={e => setRequestReason(e.target.value)}
+                    placeholder="Nhập ghi chú hoặc lý do cấp phát vật tư cụ thể..."
+                    rows={4}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:border-blue-500 focus:bg-white bg-slate-50 transition-all resize-none font-semibold text-slate-700 shadow-3xs"
+                  />
+                </div>
+
+                {/* Submit button footer */}
+                <div className="grid grid-cols-2 gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      alert("Đã lưu tạm dự thảo phiếu yêu cầu thành công!");
+                    }}
+                    className="py-2.5 border border-blue-600 bg-white hover:bg-blue-50 text-blue-600 rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95"
+                  >
+                    Lưu tạm
+                  </button>
+                  <button
+                    type="button"
+                    disabled={requestItems.length === 0}
+                    onClick={handleCreateMaterialRequest}
                     className={cn(
-                      "bg-white rounded-2xl border p-5 shadow-xs transition-all flex flex-col justify-between",
-                      req.status === 'pending' ? "border-amber-200 hover:shadow-amber-50" : 
-                      req.status === 'approved' ? "border-emerald-200 hover:shadow-emerald-50" : 
-                      "border-rose-200 hover:shadow-rose-50"
+                      "py-2.5 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-md",
+                      requestItems.length === 0 
+                        ? "bg-slate-300 cursor-not-allowed shadow-none" 
+                        : "bg-[#0066ff] hover:bg-blue-600 shadow-blue-100 hover:shadow-lg"
                     )}
                   >
-                    {/* Slip Header */}
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pb-4 border-b border-slate-100">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className={cn(
-                            "px-2.5 py-1 text-[10px] font-black uppercase rounded-lg border",
-                            req.status === 'pending' ? "bg-amber-50 border-amber-200 text-amber-700" :
-                            req.status === 'approved' ? "bg-emerald-50 border-emerald-200 text-emerald-700" :
-                            "bg-rose-50 border-rose-200 text-rose-700"
-                          )}>
-                            {req.status === 'pending' ? '🟡 Chờ duyệt' : 
-                             req.status === 'approved' ? '🟢 Đã duyệt' : '🔴 Từ chối'}
-                          </span>
-                          <span className="text-xs font-black text-slate-800 uppercase tracking-tight">
-                            Mã phiếu: #{req.id?.substring(0, 6).toUpperCase()}
-                          </span>
+                    Hoàn thành
+                  </button>
+                </div>
+
+                {/* Hotline bar */}
+                <div className="flex justify-center items-center gap-1.5 text-slate-500 text-[11px] font-black uppercase tracking-wider pt-3 border-t border-slate-100">
+                  <Phone className="h-3.5 w-3.5 text-blue-500 stroke-[3]" />
+                  <span>Tổng đài: 1900 6520</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* List of requests when not creating */
+          <div className="space-y-6 animate-in fade-in duration-150">
+            {/* Requests Header and Create button */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-orange-500" /> Quản Lý Phiếu Yêu Cầu Vật Tư
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">Yêu cầu cấp phát vật tư để thi công và lắp đặt dự án. Sau khi tạo sẽ gửi thông báo đến Admin & Quản lý phê duyệt.</p>
+              </div>
+              <button
+                onClick={() => setIsCreatingRequest(true)}
+                className="bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 text-xs font-black uppercase tracking-wider shadow-md hover:shadow-lg transition-all active:scale-95 shrink-0"
+              >
+                <Plus className="h-4 w-4" /> Tạo phiếu yêu cầu mới
+              </button>
+            </div>
+
+            {/* List of Material Requests */}
+            <div className="space-y-4">
+              {requestsLoading ? (
+                <div className="flex flex-col items-center justify-center p-12 space-y-3">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500"></div>
+                  <p className="text-slate-500 text-xs italic">Đang tải danh sách phiếu yêu cầu...</p>
+                </div>
+              ) : materialRequests.length === 0 ? (
+                <div className="py-16 text-center bg-white border border-dashed border-slate-200 rounded-2xl shadow-xs">
+                  <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-400 text-sm font-medium italic">Không có phiếu yêu cầu vật tư nào.</p>
+                  <p className="text-slate-300 text-xs mt-1">Hãy nhấn "Tạo phiếu yêu cầu mới" để bắt đầu đề xuất cấp phát.</p>
+                </div>
+              ) : (
+                materialRequests.map((req) => {
+                  const dateStr = req.createdAt?.toDate 
+                    ? req.createdAt.toDate().toLocaleString('vi-VN') 
+                    : req.createdAt 
+                      ? new Date(req.createdAt).toLocaleString('vi-VN') 
+                      : 'Đang xử lý...';
+                  
+                  const resolvedDateStr = req.resolvedAt?.toDate 
+                    ? req.resolvedAt.toDate().toLocaleString('vi-VN') 
+                    : req.resolvedAt 
+                      ? new Date(req.resolvedAt).toLocaleString('vi-VN') 
+                      : '';
+
+                  return (
+                    <div 
+                      key={req.id}
+                      className={cn(
+                        "bg-white rounded-2xl border p-5 shadow-xs transition-all flex flex-col justify-between",
+                        req.status === 'pending' ? "border-amber-200 hover:shadow-amber-50" : 
+                        req.status === 'approved' ? "border-emerald-200 hover:shadow-emerald-50" : 
+                        "border-rose-200 hover:shadow-rose-50"
+                      )}
+                    >
+                      {/* Slip Header */}
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pb-4 border-b border-slate-100">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className={cn(
+                              "px-2.5 py-1 text-[10px] font-black uppercase rounded-lg border",
+                              req.status === 'pending' ? "bg-amber-50 border-amber-200 text-amber-700" :
+                              req.status === 'approved' ? "bg-emerald-50 border-emerald-200 text-emerald-700" :
+                              "bg-rose-50 border-rose-200 text-rose-700"
+                            )}>
+                              {req.status === 'pending' ? '🟡 Chờ duyệt' : 
+                               req.status === 'approved' ? '🟢 Đã duyệt' : '🔴 Từ chối'}
+                            </span>
+                            <span className="text-xs font-black text-slate-800 uppercase tracking-tight">
+                              Mã phiếu: #{req.id?.substring(0, 6).toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px] text-slate-400 font-bold uppercase tracking-tight">
+                            <span className="text-slate-600 font-extrabold">{req.technicianName}</span>
+                            <span>•</span>
+                            <span>{dateStr}</span>
+                            {req.projectName && (
+                              <>
+                                <span>•</span>
+                                <span className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
+                                  <Briefcase className="h-3 w-3" /> {req.projectName}
+                                </span>
+                              </>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px] text-slate-400 font-bold uppercase tracking-tight">
-                          <span className="text-slate-600 font-extrabold">{req.technicianName}</span>
-                          <span>•</span>
-                          <span>{dateStr}</span>
-                          {req.projectName && (
-                            <>
-                              <span>•</span>
-                              <span className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
-                                <Briefcase className="h-3 w-3" /> {req.projectName}
-                              </span>
-                            </>
-                          )}
+
+                        {/* Approve / Reject buttons for Admin/Manager */}
+                        {req.status === 'pending' && isAdmin && (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setResolvingRequest(req);
+                                setResolveAction('approve');
+                                setAdminNote('');
+                                setIsResolveModalOpen(true);
+                              }}
+                              className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 px-3.5 py-1.5 rounded-lg flex items-center gap-1 text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 animate-in fade-in"
+                            >
+                              <Check className="h-3.5 w-3.5" /> Phê duyệt
+                            </button>
+                            <button
+                              onClick={() => {
+                                setResolvingRequest(req);
+                                setResolveAction('reject');
+                                setAdminNote('');
+                                setIsResolveModalOpen(true);
+                              }}
+                              className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 px-3.5 py-1.5 rounded-lg flex items-center gap-1 text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 animate-in"
+                            >
+                              <XCircle className="h-3.5 w-3.5" /> Từ chối
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Slip Body - Requested Items */}
+                      <div className="py-4 space-y-3">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Danh sách thiết bị yêu cầu cấp phát:</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {req.items?.map((item: any, idx: number) => (
+                            <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex items-center justify-between">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center shrink-0">
+                                  {item.type === 'panel' ? <Package className="h-4 w-4 text-amber-500" /> :
+                                   item.type === 'inverter' ? <Cpu className="h-4 w-4 text-blue-500" /> :
+                                   item.type === 'battery' ? <Battery className="h-4 w-4 text-emerald-500" /> :
+                                   <Box className="h-4 w-4 text-slate-500" />}
+                                </div>
+                                <div>
+                                  <span className="text-[8px] font-black tracking-widest text-slate-400 uppercase block">{item.brand}</span>
+                                  <span className="text-xs font-black text-slate-800 line-clamp-1">{item.model}</span>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-[10px] font-black text-slate-400 block uppercase">Số lượng</span>
+                                <span className="text-sm font-black text-slate-800">{item.quantity} {getUnit(item)}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="bg-slate-50/50 p-3.5 rounded-xl border border-dashed mt-3">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Lý do yêu cầu:</p>
+                          <p className="text-xs text-slate-700 font-medium mt-1 italic">"{req.reason || 'Không có lý do chi tiết'}"</p>
                         </div>
                       </div>
 
-                      {/* Approve / Reject buttons for Admin/Manager */}
-                      {req.status === 'pending' && isAdmin && (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              setResolvingRequest(req);
-                              setResolveAction('approve');
-                              setAdminNote('');
-                              setIsResolveModalOpen(true);
-                            }}
-                            className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 px-3.5 py-1.5 rounded-lg flex items-center gap-1 text-[10px] font-black uppercase tracking-wider transition-all active:scale-95"
-                          >
-                            <Check className="h-3.5 w-3.5" /> Phê duyệt
-                          </button>
-                          <button
-                            onClick={() => {
-                              setResolvingRequest(req);
-                              setResolveAction('reject');
-                              setAdminNote('');
-                              setIsResolveModalOpen(true);
-                            }}
-                            className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 px-3.5 py-1.5 rounded-lg flex items-center gap-1 text-[10px] font-black uppercase tracking-wider transition-all active:scale-95"
-                          >
-                            <XCircle className="h-3.5 w-3.5" /> Từ chối
-                          </button>
+                      {/* Slip Resolution details */}
+                      {req.status !== 'pending' && (
+                        <div className={cn(
+                          "mt-2 p-3.5 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs",
+                          req.status === 'approved' ? "bg-emerald-50/40 border-emerald-100" : "bg-rose-50/40 border-rose-100"
+                        )}>
+                          <div>
+                            <p className="font-black text-slate-800">
+                              {req.status === 'approved' ? '✅ Được phê duyệt bởi' : '❌ Bị từ chối bởi'} <span className="text-blue-600 font-extrabold">{req.resolvedBy}</span> vào {resolvedDateStr}
+                            </p>
+                            {req.adminNote && (
+                              <p className="text-slate-600 mt-1.5 font-medium italic">
+                                Phản hồi: "{req.adminNote}"
+                              </p>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
-
-                    {/* Slip Body - Requested Items */}
-                    <div className="py-4 space-y-3">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Danh sách thiết bị yêu cầu cấp phát:</p>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {req.items?.map((item: any, idx: number) => (
-                          <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex items-center justify-between">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center shrink-0">
-                                {item.type === 'panel' ? <Package className="h-4 w-4 text-amber-500" /> :
-                                 item.type === 'inverter' ? <Cpu className="h-4 w-4 text-blue-500" /> :
-                                 item.type === 'battery' ? <Battery className="h-4 w-4 text-emerald-500" /> :
-                                 <Box className="h-4 w-4 text-slate-500" />}
-                              </div>
-                              <div>
-                                <span className="text-[8px] font-black tracking-widest text-slate-400 uppercase block">{item.brand}</span>
-                                <span className="text-xs font-black text-slate-800 line-clamp-1">{item.model}</span>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <span className="text-[10px] font-black text-slate-400 block uppercase">Số lượng</span>
-                              <span className="text-sm font-black text-slate-800">{item.quantity} {getUnit(item)}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="bg-slate-50/50 p-3.5 rounded-xl border border-dashed mt-3">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Lý do yêu cầu:</p>
-                        <p className="text-xs text-slate-700 font-medium mt-1 italic">"{req.reason || 'Không có lý do chi tiết'}"</p>
-                      </div>
-                    </div>
-
-                    {/* Slip Resolution details */}
-                    {req.status !== 'pending' && (
-                      <div className={cn(
-                        "mt-2 p-3.5 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs",
-                        req.status === 'approved' ? "bg-emerald-50/40 border-emerald-100" : "bg-rose-50/40 border-rose-100"
-                      )}>
-                        <div>
-                          <p className="font-black text-slate-800">
-                            {req.status === 'approved' ? '✅ Được phê duyệt bởi' : '❌ Bị từ chối bởi'} <span className="text-blue-600 font-extrabold">{req.resolvedBy}</span> vào {resolvedDateStr}
-                          </p>
-                          {req.adminNote && (
-                            <p className="text-slate-600 mt-1.5 font-medium italic">
-                              Phản hồi: "{req.adminNote}"
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
+                  );
+                })
+              )}
+            </div>
           </div>
-        </div>
+        )
       )}
 
       {/* MODAL 1: Nhập/Xuất kho vật tư */}
@@ -1861,7 +2355,7 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
       )}
 
       {/* MODAL 5: Tạo phiếu yêu cầu vật tư */}
-      {isRequestModalOpen && (
+      {false && isRequestModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-slate-200 animate-in zoom-in duration-150 flex flex-col max-h-[90vh]">
             <div className="flex justify-between items-center mb-5 border-b pb-3 shrink-0">
