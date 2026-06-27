@@ -40,7 +40,16 @@ import {
   Building,
   Info,
   Printer,
-  FolderOpen
+  FolderOpen,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Sun,
+  Settings,
+  ShieldCheck,
+  TrendingUp,
+  Globe
 } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 
@@ -58,9 +67,67 @@ export const getUnit = (item: { type?: string; unit?: string } | undefined) => {
 interface PrintRequestViewProps {
   request: any;
   onClose: () => void;
+  equipmentList?: any[];
 }
 
-function PrintRequestView({ request, onClose }: PrintRequestViewProps) {
+function PrintRequestView({ request, onClose, equipmentList: propEquipmentList }: PrintRequestViewProps) {
+  const [settings, setSettings] = useState<any>(null);
+  const [localEquipmentList, setLocalEquipmentList] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const docSnap = await getDoc(doc(db, 'settings', 'general'));
+        if (docSnap.exists()) {
+          setSettings(docSnap.data());
+        }
+      } catch (err) {
+        console.warn("Failed to fetch print header settings for PrintRequestView:", err);
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  useEffect(() => {
+    if (propEquipmentList && propEquipmentList.length > 0) {
+      setLocalEquipmentList(propEquipmentList);
+    } else {
+      const q = collection(db, 'equipment');
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setLocalEquipmentList(list);
+      }, (error) => {
+        console.error("Error loading equipment inside PrintRequestView:", error);
+      });
+      return () => unsubscribe();
+    }
+  }, [propEquipmentList]);
+
+  const getStockStatusText = (item: any) => {
+    const eq = localEquipmentList.find(
+      (e) => e.id === item.equipmentId || (e.brand === item.brand && e.model === item.model)
+    );
+    if (!eq) {
+      return (
+        <span className="text-slate-400 font-medium italic">N/A</span>
+      );
+    }
+    const stock = eq.stock || 0;
+    if (stock <= 0) {
+      return (
+        <span className="text-rose-600 font-extrabold text-[10px] uppercase">Hết hàng (Tồn: 0)</span>
+      );
+    }
+    if (stock < item.quantity) {
+      return (
+        <span className="text-amber-600 font-black text-[10px] uppercase">Thiếu hụt (Tồn: {stock})</span>
+      );
+    }
+    return (
+      <span className="text-emerald-600 font-bold text-[10px] uppercase">Còn hàng (Tồn: {stock})</span>
+    );
+  };
+
   const mainItems = request.items?.filter((item: any) => 
     ['panel', 'inverter', 'battery'].includes(item.type?.toLowerCase())
   ) || [];
@@ -104,50 +171,92 @@ function PrintRequestView({ request, onClose }: PrintRequestViewProps) {
       <div className="proposal-print bg-white p-8 border border-slate-200 rounded-2xl shadow-sm max-w-[850px] mx-auto w-full font-sans text-black leading-relaxed flex flex-col justify-between min-h-[1100px]">
         {/* Header Block matching the image */}
         <div>
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-4">
-            {/* Logo area */}
-            <div className="flex items-center gap-3">
-              <div className="w-20 h-20 rounded-full border-4 border-[#0054a6] flex items-center justify-center relative shrink-0">
-                <div className="w-16 h-16 rounded-full border border-red-500 flex flex-col items-center justify-center">
-                  <span className="text-[#0054a6] font-extrabold text-2xl leading-none tracking-tight">TS</span>
-                  <span className="text-[5px] text-red-500 font-bold uppercase tracking-tighter mt-0.5">TRUONG SON</span>
+          {settings?.printHeaderUrl ? (
+            <div className="w-full mb-6 overflow-hidden rounded-xl">
+              <img 
+                src={settings.printHeaderUrl} 
+                alt="Banner Công ty" 
+                className="w-full h-auto object-contain"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          ) : (
+            <div className="w-full bg-white border border-slate-100 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden mb-6">
+              {/* Left Side: Globe TS Logo */}
+              <div className="flex flex-col items-center text-center shrink-0 w-24">
+                <img 
+                  src="https://lh3.googleusercontent.com/d/1vN7tAn7UoZ7rR7U7S-JtG0rY_iV7B56Q" 
+                  alt="Solar Trường Sơn Logo" 
+                  className="w-20 h-20 object-contain"
+                  referrerPolicy="no-referrer"
+                />
+                <span className="text-[7px] text-[#0054a6] font-black uppercase tracking-widest mt-1">TRUONG SON COMPANY</span>
+              </div>
+
+              {/* Middle Section: Company Slogans & Badges */}
+              <div className="flex-1 md:border-l border-slate-200 md:pl-6 space-y-3">
+                <div>
+                  <h2 className="text-[#0054a6] text-[10px] font-bold uppercase tracking-[0.2em] leading-none">CÔNG TY CỔ PHẦN</h2>
+                  <h1 className="text-[#0054a6] text-xl md:text-2xl font-black uppercase tracking-tight mt-1 leading-none">ĐẦU TƯ TM TRƯỜNG SƠN</h1>
+                  <h3 className="text-[#40b04c] text-[11px] md:text-xs font-extrabold uppercase tracking-[0.15em] mt-2 leading-none">GIẢI PHÁP ĐIỆN NĂNG LƯỢNG MẶT TRỜI</h3>
+                  <p className="text-slate-500 text-[10px] italic font-medium mt-1 leading-none">Hiệu quả hôm nay – Bền vững ngày mai</p>
+                </div>
+
+                {/* 4 Custom badged services matching the circular icons on the image */}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 pt-1 text-[8px] font-bold text-slate-700 uppercase tracking-wide">
+                  <span className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-[#0054a6] text-white flex items-center justify-center p-0.5 shrink-0">
+                      <Sun className="h-3 w-3" />
+                    </div>
+                    TƯ VẤN CHUYÊN NGHIỆP
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-[#0054a6] text-white flex items-center justify-center p-0.5 shrink-0">
+                      <Settings className="h-3 w-3" />
+                    </div>
+                    THIẾT KẾ TỐI ƯU
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-[#0054a6] text-white flex items-center justify-center p-0.5 shrink-0">
+                      <ShieldCheck className="h-3 w-3" />
+                    </div>
+                    THIẾT BỊ CHÍNH HÃNG CHẤT LƯỢNG CAO
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-[#0054a6] text-white flex items-center justify-center p-0.5 shrink-0">
+                      <TrendingUp className="h-3 w-3" />
+                    </div>
+                    TIẾT KIỆM ĐIỆN TỐI ƯU HIỆU QUẢ
+                  </span>
                 </div>
               </div>
-              <div className="text-[7px] text-slate-500 font-black uppercase tracking-widest text-center mt-1">
-                TRUONG SON COMPANY
+
+              {/* Right Side: Clipped Modern Solar Panel Graphic matching the image's right angle */}
+              <div className="hidden md:block w-48 h-28 relative overflow-hidden rounded-r-lg">
+                <div className="absolute inset-0 bg-gradient-to-r from-white via-[#0054a6]/10 to-transparent z-10" />
+                <img 
+                  src="https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=400&q=80" 
+                  alt="Solar System" 
+                  className="w-full h-full object-cover grayscale-[20%]"
+                  referrerPolicy="no-referrer"
+                />
               </div>
             </div>
+          )}
 
-            {/* Title / Company Slogan info */}
-            <div className="flex-1 text-center md:text-left md:pl-4">
-              <h2 className="text-[#0054a6] text-xs font-bold uppercase tracking-wider leading-none">CÔNG TY CỔ PHẦN</h2>
-              <h1 className="text-[#0054a6] text-xl font-extrabold uppercase tracking-tight mt-1 leading-none">ĐẦU TƯ TM TRƯỜNG SƠN</h1>
-              <h3 className="text-[#40b04c] text-[10px] font-black uppercase tracking-widest mt-2 leading-none">GIẢI PHÁP ĐIỆN NĂNG LƯỢNG MẶT TRỜI</h3>
-              <p className="text-slate-500 text-[9px] italic font-medium mt-1">Hiệu quả hôm nay - Bền vững ngày mai</p>
-              
-              {/* Badges */}
-              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 text-[7px] font-extrabold text-slate-600 uppercase tracking-wider justify-center md:justify-start">
-                <span className="flex items-center gap-1">☀️ TƯ VẤN CHUYÊN NGHIỆP</span>
-                <span className="flex items-center gap-1">⚙️ THIẾT KẾ TỐI ƯU</span>
-                <span className="flex items-center gap-1">🛡️ THIẾT BỊ CHÍNH HÃNG</span>
-                <span className="flex items-center gap-1">⚡ TIẾT KIỆM ĐIỆN TỐI ƯU</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Contact Strip with exact colors */}
+          {/* Contact Strip with exact colors and updated phone number */}
           <div className="bg-[#0054a6] text-white py-1 px-4 rounded-md text-[9px] flex flex-col sm:flex-row justify-between items-center font-bold tracking-tight gap-2 shadow-xs mb-8">
             <div className="flex items-center gap-1">
               <MapPin className="h-3 w-3 text-amber-300" />
               <span>Đường Nguyễn Thiếp, P. Hạc Thành, Thanh Hóa</span>
             </div>
             <div className="flex items-center gap-1">
-              <ExternalLink className="h-3 w-3 text-amber-300" />
+              <Globe className="h-3 w-3 text-amber-300" />
               <span>solartruongson.vn</span>
             </div>
             <div className="bg-[#e30613] text-white px-2.5 py-0.5 flex items-center gap-1 rounded-sm font-black text-[9px] shrink-0">
               <Phone className="h-2.5 w-2.5 text-white fill-white" />
-              <span>0945.880.386 - 0982.075.755</span>
+              <span>0945.880.386 - 0982.075.705</span>
             </div>
           </div>
 
@@ -211,7 +320,7 @@ function PrintRequestView({ request, onClose }: PrintRequestViewProps) {
                         </td>
                         <td className="py-2 px-2 text-center border border-black font-black text-slate-950 text-sm">{item.quantity}</td>
                         <td className="py-2 px-3 text-center border border-black text-slate-600 font-bold uppercase">{item.unit || getUnit(item)}</td>
-                        <td className="py-2 px-4 border border-black text-center text-[10px] text-slate-400 italic">Sẵn sàng</td>
+                        <td className="py-2 px-4 border border-black text-center">{getStockStatusText(item)}</td>
                         <td className="py-2 px-4 border border-black"></td>
                       </tr>
                     ))}
@@ -234,7 +343,7 @@ function PrintRequestView({ request, onClose }: PrintRequestViewProps) {
                         </td>
                         <td className="py-2 px-2 text-center border border-black font-black text-slate-950 text-sm">{item.quantity}</td>
                         <td className="py-2 px-3 text-center border border-black text-slate-600 font-bold uppercase">{item.unit || getUnit(item)}</td>
-                        <td className="py-2 px-4 border border-black text-center text-[10px] text-slate-400 italic">Sẵn sàng</td>
+                        <td className="py-2 px-4 border border-black text-center">{getStockStatusText(item)}</td>
                         <td className="py-2 px-4 border border-black"></td>
                       </tr>
                     ))}
@@ -275,6 +384,22 @@ interface PrintProposalsViewProps {
 }
 
 function PrintProposalsView({ proposals, onClose }: PrintProposalsViewProps) {
+  const [settings, setSettings] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const docSnap = await getDoc(doc(db, 'settings', 'general'));
+        if (docSnap.exists()) {
+          setSettings(docSnap.data());
+        }
+      } catch (err) {
+        console.warn("Failed to fetch print header settings for PrintProposalsView:", err);
+      }
+    };
+    fetchSettings();
+  }, []);
+
   // Aggregate items
   const aggregatedItemsMap: Record<string, any> = {};
   
@@ -343,50 +468,92 @@ function PrintProposalsView({ proposals, onClose }: PrintProposalsViewProps) {
       <div className="proposal-print bg-white p-8 border border-slate-200 rounded-2xl shadow-sm max-w-[850px] mx-auto w-full font-sans text-black leading-relaxed flex flex-col justify-between min-h-[1100px]">
         {/* Header Block matching the image */}
         <div>
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-4">
-            {/* Logo area */}
-            <div className="flex items-center gap-3">
-              <div className="w-20 h-20 rounded-full border-4 border-[#0054a6] flex items-center justify-center relative shrink-0">
-                <div className="w-16 h-16 rounded-full border border-red-500 flex flex-col items-center justify-center">
-                  <span className="text-[#0054a6] font-extrabold text-2xl leading-none tracking-tight">TS</span>
-                  <span className="text-[5px] text-red-500 font-bold uppercase tracking-tighter mt-0.5">TRUONG SON</span>
+          {settings?.printHeaderUrl ? (
+            <div className="w-full mb-6 overflow-hidden rounded-xl">
+              <img 
+                src={settings.printHeaderUrl} 
+                alt="Banner Công ty" 
+                className="w-full h-auto object-contain"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          ) : (
+            <div className="w-full bg-white border border-slate-100 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden mb-6">
+              {/* Left Side: Globe TS Logo */}
+              <div className="flex flex-col items-center text-center shrink-0 w-24">
+                <img 
+                  src="https://lh3.googleusercontent.com/d/1vN7tAn7UoZ7rR7U7S-JtG0rY_iV7B56Q" 
+                  alt="Solar Trường Sơn Logo" 
+                  className="w-20 h-20 object-contain"
+                  referrerPolicy="no-referrer"
+                />
+                <span className="text-[7px] text-[#0054a6] font-black uppercase tracking-widest mt-1">TRUONG SON COMPANY</span>
+              </div>
+
+              {/* Middle Section: Company Slogans & Badges */}
+              <div className="flex-1 md:border-l border-slate-200 md:pl-6 space-y-3">
+                <div>
+                  <h2 className="text-[#0054a6] text-[10px] font-bold uppercase tracking-[0.2em] leading-none">CÔNG TY CỔ PHẦN</h2>
+                  <h1 className="text-[#0054a6] text-xl md:text-2xl font-black uppercase tracking-tight mt-1 leading-none">ĐẦU TƯ TM TRƯỜNG SƠN</h1>
+                  <h3 className="text-[#40b04c] text-[11px] md:text-xs font-extrabold uppercase tracking-[0.15em] mt-2 leading-none">GIẢI PHÁP ĐIỆN NĂNG LƯỢNG MẶT TRỜI</h3>
+                  <p className="text-slate-500 text-[10px] italic font-medium mt-1 leading-none">Hiệu quả hôm nay – Bền vững ngày mai</p>
+                </div>
+
+                {/* 4 Custom badged services matching the circular icons on the image */}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 pt-1 text-[8px] font-bold text-slate-700 uppercase tracking-wide">
+                  <span className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-[#0054a6] text-white flex items-center justify-center p-0.5 shrink-0">
+                      <Sun className="h-3 w-3" />
+                    </div>
+                    TƯ VẤN CHUYÊN NGHIỆP
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-[#0054a6] text-white flex items-center justify-center p-0.5 shrink-0">
+                      <Settings className="h-3 w-3" />
+                    </div>
+                    THIẾT KẾ TỐI ƯU
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-[#0054a6] text-white flex items-center justify-center p-0.5 shrink-0">
+                      <ShieldCheck className="h-3 w-3" />
+                    </div>
+                    THIẾT BỊ CHÍNH HÃNG CHẤT LƯỢNG CAO
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-[#0054a6] text-white flex items-center justify-center p-0.5 shrink-0">
+                      <TrendingUp className="h-3 w-3" />
+                    </div>
+                    TIẾT KIỆM ĐIỆN TỐI ƯU HIỆU QUẢ
+                  </span>
                 </div>
               </div>
-              <div className="text-[7px] text-slate-500 font-black uppercase tracking-widest text-center mt-1">
-                TRUONG SON COMPANY
+
+              {/* Right Side: Clipped Modern Solar Panel Graphic matching the image's right angle */}
+              <div className="hidden md:block w-48 h-28 relative overflow-hidden rounded-r-lg">
+                <div className="absolute inset-0 bg-gradient-to-r from-white via-[#0054a6]/10 to-transparent z-10" />
+                <img 
+                  src="https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=400&q=80" 
+                  alt="Solar System" 
+                  className="w-full h-full object-cover grayscale-[20%]"
+                  referrerPolicy="no-referrer"
+                />
               </div>
             </div>
+          )}
 
-            {/* Title / Company Slogan info */}
-            <div className="flex-1 text-center md:text-left md:pl-4">
-              <h2 className="text-[#0054a6] text-xs font-bold uppercase tracking-wider leading-none">CÔNG TY CỔ PHẦN</h2>
-              <h1 className="text-[#0054a6] text-xl font-extrabold uppercase tracking-tight mt-1 leading-none">ĐẦU TƯ TM TRƯỜNG SƠN</h1>
-              <h3 className="text-[#40b04c] text-[10px] font-black uppercase tracking-widest mt-2 leading-none">GIẢI PHÁP ĐIỆN NĂNG LƯỢNG MẶT TRỜI</h3>
-              <p className="text-slate-500 text-[9px] italic font-medium mt-1">Hiệu quả hôm nay - Bền vững ngày mai</p>
-              
-              {/* Badges */}
-              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 text-[7px] font-extrabold text-slate-600 uppercase tracking-wider justify-center md:justify-start">
-                <span className="flex items-center gap-1">☀️ TƯ VẤN CHUYÊN NGHIỆP</span>
-                <span className="flex items-center gap-1">⚙️ THIẾT KẾ TỐI ƯU</span>
-                <span className="flex items-center gap-1">🛡️ THIẾT BỊ CHÍNH HÃNG</span>
-                <span className="flex items-center gap-1">⚡ TIẾT KIỆM ĐIỆN TỐI ƯU</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Contact Strip with exact colors */}
+          {/* Contact Strip with exact colors and updated phone number */}
           <div className="bg-[#0054a6] text-white py-1 px-4 rounded-md text-[9px] flex flex-col sm:flex-row justify-between items-center font-bold tracking-tight gap-2 shadow-xs mb-8">
             <div className="flex items-center gap-1">
               <MapPin className="h-3 w-3 text-amber-300" />
               <span>Đường Nguyễn Thiếp, P. Hạc Thành, Thanh Hóa</span>
             </div>
             <div className="flex items-center gap-1">
-              <ExternalLink className="h-3 w-3 text-amber-300" />
+              <Globe className="h-3 w-3 text-amber-300" />
               <span>solartruongson.vn</span>
             </div>
             <div className="bg-[#e30613] text-white px-2.5 py-0.5 flex items-center gap-1 rounded-sm font-black text-[9px] shrink-0">
               <Phone className="h-2.5 w-2.5 text-white fill-white" />
-              <span>0945.880.386 - 0982.075.755</span>
+              <span>0945.880.386 - 0982.075.705</span>
             </div>
           </div>
 
@@ -574,6 +741,15 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
   const [categoryFilter, setCategoryFilter] = useState<EquipmentCategory | 'all'>('all');
   const [stockFilter, setStockFilter] = useState<StockStatusFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Pagination for inventory list
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+
+  // Reset page when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [categoryFilter, stockFilter, searchQuery]);
 
   // Modals
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -1576,6 +1752,36 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
     });
   }, [equipmentList, categoryFilter, stockFilter, searchQuery]);
 
+  // Pagination calculations
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, filteredEquipment.length);
+  const paginatedEquipment = React.useMemo(() => {
+    return filteredEquipment.slice(startIndex, endIndex);
+  }, [filteredEquipment, startIndex, endIndex]);
+  const totalPages = Math.max(1, Math.ceil(filteredEquipment.length / pageSize));
+
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisible = 5;
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      let start = Math.max(1, currentPage - 2);
+      let end = Math.min(totalPages, currentPage + 2);
+      if (start === 1) {
+        end = maxVisible;
+      } else if (end === totalPages) {
+        start = totalPages - maxVisible + 1;
+      }
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+    }
+    return pages;
+  };
+
   if (loading) return (
     <div className="flex flex-col items-center justify-center p-16 space-y-4">
       <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
@@ -1835,222 +2041,377 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
         </div>
       </div>
 
-      {/* Equipment Warehouse Grid Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-        {filteredEquipment.map((item) => {
-          const qty = item.stock || 0;
-          const min = item.minStock || 0;
-          
-          let alertStatus: 'normal' | 'low' | 'out' = 'normal';
-          if (qty === 0) {
-            alertStatus = 'out';
-          } else if (qty <= min) {
-            alertStatus = 'low';
-          }
-
-          return (
-            <div 
-              key={item.id} 
-              className={cn(
-                "bg-white p-5 rounded-2xl border transition-all group relative flex flex-col justify-between overflow-hidden",
-                alertStatus === 'out' ? "border-rose-200 hover:shadow-rose-50" : 
-                alertStatus === 'low' ? "border-amber-200 hover:shadow-amber-50" : "border-slate-200 hover:shadow-slate-100",
-                "hover:shadow-md hover:border-slate-300"
-              )}
-            >
-              <div className="space-y-4">
-                {/* Upper row: Icons & Action Triggers */}
-                <div className="flex justify-between items-start">
-                  <div className={cn(
-                    "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
-                    item.type === 'panel' ? "bg-amber-50 text-amber-600" : 
-                    item.type === 'inverter' ? "bg-blue-50 text-blue-600" : 
-                    item.type === 'battery' ? "bg-emerald-50 text-emerald-600" : 
-                    item.type === 'mounting' ? "bg-purple-50 text-purple-600" : "bg-slate-50 text-slate-500"
-                  )}>
-                    {item.type === 'panel' ? <Package className="h-5 w-5" /> : 
-                    item.type === 'inverter' ? <Cpu className="h-5 w-5" /> : 
-                    item.type === 'battery' ? <Battery className="h-5 w-5" /> : <Box className="h-5 w-5" />}
-                  </div>
-
-                  {/* Actions buttons */}
-                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-50 p-0.5 rounded-lg border border-slate-100 shadow-xs">
-                    {isAdmin && (
-                      <>
-                        <button 
-                          onClick={() => { setEditingItem(item); setIsEditModalOpen(true); }}
-                          title="Chỉnh sửa thông số kỹ thuật"
-                          className="p-1 text-slate-500 hover:text-blue-600 hover:bg-white rounded-md transition-colors"
-                        >
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </button>
-                        <button 
-                          onClick={() => setDeletingId(item.id)}
-                          title="Xóa thiết bị khỏi kho"
-                          className="p-1 text-slate-500 hover:text-red-600 hover:bg-white rounded-md transition-colors"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Main branding models details */}
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[9px] font-black tracking-widest text-slate-400 uppercase leading-none">{item.brand}</span>
-                    {item.type === 'inverter' && (
-                      <span className={cn(
-                        "text-[7px] px-1 py-0.5 font-bold uppercase rounded border scale-95",
-                        item.isThreePhase ? "bg-purple-150 text-purple-700 border-purple-200" : "bg-blue-150 text-blue-700 border-blue-200"
-                      )}>
-                        {item.isThreePhase ? '3 Pha' : '1 Pha'}
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="text-sm font-black text-slate-800 leading-tight mt-1 line-clamp-1" title={item.model}>
-                    {item.model}
-                  </h3>
-                  <div className="flex items-center gap-1 mt-1.5 text-[10px] text-slate-400 font-semibold uppercase tracking-tight">
-                    <MapPin className="h-3 w-3 text-slate-300" />
-                    <span>{item.location || 'Chưa phân phái'}</span>
-                  </div>
-                  {item.details && (
-                    <div className="mt-2 text-[11px] text-slate-500 font-semibold italic line-clamp-2 border-l-2 border-slate-200 pl-1.5" title={item.details}>
-                      {item.details}
-                    </div>
-                  )}
-                </div>
-
-                {/* Stock values badge & progress indicator */}
-                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 space-y-1.5">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-400 font-bold uppercase tracking-wide text-[9px]">Lượng tồn kho</span>
-                    <span className={cn(
-                      "font-black tracking-tight",
-                      alertStatus === 'out' ? "text-rose-600 animate-pulse bg-rose-50 px-1.5 py-0.5 rounded" : 
-                      alertStatus === 'low' ? "text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded" : "text-emerald-600"
-                    )}>
-                      {qty} {getUnit(item)} / <span className="text-[10px] text-slate-400 font-semibold">{min} {getUnit(item)} min</span>
-                    </span>
-                  </div>
-
-                  {/* Stock micro bar indicator */}
-                  <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                    <div 
-                      className={cn(
-                        "h-full rounded-full transition-all duration-500",
-                        alertStatus === 'out' ? "w-0" :
-                        alertStatus === 'low' ? "bg-amber-400" : "bg-emerald-500"
-                      )}
-                      style={{ width: `${Math.min(100, (qty / Math.max(1, min * 2.5)) * 100)}%` }}
-                    />
-                  </div>
-
-                  {/* Alert notifications label */}
-                  {alertStatus === 'out' && (
-                    <div className="text-[8px] font-black text-rose-500 uppercase tracking-widest text-center mt-1">🔴 HẾT HÀNG - CẦN NHẬP</div>
-                  )}
-                  {alertStatus === 'low' && (
-                    <div className="text-[8px] font-black text-amber-500 uppercase tracking-widest text-center mt-1">🟡 DƯỚI ĐỊNH MỨC CẢNH BÁO</div>
-                  )}
-                  {alertStatus === 'normal' && (
-                    <div className="text-[8px] font-black text-emerald-500 uppercase tracking-widest text-center mt-1">🟢 KHO HÀNG AN TOÀN</div>
-                  )}
-                </div>
-
-                {/* Basic financial values */}
-                <div className="space-y-1.5 pt-1">
-                  {(userRole === 'admin' || userRole === 'accountant') && (
-                    <div className="flex justify-between text-[11px] font-medium leading-none">
-                      <span className="text-slate-400">Giá nhập vật tư:</span>
-                      <span className="text-slate-700 font-bold">{formatCurrency(item.unitPrice || 0)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-[11px] font-medium leading-none border-t border-slate-50 pt-1.5">
-                    <span className="text-slate-400">Giá bán dự kiến:</span>
-                    <span className="text-emerald-600 font-bold">{item.sellingPrice ? formatCurrency(item.sellingPrice) : 'Chưa thiết lập'}</span>
-                  </div>
-                  {(userRole === 'admin' || userRole === 'accountant') && (
-                    <div className="flex justify-between text-[11px] font-medium leading-none border-t border-slate-50 pt-1.5">
-                      <span className="text-slate-400">Giá trị tồn kho (nhập):</span>
-                      <span className="text-slate-900 font-black">{formatCurrency(qty * (item.unitPrice || 0))}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Warehouse dynamic in-out movement control panel */}
-              <div className="mt-4 border-t border-slate-100 pt-3 flex gap-1.5 shrink-0">
-                {isAdmin ? (
-                  <>
-                    <button 
-                      onClick={() => {
-                        setAdjustItem(item);
-                        setAdjustType('import');
-                        setIsAdjustModalOpen(true);
-                      }}
-                      className="flex-1 bg-blue-50/70 hover:bg-blue-105 border border-blue-100 text-blue-700 py-1.5 rounded-lg flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-wider transition-all active:scale-95"
-                      title="Nhập thêm vật tư"
-                    >
-                      <ArrowUpRight className="h-3 w-3" /> Nhập kho
-                    </button>
-                    <button 
-                      onClick={() => {
-                        setAdjustItem(item);
-                        setAdjustType('export');
-                        setIsAdjustModalOpen(true);
-                      }}
-                      disabled={qty === 0}
-                      className={cn(
-                        "flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 border",
-                        qty === 0 
-                          ? "bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed" 
-                          : "bg-slate-50/70 hover:bg-slate-100 border-slate-200 text-slate-700"
-                      )}
-                      title="Xuất vật tư ra kho"
-                    >
-                      <ArrowDownLeft className="h-3 w-3" /> Xuất kho
-                    </button>
-                  </>
+      {/* Paginated Material Table List */}
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50/75 border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                <th className="py-3.5 px-4 text-center w-12">STT</th>
+                <th className="py-3.5 px-4 min-w-[200px]">Vật tư / Thiết bị</th>
+                <th className="py-3.5 px-4 w-44">Danh mục</th>
+                <th className="py-3.5 px-4 w-36">Vị trí</th>
+                <th className="py-3.5 px-4 w-52">Tồn kho / Định mức</th>
+                {(userRole === 'admin' || userRole === 'accountant') ? (
+                  <th className="py-3.5 px-4 w-48">Đơn giá (Nhập / Bán)</th>
                 ) : (
-                  <button 
-                    onClick={() => {
-                      handleOpenRequestWithItem(item);
-                    }}
-                    disabled={qty === 0}
-                    className={cn(
-                      "flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 border",
-                      qty === 0 
-                        ? "bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed" 
-                        : "bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-700"
-                    )}
-                    title="Tạo phiếu yêu cầu cấp phát vật tư này"
-                  >
-                    <FileText className="h-3.5 w-3.5 text-amber-600" /> Yêu cầu cấp phát
-                  </button>
+                  <th className="py-3.5 px-4 w-36">Giá bán dự kiến</th>
                 )}
-                <button 
-                  onClick={() => {
-                    setHistoryItem(item);
-                    setIsHistoryModalOpen(true);
-                  }}
-                  className="px-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-500 rounded-lg flex items-center justify-center transition-all active:scale-95"
-                  title="Xem lịch sử luân chuyển kho"
-                >
-                  <History className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-          );
-        })}
+                <th className="py-3.5 px-4 text-right min-w-[180px]">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {paginatedEquipment.map((item, index) => {
+                const qty = item.stock || 0;
+                const min = item.minStock || 0;
+                const actualIndex = startIndex + index + 1;
+                
+                let alertStatus: 'normal' | 'low' | 'out' = 'normal';
+                if (qty === 0) {
+                  alertStatus = 'out';
+                } else if (qty <= min) {
+                  alertStatus = 'low';
+                }
 
+                const catObj = categories.find(c => c.id === item.type);
+                const CatIcon = catObj?.icon || Box;
+                const catLabel = catObj?.label || 'Thiết bị khác';
+
+                return (
+                  <tr 
+                    key={item.id} 
+                    className={cn(
+                      "hover:bg-slate-50/75 transition-all group",
+                      alertStatus === 'out' ? "bg-rose-50/5" : 
+                      alertStatus === 'low' ? "bg-amber-50/5" : ""
+                    )}
+                  >
+                    {/* STT */}
+                    <td className="py-4 px-4 text-center text-xs font-bold text-slate-400">
+                      {actualIndex}
+                    </td>
+
+                    {/* Vật tư / Thiết bị */}
+                    <td className="py-4 px-4">
+                      <div className="flex items-start gap-3">
+                        <div className={cn(
+                          "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border",
+                          item.type === 'panel' ? "bg-amber-50/50 text-amber-600 border-amber-100" : 
+                          item.type === 'inverter' ? "bg-blue-50/50 text-blue-600 border-blue-100" : 
+                          item.type === 'battery' ? "bg-emerald-50/50 text-emerald-600 border-emerald-100" : 
+                          item.type === 'mounting' ? "bg-purple-50/50 text-purple-600 border-purple-100" : "bg-slate-50/50 text-slate-500 border-slate-100"
+                        )}>
+                          {item.type === 'panel' ? <Package className="h-4.5 w-4.5" /> : 
+                           item.type === 'inverter' ? <Cpu className="h-4.5 w-4.5" /> : 
+                           item.type === 'battery' ? <Battery className="h-4.5 w-4.5" /> : <Box className="h-4.5 w-4.5" />}
+                        </div>
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[9px] font-black tracking-widest text-slate-400 uppercase leading-none">{item.brand}</span>
+                            {item.type === 'inverter' && (
+                              <span className={cn(
+                                "text-[7px] px-1 py-0.5 font-bold uppercase rounded border scale-95",
+                                item.isThreePhase ? "bg-purple-150 text-purple-700 border-purple-200" : "bg-blue-150 text-blue-700 border-blue-200"
+                              )}>
+                                {item.isThreePhase ? '3 Pha' : '1 Pha'}
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="text-xs font-black text-slate-800 leading-tight">
+                            {item.model}
+                          </h4>
+                          {item.details && (
+                            <p className="text-[10px] text-slate-400 font-semibold italic max-w-xs md:max-w-md truncate" title={item.details}>
+                              {item.details}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Danh mục */}
+                    <td className="py-4 px-4">
+                      <span className={cn(
+                        "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide border",
+                        item.type === 'panel' ? "bg-amber-50 text-amber-700 border-amber-25" : 
+                        item.type === 'inverter' ? "bg-blue-50 text-blue-700 border-blue-25" : 
+                        item.type === 'battery' ? "bg-emerald-50 text-emerald-700 border-emerald-25" : 
+                        item.type === 'mounting' ? "bg-purple-50 text-purple-700 border-purple-25" : "bg-slate-50 text-slate-600 border-slate-150"
+                      )}>
+                        <CatIcon className="h-3 w-3 shrink-0" />
+                        {catLabel}
+                      </span>
+                    </td>
+
+                    {/* Vị trí */}
+                    <td className="py-4 px-4">
+                      <div className="flex items-center gap-1 text-xs text-slate-600 font-bold">
+                        <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                        <span className="truncate">{item.location || 'Chưa phân phái'}</span>
+                      </div>
+                    </td>
+
+                    {/* Tồn kho / Định mức */}
+                    <td className="py-4 px-4">
+                      <div className="space-y-1.5 max-w-[160px]">
+                        <div className="flex justify-between items-center text-xs font-bold">
+                          <span className={cn(
+                            "font-black tracking-tight",
+                            alertStatus === 'out' ? "text-rose-600 animate-pulse bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100" : 
+                            alertStatus === 'low' ? "text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100" : "text-slate-800"
+                          )}>
+                            {qty} {getUnit(item)}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-semibold">
+                            Min: {min} {getUnit(item)}
+                          </span>
+                        </div>
+                        {/* Micro progress bar */}
+                        <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
+                          <div 
+                            className={cn(
+                              "h-full rounded-full transition-all duration-500",
+                              alertStatus === 'out' ? "w-0" :
+                              alertStatus === 'low' ? "bg-amber-400" : "bg-emerald-500"
+                            )}
+                            style={{ width: `${Math.min(100, (qty / Math.max(1, min * 2.5)) * 100)}%` }}
+                          />
+                        </div>
+                        {/* Short status label */}
+                        <div className="text-[8px] font-black tracking-wide uppercase leading-none">
+                          {alertStatus === 'out' && <span className="text-rose-500">🔴 Hết hàng - Cần nhập</span>}
+                          {alertStatus === 'low' && <span className="text-amber-500">🟡 Dưới định mức</span>}
+                          {alertStatus === 'normal' && <span className="text-emerald-500">🟢 Kho an toàn</span>}
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Đơn giá */}
+                    <td className="py-4 px-4">
+                      <div className="text-xs space-y-1">
+                        {(userRole === 'admin' || userRole === 'accountant') ? (
+                          <>
+                            <div className="flex justify-between gap-2">
+                              <span className="text-slate-400 font-semibold">Nhập:</span>
+                              <span className="font-bold text-slate-800">{formatCurrency(item.unitPrice || 0)}</span>
+                            </div>
+                            <div className="flex justify-between gap-2 border-t border-slate-100 pt-1">
+                              <span className="text-slate-400 font-semibold">Bán:</span>
+                              <span className="font-bold text-emerald-600">{item.sellingPrice ? formatCurrency(item.sellingPrice) : 'Chưa bán'}</span>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="font-bold text-emerald-600">
+                            {item.sellingPrice ? formatCurrency(item.sellingPrice) : 'Chưa thiết lập'}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Hành động / Thao tác */}
+                    <td className="py-4 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {/* Warehouse flow adjust */}
+                        {isAdmin ? (
+                          <>
+                            <button 
+                              onClick={() => {
+                                setAdjustItem(item);
+                                setAdjustType('import');
+                                setIsAdjustModalOpen(true);
+                              }}
+                              className="bg-blue-50/75 hover:bg-blue-100 text-blue-700 border border-blue-100 p-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
+                              title="Nhập thêm vật tư"
+                            >
+                              <ArrowUpRight className="h-3.5 w-3.5" />
+                              <span className="hidden lg:inline">Nhập kho</span>
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setAdjustItem(item);
+                                setAdjustType('export');
+                                setIsAdjustModalOpen(true);
+                              }}
+                              disabled={qty === 0}
+                              className={cn(
+                                "p-1.5 border rounded-lg text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 flex items-center gap-1 cursor-pointer",
+                                qty === 0 
+                                  ? "bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed" 
+                                  : "bg-slate-50/70 hover:bg-slate-100 border-slate-200 text-slate-700"
+                              )}
+                              title="Xuất vật tư ra kho"
+                            >
+                              <ArrowDownLeft className="h-3.5 w-3.5" />
+                              <span className="hidden lg:inline">Xuất kho</span>
+                            </button>
+                          </>
+                        ) : (
+                          <button 
+                            onClick={() => {
+                              handleOpenRequestWithItem(item);
+                            }}
+                            disabled={qty === 0}
+                            className={cn(
+                              "py-1.5 px-2.5 border rounded-lg text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 flex items-center gap-1 cursor-pointer",
+                              qty === 0 
+                                ? "bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed" 
+                                : "bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-700"
+                            )}
+                            title="Tạo phiếu yêu cầu cấp phát vật tư này"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                            <span>Yêu cầu cấp phát</span>
+                          </button>
+                        )}
+
+                        {/* History button */}
+                        <button 
+                          onClick={() => {
+                            setHistoryItem(item);
+                            setIsHistoryModalOpen(true);
+                          }}
+                          className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-500 rounded-lg flex items-center justify-center transition-all active:scale-95 cursor-pointer"
+                          title="Xem lịch sử luân chuyển kho"
+                        >
+                          <History className="h-3.5 w-3.5" />
+                        </button>
+
+                        {/* Edit & Delete for Admin */}
+                        {isAdmin && (
+                          <div className="flex items-center border-l border-slate-200 pl-1.5 gap-1">
+                            <button 
+                              onClick={() => { setEditingItem(item); setIsEditModalOpen(true); }}
+                              title="Chỉnh sửa thông số"
+                              className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer border border-transparent"
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </button>
+                            <button 
+                              onClick={() => setDeletingId(item.id)}
+                              title="Xóa vật tư"
+                              className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer border border-transparent"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Empty State within list container */}
         {filteredEquipment.length === 0 && (
-          <div className="col-span-full py-16 text-center bg-white border border-dashed border-slate-200 rounded-2xl shadow-xs">
+          <div className="py-16 text-center border-t border-slate-100">
             <Box className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-400 text-sm font-medium italic">Không tìm thấy mã thiết bị nào phù hợp trong kho.</p>
+            <p className="text-slate-400 text-sm font-semibold italic">Không tìm thấy mã thiết bị nào phù hợp trong kho.</p>
             <p className="text-slate-300 text-xs mt-1">Vui lòng thử cấu hình lại thanh tìm kiếm hoặc bộ lọc trạng thái.</p>
+          </div>
+        )}
+
+        {/* Pagination & Page Size Footer */}
+        {filteredEquipment.length > 0 && (
+          <div className="bg-slate-50/80 px-5 py-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+            {/* Left: Entries size selector and counting text */}
+            <div className="flex flex-col sm:flex-row items-center gap-3 text-xs text-slate-500 font-semibold">
+              <div className="flex items-center gap-1.5">
+                <span>Hiển thị</span>
+                <select 
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+                <span>vật tư mỗi trang</span>
+              </div>
+              <span className="hidden sm:inline text-slate-300">|</span>
+              <p>
+                Đang xem <span className="text-slate-800 font-extrabold">{startIndex + 1}</span> đến <span className="text-slate-800 font-extrabold">{endIndex}</span> trong tổng số <span className="text-blue-600 font-black">{filteredEquipment.length}</span> vật tư
+              </p>
+            </div>
+
+            {/* Right: Pagination Page Buttons */}
+            <div className="flex items-center gap-1">
+              {/* Go to First Page */}
+              <button
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                className={cn(
+                  "p-2 rounded-lg border text-slate-500 hover:bg-slate-100 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
+                  currentPage === 1 ? "bg-slate-50" : "bg-white"
+                )}
+                title="Trang đầu"
+              >
+                <ChevronsLeft className="h-4 w-4" />
+              </button>
+
+              {/* Go to Previous Page */}
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className={cn(
+                  "p-2 rounded-lg border text-slate-500 hover:bg-slate-100 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
+                  currentPage === 1 ? "bg-slate-50" : "bg-white"
+                )}
+                title="Trang trước"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
+              {/* Page numbers */}
+              {getPageNumbers().map(pageNum => (
+                <button
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={cn(
+                    "w-8 h-8 rounded-lg border text-xs font-extrabold transition-all cursor-pointer",
+                    currentPage === pageNum 
+                      ? "bg-blue-600 border-blue-600 text-white shadow-sm" 
+                      : "bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border-slate-200"
+                  )}
+                >
+                  {pageNum}
+                </button>
+              ))}
+
+              {/* Go to Next Page */}
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className={cn(
+                  "p-2 rounded-lg border text-slate-500 hover:bg-slate-100 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
+                  currentPage === totalPages ? "bg-slate-50" : "bg-white"
+                )}
+                title="Trang sau"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+
+              {/* Go to Last Page */}
+              <button
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                className={cn(
+                  "p-2 rounded-lg border text-slate-500 hover:bg-slate-100 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
+                  currentPage === totalPages ? "bg-slate-50" : "bg-white"
+                )}
+                title="Trang cuối"
+              >
+                <ChevronsRight className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -2059,7 +2420,7 @@ export default function CatalogManager({ userId, userRole }: CatalogManagerProps
 
       {activeTab === 'requests' && (
         printingRequest ? (
-          <PrintRequestView request={printingRequest} onClose={() => setPrintingRequest(null)} />
+          <PrintRequestView request={printingRequest} onClose={() => setPrintingRequest(null)} equipmentList={equipmentList} />
         ) : isCreatingRequest ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 animate-in fade-in slide-in-from-bottom-2 duration-200">
             {/* Left Column (Selector & Items Table) */}

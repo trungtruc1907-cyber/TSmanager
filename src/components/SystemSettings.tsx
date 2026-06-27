@@ -37,6 +37,7 @@ interface LinkedDriveAccount {
 export default function SystemSettings({ userId }: SystemSettingsProps) {
   // General Corporate Settings State
   const [logoUrl, setLogoUrl] = useState('');
+  const [printHeaderUrl, setPrintHeaderUrl] = useState('');
   const [companyName, setCompanyName] = useState('CÔNG TY CỔ PHẦN ĐẦU TƯ TM TRƯỜNG SƠN');
   const [companyBrandName, setCompanyBrandName] = useState('TRƯỜNG SƠN SOLAR');
   const [companyTagline, setCompanyTagline] = useState('Giải pháp Năng lượng Xanh chuyên nghiệp');
@@ -61,6 +62,7 @@ export default function SystemSettings({ userId }: SystemSettingsProps) {
         if (docSnap.exists()) {
           const data = docSnap.data();
           setLogoUrl(data.logoUrl || '');
+          setPrintHeaderUrl(data.printHeaderUrl || '');
           setCompanyName(data.companyName || '');
           setCompanyBrandName(data.companyBrandName || 'TRƯỜNG SƠN SOLAR');
           setCompanyTagline(data.companyTagline || 'Giải pháp Năng lượng Xanh chuyên nghiệp');
@@ -151,6 +153,7 @@ export default function SystemSettings({ userId }: SystemSettingsProps) {
     try {
       await setDoc(doc(db, 'settings', 'general'), {
         logoUrl,
+        printHeaderUrl,
         companyName,
         companyBrandName,
         companyTagline,
@@ -404,6 +407,51 @@ export default function SystemSettings({ userId }: SystemSettingsProps) {
 
               <p className="text-[9px] text-slate-400 font-medium italic text-center">
                 * Logo này sẽ xuất hiện trên Website và các Báo giá/Hợp đồng kỹ thuật.
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Ảnh Header Bản In (Các Phiếu)</p>
+            
+            <div className="aspect-[16/5] w-full bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center relative group overflow-hidden mb-6">
+              {printHeaderUrl ? (
+                <>
+                  <img src={printHeaderUrl} alt="Print Header Preview" className="w-full h-full object-contain p-2" referrerPolicy="no-referrer" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <button 
+                      type="button"
+                      onClick={() => setPrintHeaderUrl('')}
+                      className="bg-white text-red-500 px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-transform hover:scale-105"
+                    >
+                      Xóa ảnh
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center p-4">
+                  <ImageIcon className="h-8 w-8 text-slate-300 mx-auto mb-1" />
+                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-tight">Chưa có ảnh banner</p>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                  <Link className="h-3.5 w-3.5 text-slate-400" />
+                </div>
+                <input 
+                  type="text" 
+                  placeholder="Nhập URL ảnh banner bản in..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-3 text-xs text-slate-900 outline-none focus:border-blue-500 transition-colors"
+                  value={printHeaderUrl}
+                  onChange={e => setPrintHeaderUrl(e.target.value)}
+                />
+              </div>
+
+              <p className="text-[9px] text-slate-400 font-medium italic text-center">
+                * Dùng cho phiếu yêu cầu vật tư và đề nghị mua hàng. Nếu bỏ trống, hệ thống sẽ dùng giao diện mặc định cực kỳ đẹp mắt.
               </p>
             </div>
           </div>
