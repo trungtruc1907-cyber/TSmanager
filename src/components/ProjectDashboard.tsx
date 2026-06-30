@@ -85,7 +85,7 @@ export default function ProjectDashboard({ onOpenProject, onOpenTracker, showAll
   useEffect(() => {
     if (!userId) return;
     const unsubSales = onSnapshot(collection(db, 'users'), (s) => {
-      setSalesStaff(s.docs.map(d => ({ id: d.id, ...d.data() } as AppUser)));
+      setSalesStaff(s.docs.map(d => ({ id: d.id, ...d.data() } as AppUser)).filter(u => !u.isHidden || u.id === userId));
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'users');
     });

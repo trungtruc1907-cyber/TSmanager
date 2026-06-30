@@ -125,6 +125,7 @@ export interface AppUser {
   createdAt: any;
   lastLogin?: any;
   status: 'active' | 'inactive' | 'pending';
+  isHidden?: boolean;
 }
 
 export interface ProjectTask {

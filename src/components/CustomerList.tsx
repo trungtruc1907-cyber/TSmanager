@@ -125,7 +125,7 @@ export default function CustomerList({ onViewProject, userId, userRole }: Custom
     // Listen to sales staff users
     const qSales = collection(db, 'users');
     const unsubSales = onSnapshot(qSales, (snapshot) => {
-      const rawSales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppUser));
+      const rawSales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppUser)).filter(u => !u.isHidden || u.id === userId);
       rawSales.sort((a, b) => {
         const nameA = a.displayName || '';
         const nameB = b.displayName || '';

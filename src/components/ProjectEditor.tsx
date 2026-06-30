@@ -94,7 +94,7 @@ export default function ProjectEditor({ projectId, initialCustomerId, userRole, 
     });
 
     const unsubUsers = onSnapshot(collection(db, 'users'), (s) => {
-      const rawUsers = s.docs.map(d => ({ id: d.id, ...d.data() } as AppUser));
+      const rawUsers = s.docs.map(d => ({ id: d.id, ...d.data() } as AppUser)).filter(u => !u.isHidden || u.id === userId);
       rawUsers.sort((a, b) => {
         const nameA = a.displayName || '';
         const nameB = b.displayName || '';

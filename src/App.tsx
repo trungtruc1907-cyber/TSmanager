@@ -1000,13 +1000,16 @@ export default function App() {
       {/* Mobile Bottom Navigation - Floating Professional Design */}
       <nav className="lg:hidden fixed bottom-6 left-6 right-6 z-50">
         <div className="bg-slate-900/90 backdrop-blur-2xl border border-white/10 rounded-[2rem] px-4 py-3 shadow-[0_20px_50px_rgba(0,0,0,0.3)] flex items-center justify-around">
-          {navigation.slice(0, 5).map((item) => {
+          {(navigation.length > 5 ? navigation.slice(0, 4) : navigation).map((item) => {
             const Icon = item.icon;
             const isActive = activeView === item.id;
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveView(item.id as View)}
+                onClick={() => {
+                  setActiveView(item.id as View);
+                  setIsMobileMenuOpen(false);
+                }}
                 className={cn(
                   "flex flex-col items-center gap-1.5 px-4 py-2 rounded-2xl transition-all relative",
                   isActive ? "text-white" : "text-slate-500"
@@ -1026,8 +1029,101 @@ export default function App() {
               </button>
             );
           })}
+
+          {navigation.length > 5 && (
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className={cn(
+                "flex flex-col items-center gap-1.5 px-4 py-2 rounded-2xl transition-all relative",
+                (showNotifications || isMobileMenuOpen || !navigation.slice(0, 4).some(item => item.id === activeView)) ? "text-white" : "text-slate-500"
+              )}
+            >
+              {(isMobileMenuOpen || !navigation.slice(0, 4).some(item => item.id === activeView)) && (
+                <motion.div 
+                  layoutId="mobile-nav-pill"
+                  className="absolute inset-0 bg-blue-600 rounded-2xl -z-10"
+                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                />
+              )}
+              <Menu className={cn("h-5 w-5", (isMobileMenuOpen || !navigation.slice(0, 4).some(item => item.id === activeView)) ? "scale-110" : "scale-100")} />
+              <span className="text-[8px] font-black uppercase tracking-tighter">Thêm</span>
+            </button>
+          )}
         </div>
       </nav>
+
+      {/* Mobile Menu Drawer - Smooth Slide-up Bottom Sheet */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[45] lg:hidden"
+            />
+            {/* Slide-up Sheet */}
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 220 }}
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-[2.5rem] border-t border-slate-200 shadow-2xl z-[48] p-6 pb-12 lg:hidden font-sans max-h-[85vh] overflow-y-auto"
+            >
+              <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 shrink-0" />
+              
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">Danh mục chức năng</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Hệ thống Solar Trường Sơn</p>
+                </div>
+                <button
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition-all"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Grid of All Items */}
+              <div className="grid grid-cols-3 gap-3">
+                {navigation.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeView === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setActiveView(item.id as View);
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className={cn(
+                        "flex flex-col items-center justify-center p-3.5 rounded-2xl border transition-all gap-1.5 min-h-[80px]",
+                        isActive 
+                          ? "bg-slate-900 border-slate-900 text-white shadow-lg shadow-slate-900/20" 
+                          : "bg-slate-50 border-slate-100 text-slate-600 hover:bg-slate-100"
+                      )}
+                    >
+                      <Icon className={cn("h-5 w-5", isActive ? "text-blue-400" : "text-slate-500")} />
+                      <span className="text-[10px] font-extrabold text-center uppercase tracking-tight leading-tight">
+                        {item.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+                <p className="text-[9px] text-slate-400 font-black tracking-widest uppercase">
+                  Trường Sơn Solar • v2.0 ERP
+                </p>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Responsive Overlay for Alerts/Modals */}
       <div className="fixed top-0 pointer-events-none w-full h-full z-[100]" />

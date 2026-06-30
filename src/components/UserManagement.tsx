@@ -20,7 +20,9 @@ import {
   Settings,
   ClipboardList,
   Key,
-  Calculator
+  Calculator,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -34,7 +36,7 @@ export default function UserManagement({ userId }: UserManagementProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'active' | 'inactive'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'active' | 'inactive' | 'hidden'>('all');
 
   const [newUser, setNewUser] = useState({
     username: '',
@@ -283,6 +285,7 @@ export default function UserManagement({ userId }: UserManagementProps) {
       u.email.toLowerCase().includes(searchTerm.toLowerCase());
     
     if (filterStatus === 'all') return matchesSearch;
+    if (filterStatus === 'hidden') return matchesSearch && u.isHidden === true;
     return matchesSearch && u.status === filterStatus;
   });
 
@@ -347,7 +350,7 @@ export default function UserManagement({ userId }: UserManagementProps) {
             />
           </div>
           <div className="flex bg-white border border-slate-200 rounded-xl p-1 shrink-0">
-             {(['all', 'pending', 'active'] as const).map((s) => (
+             {(['all', 'pending', 'active', 'hidden'] as const).map((s) => (
                 <button
                   key={s}
                   onClick={() => setFilterStatus(s)}
@@ -356,7 +359,7 @@ export default function UserManagement({ userId }: UserManagementProps) {
                     filterStatus === s ? "bg-slate-900 text-white shadow-md" : "text-slate-400 hover:text-slate-600"
                   )}
                 >
-                  {s === 'all' ? 'Tất cả' : s === 'pending' ? 'Chờ duyệt' : 'Đã duyệt'}
+                  {s === 'all' ? 'Tất cả' : s === 'pending' ? 'Chờ duyệt' : s === 'active' ? 'Đã duyệt' : 'Bị ẩn'}
                 </button>
              ))}
           </div>
@@ -434,7 +437,14 @@ export default function UserManagement({ userId }: UserManagementProps) {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    {getStatusBadge(user.status)}
+                    <div className="flex flex-col gap-1.5 items-start">
+                      {getStatusBadge(user.status)}
+                      {user.isHidden && (
+                        <span className="px-2 py-1 rounded-lg bg-amber-50 text-amber-600 text-[9px] font-black uppercase tracking-tighter inline-flex items-center gap-1 shrink-0">
+                          <EyeOff className="h-3 w-3" /> Bị ẩn
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="text-[10px] text-slate-500 font-medium">
@@ -466,6 +476,18 @@ export default function UserManagement({ userId }: UserManagementProps) {
                             title="Cấu hình / Cấp lại mật khẩu"
                           >
                             <Key className="h-4 w-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleUpdateUser(user.id, { isHidden: !user.isHidden })}
+                            className={cn(
+                              "p-2 rounded-lg border transition-all",
+                              user.isHidden 
+                                ? "border-amber-200 text-amber-600 bg-amber-50 hover:bg-amber-100" 
+                                : "border-slate-100 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+                            )}
+                            title={user.isHidden ? "Hiển thị nhân sự" : "Ẩn nhân sự khỏi toàn hệ thống"}
+                          >
+                            {user.isHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                           </button>
                           <button 
                             onClick={() => handleToggleStatus(user.id, user.status)}

@@ -111,7 +111,7 @@ export default function WorkSchedulerHub({ userId, userRole }: Props) {
     const unsubUsers = onSnapshot(
       collection(db, 'users'),
       (s) => {
-        setUsers(s.docs.map(d => ({ id: d.id, ...d.data() } as AppUser)));
+        setUsers(s.docs.map(d => ({ id: d.id, ...d.data() } as AppUser)).filter(u => !u.isHidden || u.id === userId));
       },
       (error) => handleFirestoreError(error, OperationType.GET, 'users')
     );
