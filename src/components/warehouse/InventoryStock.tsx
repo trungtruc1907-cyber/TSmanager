@@ -46,6 +46,29 @@ import {
 } from 'recharts';
 import { Equipment, InventoryTransaction } from './types';
 
+const renderFakeQrCodeSvg = (id: string) => {
+  const squares = [];
+  const idHash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  for (let i = 2; i < 14; i += 2) {
+    for (let j = 2; j < 14; j += 2) {
+      if (((i * j + idHash) % 3) === 0) {
+        squares.push(<rect key={`${i}-${j}`} x={i} y={j} width={2} height={2} className="fill-slate-900" />);
+      }
+    }
+  }
+  return (
+    <svg viewBox="0 0 16 16" className="w-16 h-16 text-slate-900 shrink-0 select-none">
+      <rect x={0} y={0} width={5} height={5} className="fill-none stroke-slate-900" strokeWidth={0.5} />
+      <rect x={1} y={1} width={3} height={3} className="fill-slate-900" />
+      <rect x={11} y={0} width={5} height={5} className="fill-none stroke-slate-900" strokeWidth={0.5} />
+      <rect x={12} y={1} width={3} height={3} className="fill-slate-900" />
+      <rect x={0} y={11} width={5} height={5} className="fill-none stroke-slate-900" strokeWidth={0.5} />
+      <rect x={1} y={12} width={3} height={3} className="fill-slate-900" />
+      {squares}
+    </svg>
+  );
+};
+
 interface InventoryStockProps {
   equipment: Equipment[];
   transactions: InventoryTransaction[];
@@ -251,6 +274,8 @@ export default function InventoryStock({ equipment, transactions, userRole }: In
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingItem, setEditingItem] = useState<Equipment | null>(null);
   const [showFabMenu, setShowFabMenu] = useState(false);
+  const [showPrintQrModal, setShowPrintQrModal] = useState(false);
+  const [selectedQrItems, setSelectedQrItems] = useState<string[]>([]);
 
   // Form State for Add/Edit
   const [formId, setFormId] = useState('');
@@ -1362,7 +1387,14 @@ export default function InventoryStock({ equipment, transactions, userRole }: In
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
               Kiểm kê
             </button>
-            <button className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 rounded-xl text-left cursor-pointer transition-all">
+            <button 
+              onClick={() => {
+                setShowPrintQrModal(true);
+                setShowFabMenu(false);
+                setSelectedQrItems(selectedItem ? [selectedItem.id] : []);
+              }}
+              className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 rounded-xl text-left cursor-pointer transition-all"
+            >
               <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
               In mã QR
             </button>
@@ -1580,6 +1612,164 @@ export default function InventoryStock({ equipment, transactions, userRole }: In
                 {editingItem ? 'Lưu thay đổi' : 'Khai báo ngay'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* High-Fidelity Printable QR Codes Sticker Labels Sheet Modal */}
+      {showPrintQrModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans print:p-0 print:bg-white print:static print:inset-auto">
+          <div className="bg-white rounded-[2rem] shadow-2xl border border-slate-100 w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden print:shadow-none print:border-none print:h-auto print:max-w-full print:w-full print:bg-white">
+            
+            {/* Modal Header */}
+            <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 print:hidden shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                  <QrCode className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-widest text-slate-900">In Mã QR / Barcode Vật Tư</h3>
+                  <p className="text-[10px] text-slate-400 font-bold mt-1">Chọn các thiết bị cơ điện mặt trời bên dưới để in nhãn dán định danh</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowPrintQrModal(false)}
+                className="p-2 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+              >
+                <X className="h-5 w-5 text-slate-400" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0 print:block">
+              
+              {/* Left Panel: Selection list */}
+              <div className="w-full md:w-2/5 border-r border-slate-100 flex flex-col overflow-hidden print:hidden shrink-0">
+                <div className="p-4 border-b border-slate-50 bg-slate-50/20">
+                  <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    <span>Danh sách vật tư ({allItems.length})</span>
+                    <button 
+                      onClick={() => {
+                        if (selectedQrItems.length === allItems.length) {
+                          setSelectedQrItems([]);
+                        } else {
+                          setSelectedQrItems(allItems.map(i => i.id));
+                        }
+                      }}
+                      className="text-blue-600 hover:text-blue-800 font-black cursor-pointer"
+                    >
+                      {selectedQrItems.length === allItems.length ? 'Bỏ chọn hết' : 'Chọn tất cả'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto divide-y divide-slate-50 p-2">
+                  {allItems.map(item => {
+                    const isSelected = selectedQrItems.includes(item.id);
+                    return (
+                      <div 
+                        key={item.id} 
+                        onClick={() => {
+                          if (isSelected) {
+                            setSelectedQrItems(selectedQrItems.filter(id => id !== item.id));
+                          } else {
+                            setSelectedQrItems([...selectedQrItems, item.id]);
+                          }
+                        }}
+                        className={`p-3 rounded-xl flex items-center gap-3 hover:bg-slate-50 transition-all cursor-pointer ${
+                          isSelected ? 'bg-blue-50/40 border border-blue-100/30' : 'border border-transparent'
+                        }`}
+                      >
+                        <input 
+                          type="checkbox" 
+                          checked={isSelected}
+                          onChange={() => {}} // Handled by div click
+                          className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4 shrink-0 pointer-events-none"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex justify-between items-start gap-1">
+                            <span className="text-[8px] font-mono font-black text-slate-400 uppercase">#{item.id}</span>
+                            <span className="text-[8px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold">{item.unit || 'Cái'}</span>
+                          </div>
+                          <span className="text-xs font-black text-slate-800 block truncate mt-0.5">{item.model}</span>
+                          <span className="text-[9px] font-bold text-slate-400 block mt-0.5">{item.brand} | Tồn: {item.stock}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Right Panel: Label preview sheet */}
+              <div className="flex-1 bg-slate-100/50 p-6 overflow-y-auto print:bg-white print:p-0">
+                <div className="mb-4 flex justify-between items-center print:hidden">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block font-black">
+                    Bản xem trước trang in ({selectedQrItems.length} nhãn)
+                  </span>
+                  {selectedQrItems.length > 0 && (
+                    <button 
+                      onClick={() => window.print()}
+                      className="bg-[#0054a6] hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
+                    >
+                      <Printer className="h-4 w-4" />
+                      In nhãn dán
+                    </button>
+                  )}
+                </div>
+
+                {selectedQrItems.length === 0 ? (
+                  <div className="h-64 flex flex-col items-center justify-center text-slate-400 gap-2 border-2 border-dashed border-slate-200 rounded-3xl bg-white p-6 print:hidden">
+                    <QrCode className="h-10 w-10 text-slate-300 animate-pulse" />
+                    <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Vui lòng chọn vật tư để xem trước nhãn in</span>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:grid-cols-3 print:gap-6 print:p-0">
+                    {allItems.filter(item => selectedQrItems.includes(item.id)).map(item => (
+                      <div 
+                        key={item.id} 
+                        className="bg-white border-2 border-dashed border-slate-300 p-4 rounded-xl flex items-center gap-4 shadow-xs relative print:border print:border-solid print:border-slate-800 print:shadow-none print:break-inside-avoid print:my-2"
+                      >
+                        {/* Left Side: Brand & Product Details */}
+                        <div className="flex-1 min-w-0 space-y-1.5 text-left">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[7px] font-black tracking-widest text-blue-600 uppercase">TRƯỜNG SƠN SOLAR</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">{item.brand}</span>
+                            <span className="text-xs font-black text-slate-800 block truncate" title={item.model}>{item.model}</span>
+                          </div>
+                          <div className="pt-1.5 border-t border-slate-100 flex justify-between items-center text-[10px]">
+                            <span className="font-mono font-black text-slate-900">SKU: #{item.id}</span>
+                            <span className="font-bold text-slate-500">VT: {item.kho || 'KHO_SOLAR'}</span>
+                          </div>
+                        </div>
+
+                        {/* Right Side: QR Code Generator */}
+                        <div className="w-16 h-16 shrink-0 border border-slate-200 p-1 bg-white rounded-lg flex items-center justify-center print:border-slate-800">
+                          {renderFakeQrCodeSvg(item.id)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-8 py-4 border-t border-slate-100 flex justify-between items-center bg-slate-50/50 print:hidden shrink-0">
+              <span className="text-[10px] font-bold text-slate-400 italic">
+                * Mẹo: Sử dụng giấy Decal A4 chia 3 cột nhãn để dán trực tiếp lên hộp vật tư.
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowPrintQrModal(false)}
+                className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer"
+              >
+                Đóng lại
+              </button>
+            </div>
+
           </div>
         </div>
       )}

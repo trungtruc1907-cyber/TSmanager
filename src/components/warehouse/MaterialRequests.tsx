@@ -23,7 +23,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { collection, doc, setDoc, updateDoc, getDocs, onSnapshot, query, orderBy, getDoc, addDoc, increment } from 'firebase/firestore';
+import { collection, doc, setDoc, updateDoc, getDocs, onSnapshot, query, orderBy, getDoc, addDoc, increment, deleteDoc } from 'firebase/firestore';
 import { MaterialRequest, Equipment } from './types';
 
 const getSafeISOString = (dateVal: any): string => {
@@ -66,11 +66,13 @@ interface MaterialRequestsProps {
   equipment: Equipment[];
   userRole: string;
   onOpenDocument: (id: string, type: 'pn' | 'px' | 'dexuat' | 'muahang', label: string) => void;
+  onOpenProject?: (id: string) => void;
 }
 
-export default function MaterialRequests({ requests, equipment, userRole, onOpenDocument }: MaterialRequestsProps) {
+export default function MaterialRequests({ requests, equipment, userRole, onOpenDocument, onOpenProject }: MaterialRequestsProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'draft'>('all');
+  const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -226,6 +228,41 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
     document.body.removeChild(link);
   };
 
+  // Start editing a draft
+  const handleStartEditDraft = (req: MaterialRequest) => {
+    setEditingRequestId(req.id);
+    setFormProjectId(req.projectId);
+    setFormTechnicianName(req.technicianName || 'Mr Lành');
+    setFormReason(req.reason || '');
+    setFormItems(req.items.map(item => ({
+      equipmentId: item.equipmentId,
+      quantity: item.quantity
+    })));
+    setShowAddModal(true);
+  };
+
+  // Cancel/Delete draft
+  const handleDeleteDraft = async (id: string) => {
+    const confirmDelete = window.confirm(`Bạn có chắc chắn muốn hủy và xóa vĩnh viễn phiếu tạm #${id}?`);
+    if (!confirmDelete) return;
+    try {
+      await deleteDoc(doc(db, 'material_requests', id));
+      alert(`Đã hủy thành công phiếu tạm #${id}.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'material_requests');
+    }
+  };
+
+  // Reset and close creation/edit form
+  const handleCloseAddModal = () => {
+    setShowAddModal(false);
+    setEditingRequestId(null);
+    setFormProjectId('');
+    setFormTechnicianName('Mr Lành');
+    setFormReason('');
+    setFormItems([]);
+  };
+
   // Save Draft (Lưu Tạm)
   const handleSaveDraft = async () => {
     if (!formProjectId) {
@@ -240,7 +277,7 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
     try {
       const selectedProj = projects.find(p => p.id === formProjectId);
       const projName = selectedProj ? `Hòa Lưới ${selectedProj.systemSizeKWp || 5}kWp - ${selectedProj.customerName || 'KH'}` : 'Dự án Solar';
-      const reqId = 'DX-' + Math.floor(1000 + Math.random() * 9000);
+      const reqId = editingRequestId || ('DX-' + Math.floor(1000 + Math.random() * 9000));
 
       const payload: MaterialRequest = {
         id: reqId,
@@ -249,7 +286,7 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
         technicianId: 'TECH_' + Math.floor(10 + Math.random() * 90),
         technicianName: formTechnicianName || 'Mr Lành',
         reason: formReason.trim() || 'Nháp / Lưu tạm đề xuất cấp phát',
-        status: 'pending',
+        status: 'draft',
         createdAt: new Date().toISOString(),
         items: formItems.map(item => {
           const eq = equipment.find(e => e.id === item.equipmentId);
@@ -265,12 +302,8 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
       };
 
       await setDoc(doc(db, 'material_requests', reqId), payload);
-      alert(`Lưu tạm thành công phiếu đề xuất ${reqId}!`);
-      setShowAddModal(false);
-      setFormProjectId('');
-      setFormTechnicianName('Mr Lành');
-      setFormReason('');
-      setFormItems([]);
+      alert(editingRequestId ? `Cập nhật thành công phiếu tạm ${reqId}!` : `Lưu tạm thành công phiếu đề xuất ${reqId}!`);
+      handleCloseAddModal();
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'material_requests');
     }
@@ -288,7 +321,7 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
       const selectedProj = projects.find(p => p.id === formProjectId);
       const projName = selectedProj ? `Hòa Lưới ${selectedProj.systemSizeKWp || 5}kWp - ${selectedProj.customerName || 'KH'}` : 'Dự án Solar';
       
-      const reqId = 'DX-' + Math.floor(1000 + Math.random() * 9000);
+      const reqId = editingRequestId || ('DX-' + Math.floor(1000 + Math.random() * 9000));
       
       const payload: MaterialRequest = {
         id: reqId,
@@ -313,11 +346,8 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
       };
 
       await setDoc(doc(db, 'material_requests', reqId), payload);
-      setShowAddModal(false);
-      setFormProjectId('');
-      setFormTechnicianName('');
-      setFormReason('');
-      setFormItems([]);
+      alert(editingRequestId ? `Phát hành thành công phiếu đề xuất ${reqId} từ bản nháp!` : `Tạo mới thành công đề xuất ${reqId}!`);
+      handleCloseAddModal();
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'material_requests');
     }
@@ -683,6 +713,7 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
           <div className="flex border border-slate-200 bg-slate-50 rounded-2xl p-1 shrink-0">
             {[
               { id: 'all', label: 'Tất cả' },
+              { id: 'draft', label: 'Lưu tạm' },
               { id: 'pending', label: 'Chờ duyệt' },
               { id: 'approved', label: 'Đã duyệt' },
               { id: 'rejected', label: 'Từ chối' }
@@ -702,7 +733,14 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
           </div>
 
           <button 
-            onClick={() => setShowAddModal(true)}
+            onClick={() => {
+              setEditingRequestId(null);
+              setFormProjectId('');
+              setFormTechnicianName('Mr Lành');
+              setFormReason('');
+              setFormItems([]);
+              setShowAddModal(true);
+            }}
             className="bg-[#0054a6] hover:bg-blue-700 text-white px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95 shadow-xs cursor-pointer"
           >
             <Plus className="h-4 w-4" />
@@ -719,7 +757,7 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
               <button 
                 type="button"
-                onClick={() => setShowAddModal(false)}
+                onClick={handleCloseAddModal}
                 className="flex items-center gap-2 cursor-pointer text-slate-700 hover:text-blue-600 transition-all font-black text-xs uppercase tracking-wider shrink-0 bg-transparent border-0 outline-none"
               >
                 <ArrowLeft className="h-4.5 w-4.5 text-blue-600" />
@@ -905,6 +943,7 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
                 <input 
                   type="text"
                   disabled
+                  value={editingRequestId || ''}
                   placeholder="Mã phiếu tự động"
                   className="w-full px-4 py-2.5 rounded-xl bg-slate-100 border border-slate-200 font-bold text-xs text-slate-500 cursor-not-allowed"
                 />
@@ -994,10 +1033,21 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-1 text-[11px] font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-xl w-fit">
-                        <Briefcase className="h-3.5 w-3.5 shrink-0 text-blue-500" />
-                        <span className="truncate max-w-[150px]">{req.projectName}</span>
-                      </div>
+                      {req.projectId && req.projectId !== 'PRJ_TEMP' && onOpenProject ? (
+                        <button
+                          onClick={() => onOpenProject(req.projectId)}
+                          className="flex items-center gap-1 text-[11px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-xl w-fit cursor-pointer text-left focus:outline-none transition-all border border-blue-100"
+                          title="Click để xem chi tiết công trình"
+                        >
+                          <Briefcase className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+                          <span className="truncate max-w-[150px] underline decoration-dotted">{req.projectName}</span>
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-1 text-[11px] font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-xl w-fit border border-transparent">
+                          <Briefcase className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+                          <span className="truncate max-w-[150px]">{req.projectName}</span>
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="space-y-1">
@@ -1014,32 +1064,53 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
                     <td className="px-6 py-4 text-xs font-bold text-slate-400">{getSafeISOString(req.createdAt).substring(0, 10)}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2.5 py-1 text-[9px] font-black uppercase rounded-lg border tracking-wider ${
+                        req.status === 'draft' ? 'bg-slate-100 border-slate-300 text-slate-600' :
                         req.status === 'pending' ? 'bg-amber-50 border-amber-200 text-amber-700' :
                         req.status === 'approved' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
                         'bg-rose-50 border-rose-200 text-rose-700'
                       }`}>
-                        {req.status === 'pending' ? '🟡 Chờ duyệt' : 
+                        {req.status === 'draft' ? '⚪ Lưu tạm' :
+                         req.status === 'pending' ? '🟡 Chờ duyệt' : 
                          req.status === 'approved' ? '🟢 Đã duyệt' : '🔴 Từ chối'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => onOpenDocument(req.id, 'dexuat', `${req.id}`)}
-                          className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer"
-                        >
-                          Mở chi tiết
-                        </button>
-                        {req.status === 'pending' && (userRole === 'admin' || userRole === 'manager' || userRole === 'accountant') && (
-                          <button
-                            onClick={() => {
-                              setReviewingRequest(req);
-                              setReviewAdminNote('');
-                            }}
-                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all shadow-xs active:scale-95 cursor-pointer border-0"
-                          >
-                            Duyệt phiếu
-                          </button>
+                        {req.status === 'draft' ? (
+                          <>
+                            <button
+                              onClick={() => handleStartEditDraft(req)}
+                              className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                            >
+                              Nhập thêm hàng
+                            </button>
+                            <button
+                              onClick={() => handleDeleteDraft(req.id)}
+                              className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                            >
+                              Hủy phiếu
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => onOpenDocument(req.id, 'dexuat', `${req.id}`)}
+                              className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                            >
+                              Mở chi tiết
+                            </button>
+                            {req.status === 'pending' && (userRole === 'admin' || userRole === 'manager' || userRole === 'accountant') && (
+                              <button
+                                onClick={() => {
+                                  setReviewingRequest(req);
+                                  setReviewAdminNote('');
+                                }}
+                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all shadow-xs active:scale-95 cursor-pointer border-0"
+                              >
+                                Duyệt phiếu
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     </td>
@@ -1072,7 +1143,24 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
               <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 text-xs">
                 <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">Thông tin đề xuất</p>
                 <p className="font-bold text-slate-800">Kỹ thuật viên: <span className="font-extrabold">{reviewingRequest.technicianName}</span></p>
-                <p className="font-bold text-slate-800 mt-1">Dự án: <span className="font-extrabold">{reviewingRequest.projectName}</span></p>
+                <p className="font-bold text-slate-800 mt-1">
+                  Dự án:{" "}
+                  {reviewingRequest.projectId && reviewingRequest.projectId !== 'PRJ_TEMP' && onOpenProject ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReviewingRequest(null);
+                        onOpenProject(reviewingRequest.projectId);
+                      }}
+                      className="font-extrabold text-blue-600 hover:underline cursor-pointer focus:outline-none"
+                      title="Click để xem chi tiết công trình"
+                    >
+                      {reviewingRequest.projectName}
+                    </button>
+                  ) : (
+                    <span className="font-extrabold">{reviewingRequest.projectName}</span>
+                  )}
+                </p>
                 <p className="font-bold text-slate-800 mt-1">Lý do đề xuất: <span className="italic font-medium">"{reviewingRequest.reason}"</span></p>
 
                 <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider mt-4 mb-2">Chi tiết thiết bị yêu cầu</p>

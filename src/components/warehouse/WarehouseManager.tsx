@@ -40,6 +40,7 @@ interface WarehouseManagerProps {
   setActiveTabId?: (id: string) => void;
   tabs?: WarehouseTab[];
   setTabs?: React.Dispatch<React.SetStateAction<WarehouseTab[]>>;
+  onOpenProject?: (id: string) => void;
 }
 
 export default function WarehouseManager({ 
@@ -48,7 +49,8 @@ export default function WarehouseManager({
   activeTabId: externalActiveTabId,
   setActiveTabId: externalSetActiveTabId,
   tabs: externalTabs,
-  setTabs: externalSetTabs
+  setTabs: externalSetTabs,
+  onOpenProject
 }: WarehouseManagerProps) {
   
   // Real-time Firestore states
@@ -183,6 +185,17 @@ export default function WarehouseManager({
           transactions={transactions}
           requests={materialRequests}
           proposals={purchaseProposals}
+          onOpenProject={onOpenProject}
+          onClose={() => {
+            const catTabId = activeTabObj.documentType === 'pn' ? 'nhapkho' :
+                             activeTabObj.documentType === 'px' ? 'xuatkho' :
+                             activeTabObj.documentType === 'dexuat' ? 'dexuat' :
+                             activeTabObj.documentType === 'muahang' ? 'muahang' : 'dashboard';
+            
+            const filteredTabs = tabs.filter(t => t.id !== activeTabObj.id);
+            setTabs(filteredTabs);
+            setActiveTabId(catTabId);
+          }}
         />
       );
     }
@@ -215,6 +228,7 @@ export default function WarehouseManager({
             equipment={equipment}
             userRole={userRole}
             onOpenDocument={handleOpenDocument}
+            onOpenProject={onOpenProject}
           />
         );
       case 'muahang':
@@ -264,48 +278,10 @@ export default function WarehouseManager({
   };
 
   return (
-    <div id="warehouse-management-module" className="flex flex-col w-full lg:-mt-10 lg:-mx-10">
+    <div id="warehouse-management-module" className="flex flex-col w-full">
       
-      {/* Dynamic Tab Horizontal Navigation Rail - Mobile & Tablet Only */}
-      <div className="lg:hidden w-full bg-white border-b border-slate-200 sticky top-0 z-20 px-4 flex items-end overflow-x-auto scrollbar-none gap-1.5 pt-3 shadow-xs">
-        <div className="w-full flex items-end gap-1.5">
-          {tabs.map((tab) => {
-            const isActive = tab.id === activeTabId;
-            const tabIcon = tab.icon || (
-              tab.id === 'dashboard' ? '🏡' :
-              tab.id === 'kho' ? '📦' :
-              tab.id === 'dexuat' ? '📝' :
-              tab.id === 'muahang' ? '🛒' :
-              tab.id === 'nhapkho' ? '🚚' :
-              tab.id === 'xuatkho' ? '📤' :
-              tab.id === 'baocao' ? '📊' : '📄'
-            );
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTabId(tab.id)}
-                className={`px-4 py-2.5 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 border-t-2 border-x transition-all shrink-0 cursor-pointer ${
-                  isActive 
-                    ? 'bg-white border-blue-600 border-x-slate-200 text-blue-600 rounded-t-lg z-10 -mb-px' 
-                    : 'bg-slate-50/40 border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50/80 rounded-t-md'
-                }`}
-              >
-                <span>{tabIcon}</span>
-                <span>{tab.label}</span>
-                {tab.closable && (
-                  <X 
-                    onClick={(e) => handleCloseTab(tab.id, e)}
-                    className="h-3.5 w-3.5 text-slate-400 hover:text-rose-600 rounded-full hover:bg-rose-50 transition-all shrink-0 p-0.5 ml-0.5" 
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Main Tab View Renderer */}
-      <div className="w-full max-w-7xl mx-auto px-4 lg:px-10 pt-6 pb-12">
+      <div className="w-full max-w-7xl mx-auto py-6">
         {loading ? (
           <div className="py-32 flex flex-col items-center justify-center text-slate-400 gap-4">
             <RefreshCw className="h-10 w-10 text-blue-600 animate-spin" />

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileText, 
   Printer, 
@@ -12,8 +12,11 @@ import {
   CheckCircle2,
   AlertTriangle,
   XCircle,
-  HelpCircle
+  HelpCircle,
+  ArrowLeft
 } from 'lucide-react';
+import { db } from '../../lib/firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { Equipment, InventoryTransaction, MaterialRequest, PurchaseProposal } from './types';
 
 const getSafeISOString = (dateVal: any): string => {
@@ -58,6 +61,8 @@ interface DocumentDetailTabProps {
   transactions: InventoryTransaction[];
   requests: MaterialRequest[];
   proposals: PurchaseProposal[];
+  onOpenProject?: (id: string) => void;
+  onClose?: () => void;
 }
 
 export default function DocumentDetailTab({
@@ -66,8 +71,23 @@ export default function DocumentDetailTab({
   equipment,
   transactions,
   requests,
-  proposals
+  proposals,
+  onOpenProject,
+  onClose
 }: DocumentDetailTabProps) {
+
+  const [settings, setSettings] = useState<any>(null);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'settings', 'general'), (docSnap) => {
+      if (docSnap.exists()) {
+        setSettings(docSnap.data());
+      }
+    }, (error) => {
+      console.log("Error fetching general settings for DocumentDetailTab:", error);
+    });
+    return () => unsub();
+  }, []);
 
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
@@ -84,9 +104,18 @@ export default function DocumentDetailTab({
     const docItem = transactions.find(t => t.id === documentId && t.type === 'import');
     if (!docItem) {
       return (
-        <div className="bg-white rounded-[2rem] p-12 text-center text-slate-500 font-bold border border-slate-100 shadow-xs">
-          <XCircle className="h-12 w-12 text-rose-500 mx-auto mb-4 animate-bounce" />
-          Phiếu Nhập Kho #{documentId} không tồn tại hoặc đã bị xóa.
+        <div className="bg-white rounded-[2rem] p-12 text-center text-slate-500 font-bold border border-slate-100 shadow-xs flex flex-col items-center justify-center gap-4">
+          <XCircle className="h-12 w-12 text-rose-500 animate-bounce" />
+          <span>Phiếu Nhập Kho #{documentId} không tồn tại hoặc đã bị xóa.</span>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-black uppercase tracking-wider cursor-pointer transition-all active:scale-95"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Quay lại danh sách
+            </button>
+          )}
         </div>
       );
     }
@@ -95,10 +124,21 @@ export default function DocumentDetailTab({
       <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xs space-y-8 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0">
         
         {/* Header Ribbon / Control actions for interactive screen */}
-        <div className="flex justify-between items-center pb-6 border-b border-slate-100 print:hidden">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-emerald-500 animate-ping shrink-0" />
-            <span className="text-xs font-black uppercase tracking-wider text-emerald-600">Đã kiểm duyệt & lưu trữ kho thành công</span>
+        <div className="flex justify-between items-center pb-6 border-b border-slate-100 print:hidden gap-4">
+          <div className="flex items-center gap-3">
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 text-xs font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer shrink-0"
+              >
+                <ArrowLeft className="h-4 w-4 text-slate-500" />
+                Quay lại
+              </button>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-emerald-500 animate-ping shrink-0" />
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-600">Đã kiểm duyệt & lưu trữ kho thành công</span>
+            </div>
           </div>
           <button 
             onClick={handlePrint}
@@ -114,12 +154,31 @@ export default function DocumentDetailTab({
           
           {/* Header section with brand identity */}
           <div className="flex justify-between items-start gap-4">
-            <div>
-              <span className="text-sm font-black text-[#0054a6] uppercase tracking-widest block">VINASOLAR TECHNOLOGY CO., LTD</span>
-              <p className="text-[10px] text-slate-400 font-bold mt-1">Hệ Thống Quản Lý Kho & Vật Tư Cơ Điện Mặt Trời</p>
-              <p className="text-[10px] text-slate-400 font-bold">Số điện thoại: 028.6277.8849 | Website: vinasolar.com</p>
+            <div className="flex-1">
+              {settings?.printHeaderUrl ? (
+                <div className="w-full max-h-24 overflow-hidden mb-2">
+                  <img 
+                    src={settings.printHeaderUrl} 
+                    alt="Company Header Banner" 
+                    className="max-h-20 object-contain text-left" 
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              ) : (
+                <>
+                  <span className="text-sm font-black text-[#0054a6] uppercase tracking-widest block">
+                    {settings?.companyName || 'VINASOLAR TECHNOLOGY CO., LTD'}
+                  </span>
+                  <p className="text-[10px] text-slate-400 font-bold mt-1">
+                    {settings?.companyTagline || 'Hệ Thống Quản Lý Kho & Vật Tư Cơ Điện Mặt Trời'}
+                  </p>
+                  <p className="text-[10px] text-slate-400 font-bold">
+                    Số điện thoại: {settings?.phone || '028.6277.8849'} | Website: {settings?.website || 'vinasolar.com'}
+                  </p>
+                </>
+              )}
             </div>
-            <div className="text-right">
+            <div className="text-right shrink-0">
               <span className="text-xs font-black uppercase text-slate-400 block tracking-widest">PHIẾU NHẬP KHO</span>
               <span className="text-sm font-black text-slate-900 font-mono mt-1 block">SỐ: #{docItem.id}</span>
               <span className="text-[10px] text-slate-400 font-bold mt-1 block">Ngày lập: {docItem.date}</span>
@@ -232,9 +291,18 @@ export default function DocumentDetailTab({
     const docItem = transactions.find(t => t.id === documentId && t.type === 'export');
     if (!docItem) {
       return (
-        <div className="bg-white rounded-[2rem] p-12 text-center text-slate-500 font-bold border border-slate-100 shadow-xs">
-          <XCircle className="h-12 w-12 text-rose-500 mx-auto mb-4 animate-bounce" />
-          Phiếu Xuất Kho #{documentId} không tồn tại hoặc đã bị xóa.
+        <div className="bg-white rounded-[2rem] p-12 text-center text-slate-500 font-bold border border-slate-100 shadow-xs flex flex-col items-center justify-center gap-4">
+          <XCircle className="h-12 w-12 text-rose-500 animate-bounce" />
+          <span>Phiếu Xuất Kho #{documentId} không tồn tại hoặc đã bị xóa.</span>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-black uppercase tracking-wider cursor-pointer transition-all active:scale-95"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Quay lại danh sách
+            </button>
+          )}
         </div>
       );
     }
@@ -243,10 +311,21 @@ export default function DocumentDetailTab({
       <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xs space-y-8 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0">
         
         {/* Header Ribbon / Control actions for interactive screen */}
-        <div className="flex justify-between items-center pb-6 border-b border-slate-100 print:hidden">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-rose-500 animate-ping shrink-0" />
-            <span className="text-xs font-black uppercase tracking-wider text-rose-600">Đã xuất vật tư bàn giao thi công công trình</span>
+        <div className="flex justify-between items-center pb-6 border-b border-slate-100 print:hidden gap-4">
+          <div className="flex items-center gap-3">
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 text-xs font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer shrink-0"
+              >
+                <ArrowLeft className="h-4 w-4 text-slate-500" />
+                Quay lại
+              </button>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-rose-500 animate-ping shrink-0" />
+              <span className="text-xs font-black uppercase tracking-wider text-rose-600">Đã xuất vật tư bàn giao thi công công trình</span>
+            </div>
           </div>
           <button 
             onClick={handlePrint}
@@ -262,12 +341,31 @@ export default function DocumentDetailTab({
           
           {/* Header section with brand identity */}
           <div className="flex justify-between items-start gap-4">
-            <div>
-              <span className="text-sm font-black text-[#0054a6] uppercase tracking-widest block">VINASOLAR TECHNOLOGY CO., LTD</span>
-              <p className="text-[10px] text-slate-400 font-bold mt-1">Hệ Thống Quản Lý Kho & Vật Tư Cơ Điện Mặt Trời</p>
-              <p className="text-[10px] text-slate-400 font-bold">Số điện thoại: 028.6277.8849 | Website: vinasolar.com</p>
+            <div className="flex-1">
+              {settings?.printHeaderUrl ? (
+                <div className="w-full max-h-24 overflow-hidden mb-2">
+                  <img 
+                    src={settings.printHeaderUrl} 
+                    alt="Company Header Banner" 
+                    className="max-h-20 object-contain text-left" 
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              ) : (
+                <>
+                  <span className="text-sm font-black text-[#0054a6] uppercase tracking-widest block">
+                    {settings?.companyName || 'VINASOLAR TECHNOLOGY CO., LTD'}
+                  </span>
+                  <p className="text-[10px] text-slate-400 font-bold mt-1">
+                    {settings?.companyTagline || 'Hệ Thống Quản Lý Kho & Vật Tư Cơ Điện Mặt Trời'}
+                  </p>
+                  <p className="text-[10px] text-slate-400 font-bold">
+                    Số điện thoại: {settings?.phone || '028.6277.8849'} | Website: {settings?.website || 'vinasolar.com'}
+                  </p>
+                </>
+              )}
             </div>
-            <div className="text-right">
+            <div className="text-right shrink-0">
               <span className="text-xs font-black uppercase text-slate-400 block tracking-widest">PHIẾU XUẤT KHO VẬT TƯ</span>
               <span className="text-sm font-black text-slate-900 font-mono mt-1 block">SỐ: #{docItem.id}</span>
               <span className="text-[10px] text-slate-400 font-bold mt-1 block">Ngày xuất: {docItem.date}</span>
@@ -280,10 +378,21 @@ export default function DocumentDetailTab({
           <div className="grid grid-cols-2 gap-6 text-xs text-slate-700">
             <div className="space-y-1.5">
               <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Công trình thi công nhận cấp phát</p>
-              <p className="font-extrabold text-slate-900 flex items-center gap-1">
-                <Briefcase className="h-4 w-4 text-slate-400" />
-                {docItem.partnerName}
-              </p>
+              {docItem.partnerId && docItem.partnerId !== 'PRJ_TEMP' && docItem.partnerId !== 'PROJ_DEFAULT' && onOpenProject ? (
+                <button
+                  onClick={() => onOpenProject(docItem.partnerId)}
+                  className="font-extrabold text-blue-600 hover:underline flex items-center gap-1.5 cursor-pointer text-left focus:outline-none"
+                  title="Click để xem chi tiết công trình"
+                >
+                  <Briefcase className="h-4 w-4 text-blue-500 shrink-0" />
+                  <span className="underline decoration-dotted">{docItem.partnerName}</span>
+                </button>
+              ) : (
+                <p className="font-extrabold text-slate-900 flex items-center gap-1">
+                  <Briefcase className="h-4 w-4 text-slate-400" />
+                  {docItem.partnerName}
+                </p>
+              )}
               <p className="font-semibold text-slate-500">Mã liên kết công trình: {docItem.partnerId || 'PROJ_DEFAULT'}</p>
               <p className="font-medium text-slate-500 italic">Mô tả: {docItem.note}</p>
             </div>
@@ -370,28 +479,48 @@ export default function DocumentDetailTab({
     const docItem = requests.find(r => r.id === documentId);
     if (!docItem) {
       return (
-        <div className="bg-white rounded-[2rem] p-12 text-center text-slate-500 font-bold border border-slate-100 shadow-xs">
-          <XCircle className="h-12 w-12 text-rose-500 mx-auto mb-4 animate-bounce" />
-          Tờ Đề Xuất Cấp Vật Tư #{documentId} không tồn tại hoặc đã bị xóa.
+        <div className="bg-white rounded-[2rem] p-12 text-center text-slate-500 font-bold border border-slate-100 shadow-xs flex flex-col items-center justify-center gap-4">
+          <XCircle className="h-12 w-12 text-rose-500 animate-bounce" />
+          <span>Tờ Đề Xuất Cấp Vật Tư #{documentId} không tồn tại hoặc đã bị xóa.</span>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-black uppercase tracking-wider cursor-pointer transition-all active:scale-95"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Quay lại danh sách
+            </button>
+          )}
         </div>
       );
     }
 
     return (
-      <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xs space-y-8 max-w-4xl mx-auto">
+      <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xs space-y-8 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0">
         
-        <div className="flex justify-between items-center pb-6 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <span className={`w-3 h-3 rounded-full shrink-0 ${
-              docItem.status === 'pending' ? 'bg-amber-500 animate-pulse' :
-              docItem.status === 'approved' ? 'bg-emerald-500' : 'bg-rose-500'
-            }`} />
-            <span className={`text-xs font-black uppercase tracking-wider ${
-              docItem.status === 'pending' ? 'text-amber-600' :
-              docItem.status === 'approved' ? 'text-emerald-600' : 'text-rose-600'
-            }`}>
-              Trạng thái: {docItem.status === 'pending' ? 'Chờ kiểm duyệt' : docItem.status === 'approved' ? 'Đã duyệt đề xuất' : 'Từ chối cấp phát'}
-            </span>
+        <div className="flex justify-between items-center pb-6 border-b border-slate-100 print:hidden gap-4">
+          <div className="flex items-center gap-3">
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 text-xs font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer shrink-0"
+              >
+                <ArrowLeft className="h-4 w-4 text-slate-500" />
+                Quay lại
+              </button>
+            )}
+            <div className="flex items-center gap-2">
+              <span className={`w-3 h-3 rounded-full shrink-0 ${
+                docItem.status === 'pending' ? 'bg-amber-500 animate-pulse' :
+                docItem.status === 'approved' ? 'bg-emerald-500' : 'bg-rose-500'
+              }`} />
+              <span className={`text-xs font-black uppercase tracking-wider ${
+                docItem.status === 'pending' ? 'text-amber-600' :
+                docItem.status === 'approved' ? 'text-emerald-600' : 'text-rose-600'
+              }`}>
+                Trạng thái: {docItem.status === 'pending' ? 'Chờ kiểm duyệt' : docItem.status === 'approved' ? 'Đã duyệt đề xuất' : 'Từ chối cấp phát'}
+              </span>
+            </div>
           </div>
           <button 
             onClick={handlePrint}
@@ -404,12 +533,29 @@ export default function DocumentDetailTab({
 
         <div className="space-y-6">
           <div className="flex justify-between items-start gap-4">
-            <div>
-              <span className="text-sm font-black text-[#0054a6] uppercase tracking-widest block">TỜ TRÌNH ĐỀ XUẤT CẤP PHÁT VẬT TƯ THI CÔNG</span>
-              <p className="text-[10px] text-slate-400 font-bold mt-1">Hệ Thống Phê Duyệt Tự Động Kỹ Thuật Dự Án Vinasolar</p>
+            <div className="flex-1">
+              {settings?.printHeaderUrl ? (
+                <div className="w-full max-h-24 overflow-hidden mb-2">
+                  <img 
+                    src={settings.printHeaderUrl} 
+                    alt="Company Header Banner" 
+                    className="max-h-20 object-contain text-left" 
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              ) : (
+                <>
+                  <span className="text-sm font-black text-[#0054a6] uppercase tracking-widest block">
+                    {settings?.companyName || 'VINASOLAR TECHNOLOGY CO., LTD'}
+                  </span>
+                  <p className="text-[10px] text-slate-400 font-bold mt-1">
+                    {settings?.companyTagline || 'Hệ Thống Phê Duyệt Tự Động Kỹ Thuật Dự Án Vinasolar'}
+                  </p>
+                </>
+              )}
             </div>
-            <div className="text-right">
-              <span className="text-xs font-black uppercase text-slate-400 block tracking-widest">MÃ SỐ</span>
+            <div className="text-right shrink-0">
+              <span className="text-xs font-black uppercase text-slate-400 block tracking-widest">TỜ TRÌNH ĐỀ XUẤT CẤP PHÁT VẬT TƯ THI CÔNG</span>
               <span className="text-sm font-black text-slate-900 font-mono mt-1 block">#{docItem.id}</span>
               <span className="text-[10px] text-slate-400 font-bold mt-1 block">Yêu cầu: {getSafeISOString(docItem.createdAt).substring(0, 10)}</span>
             </div>
@@ -426,7 +572,17 @@ export default function DocumentDetailTab({
             </div>
             <div>
               <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Công trình áp dụng cấp phát</p>
-              <p className="font-extrabold text-blue-600 mt-1">{docItem.projectName}</p>
+              {docItem.projectId && docItem.projectId !== 'PRJ_TEMP' && onOpenProject ? (
+                <button
+                  onClick={() => onOpenProject(docItem.projectId)}
+                  className="font-extrabold text-blue-600 hover:underline block mt-1 text-left cursor-pointer focus:outline-none"
+                  title="Click để xem chi tiết công trình"
+                >
+                  <span className="underline decoration-dotted">{docItem.projectName}</span>
+                </button>
+              ) : (
+                <p className="font-extrabold text-blue-600 mt-1">{docItem.projectName}</p>
+              )}
               <p className="font-semibold text-slate-500">Mã công trình: {docItem.projectId}</p>
               {docItem.adminNote && (
                 <p className="font-medium text-slate-500 mt-2 bg-white border border-slate-200 p-2 rounded-xl text-[11px]">
@@ -481,22 +637,42 @@ export default function DocumentDetailTab({
     const docItem = proposals.find(p => p.id === documentId);
     if (!docItem) {
       return (
-        <div className="bg-white rounded-[2rem] p-12 text-center text-slate-500 font-bold border border-slate-100 shadow-xs">
-          <XCircle className="h-12 w-12 text-rose-500 mx-auto mb-4 animate-bounce" />
-          Đơn Mua Hàng #{documentId} không tồn tại hoặc đã bị xóa.
+        <div className="bg-white rounded-[2rem] p-12 text-center text-slate-500 font-bold border border-slate-100 shadow-xs flex flex-col items-center justify-center gap-4">
+          <XCircle className="h-12 w-12 text-rose-500 animate-bounce" />
+          <span>Đơn Mua Hàng #{documentId} không tồn tại hoặc đã bị xóa.</span>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-black uppercase tracking-wider cursor-pointer transition-all active:scale-95"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Quay lại danh sách
+            </button>
+          )}
         </div>
       );
     }
 
     return (
-      <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xs space-y-8 max-w-4xl mx-auto">
+      <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xs space-y-8 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0">
         
-        <div className="flex justify-between items-center pb-6 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-blue-500 animate-ping shrink-0" />
-            <span className="text-xs font-black uppercase tracking-wider text-blue-600">
-              Trạng thái mua hàng: {docItem.status === 'pending' ? 'Chờ ban giám đốc phê duyệt' : docItem.status === 'approved' ? 'Đã duyệt mua - Chờ đặt hàng' : docItem.status === 'ordering' ? 'Đang giao vận' : 'Hoàn tất mua hàng'}
-            </span>
+        <div className="flex justify-between items-center pb-6 border-b border-slate-100 print:hidden gap-4">
+          <div className="flex items-center gap-3">
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 text-xs font-black uppercase tracking-wider transition-all active:scale-95 cursor-pointer shrink-0"
+              >
+                <ArrowLeft className="h-4 w-4 text-slate-500" />
+                Quay lại
+              </button>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-blue-500 animate-ping shrink-0" />
+              <span className="text-xs font-black uppercase tracking-wider text-blue-600">
+                Trạng thái mua hàng: {docItem.status === 'pending' ? 'Chờ ban giám đốc phê duyệt' : docItem.status === 'approved' ? 'Đã duyệt mua - Chờ đặt hàng' : docItem.status === 'ordering' ? 'Đang giao vận' : 'Hoàn tất mua hàng'}
+              </span>
+            </div>
           </div>
           <button 
             onClick={handlePrint}
@@ -509,12 +685,29 @@ export default function DocumentDetailTab({
 
         <div className="space-y-6">
           <div className="flex justify-between items-start gap-4">
-            <div>
-              <span className="text-sm font-black text-[#0054a6] uppercase tracking-widest block">ĐƠN ĐẶT MUA HÀNG & PHỤ PHÍ THU MUA</span>
-              <p className="text-[10px] text-slate-400 font-bold mt-1">Phòng Kế Hoạch & Vật Tư Vinasolar</p>
+            <div className="flex-1">
+              {settings?.printHeaderUrl ? (
+                <div className="w-full max-h-24 overflow-hidden mb-2">
+                  <img 
+                    src={settings.printHeaderUrl} 
+                    alt="Company Header Banner" 
+                    className="max-h-20 object-contain text-left" 
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              ) : (
+                <>
+                  <span className="text-sm font-black text-[#0054a6] uppercase tracking-widest block">
+                    {settings?.companyName || 'VINASOLAR TECHNOLOGY CO., LTD'}
+                  </span>
+                  <p className="text-[10px] text-slate-400 font-bold mt-1">
+                    {settings?.companyTagline || 'Phòng Kế Hoạch & Vật Tư Vinasolar'}
+                  </p>
+                </>
+              )}
             </div>
-            <div className="text-right">
-              <span className="text-xs font-black uppercase text-slate-400 block tracking-widest">ĐƠN ĐỀ XUẤT</span>
+            <div className="text-right shrink-0">
+              <span className="text-xs font-black uppercase text-slate-400 block tracking-widest">ĐƠN ĐỀ XUẤT ĐẶT MUA HÀNG</span>
               <span className="text-sm font-black text-slate-900 font-mono mt-1 block">#{docItem.id}</span>
               <span className="text-[10px] text-slate-400 font-bold mt-1 block">Lập ngày: {getSafeISOString(docItem.createdAt).substring(0, 10)}</span>
             </div>

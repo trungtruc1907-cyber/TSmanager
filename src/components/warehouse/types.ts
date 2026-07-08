@@ -19,7 +19,7 @@ export interface MaterialRequest {
   technicianId: string;
   technicianName: string;
   reason: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'draft';
   createdAt: any;
   items: Array<{
     equipmentId: string;

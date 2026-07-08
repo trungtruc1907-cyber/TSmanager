@@ -152,10 +152,10 @@ service cloud.firestore {
     }
 
     function isValidMaterialRequest(data) {
-      return data.technicianId is string && data.technicianId.size() > 0
-          && data.technicianName is string && data.technicianName.size() > 0
-          && data.status in ['pending', 'approved', 'rejected', 'draft']
-          && data.items is list;
+      return (!('technicianId' in data) || (data.technicianId is string && data.technicianId.size() > 0))
+          && (!('technicianName' in data) || (data.technicianName is string && data.technicianName.size() > 0))
+          && (!('status' in data) || data.status in ['pending', 'approved', 'rejected', 'draft'])
+          && (!('items' in data) || data.items is list);
     }
 
     function isValidPurchaseProposal(data) {
@@ -230,9 +230,9 @@ service cloud.firestore {
       return data.title is string && data.title.size() > 0 && data.title.size() <= 200
           && data.message is string && data.message.size() > 0 && data.message.size() <= 2000
           && data.type in ['customer', 'appointment', 'task']
-          && data.createdBy == auth.uid
+          && data.createdBy is string
           && data.createdByName is string && data.createdByName.size() > 0
-          && (!('createdAt' in data) || data.createdAt is timestamp);
+          && (!('createdAt' in data) || data.createdAt is timestamp || data.createdAt is string || data.createdAt == null);
     }
 
     // --- RULES ---
@@ -314,13 +314,13 @@ service cloud.firestore {
         hAdmin(database, request.auth) || 
         hAccountant(database, request.auth) || 
         hOperator(database, request.auth) || 
-        (resource.data.technicianId == request.auth.uid && resource.data.status == 'draft')
+        resource.data.status == 'draft'
       ) && isValidMaterialRequest(incoming());
       allow delete: if hActive(database, request.auth) && (
         hAdmin(database, request.auth) || 
         hAccountant(database, request.auth) || 
         hOperator(database, request.auth) || 
-        (resource.data.technicianId == request.auth.uid && resource.data.status == 'draft')
+        resource.data.status == 'draft'
       );
     }
 
