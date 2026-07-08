@@ -155,15 +155,7 @@ service cloud.firestore {
       return data.technicianId is string && data.technicianId.size() > 0
           && data.technicianName is string && data.technicianName.size() > 0
           && data.status in ['pending', 'approved', 'rejected', 'draft']
-          && data.items is list
-          && (!('id' in data) || data.id is string)
-          && (!('projectId' in data) || data.projectId is string)
-          && (!('projectName' in data) || data.projectName is string)
-          && (!('reason' in data) || data.reason is string)
-          && (!('createdAt' in data) || data.createdAt is string || data.createdAt is timestamp || data.createdAt == null)
-          && (!('resolvedAt' in data) || data.resolvedAt is string || data.resolvedAt is timestamp || data.resolvedAt == null)
-          && (!('resolvedBy' in data) || data.resolvedBy is string || data.resolvedBy == null)
-          && (!('adminNote' in data) || data.adminNote is string);
+          && data.items is list;
     }
 
     function isValidPurchaseProposal(data) {

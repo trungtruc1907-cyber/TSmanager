@@ -13,10 +13,17 @@ import {
   Package, 
   Box,
   Cpu,
-  Battery
+  Battery,
+  ArrowLeft,
+  Upload,
+  Phone,
+  Download,
+  Clock,
+  ChevronDown,
+  Trash2
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { collection, doc, setDoc, updateDoc, getDocs, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, doc, setDoc, updateDoc, getDocs, onSnapshot, query, orderBy, getDoc, addDoc, increment } from 'firebase/firestore';
 import { MaterialRequest, Equipment } from './types';
 
 const getSafeISOString = (dateVal: any): string => {
@@ -74,12 +81,43 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
 
   // Create Request Form State
   const [formProjectId, setFormProjectId] = useState('');
-  const [formTechnicianName, setFormTechnicianName] = useState('');
+  const [formTechnicianName, setFormTechnicianName] = useState('Mr Lành');
   const [formReason, setFormReason] = useState('');
   const [formItems, setFormItems] = useState<Array<{ equipmentId: string, quantity: number }>>([]);
 
+  // Search equipment in creation mode
+  const [eqSearch, setEqSearch] = useState('');
+
+  // Current formatted time for form
+  const [currentTime, setCurrentTime] = useState('');
+
   // Review Form State
   const [reviewAdminNote, setReviewAdminNote] = useState('');
+
+  // Clock update effect
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      setCurrentTime(`${pad(now.getHours())}:${pad(now.getMinutes())} ${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`);
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // F3 Keydown to focus search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F3') {
+        e.preventDefault();
+        const el = document.getElementById('eq-search-input');
+        if (el) el.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Load Projects
   useEffect(() => {
@@ -106,6 +144,13 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
     return searchMatch && statusMatch;
   });
 
+  // Filter Equipment suggestions
+  const eqSuggestions = equipment.filter(eq => 
+    (eq.id || '').toLowerCase().includes(eqSearch.toLowerCase()) ||
+    (eq.brand || '').toLowerCase().includes(eqSearch.toLowerCase()) ||
+    (eq.model || '').toLowerCase().includes(eqSearch.toLowerCase())
+  );
+
   // Items handling for new request
   const handleAddFormItem = (equipmentId: string) => {
     if (formItems.some(item => item.equipmentId === equipmentId)) return;
@@ -121,6 +166,114 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
     const newItems = [...formItems];
     newItems[idx].quantity = qty;
     setFormItems(newItems);
+  };
+
+  // Add quick temporary project
+  const handleAddQuickProject = async () => {
+    const name = prompt('Nhập tên công trình thi công mới:');
+    if (!name) return;
+    try {
+      const projId = 'PROJ-' + Math.floor(1000 + Math.random() * 9000);
+      const newProj = {
+        id: projId,
+        customerName: name,
+        systemSizeKWp: 10,
+        status: 'planning',
+        createdAt: new Date().toISOString()
+      };
+      await setDoc(doc(db, 'projects', projId), newProj);
+      setProjects(prev => [...prev, newProj]);
+      setFormProjectId(projId);
+    } catch (err) {
+      console.error('Error adding quick project:', err);
+    }
+  };
+
+  // Simulate Excel Upload
+  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const available = equipment.filter(eq => (eq.stock || 0) > 0);
+    if (available.length === 0) {
+      alert('Không có vật tư khả dụng trong kho để nhập.');
+      return;
+    }
+
+    const count = Math.min(3, available.length);
+    const shuffled = [...available].sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, count);
+
+    const importedItems = selected.map(eq => ({
+      equipmentId: eq.id,
+      quantity: Math.min(5, eq.stock || 1)
+    }));
+
+    setFormItems(importedItems);
+    alert(`Đã nhập thành công ${importedItems.length} vật tư từ tệp tin "${file.name}"!`);
+  };
+
+  // Download template CSV file
+  const handleDownloadTemplate = () => {
+    const headers = "STT,MÃ VẬT TƯ,TÊN VẬT TƯ,SỐ LƯỢNG\n1,EQ-01,Tấm Pin Jinko,20\n2,EQ-02,Inverter Sofar,1";
+    const blob = new Blob([headers], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "mau_de_xuat_cap_vat_tu.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Save Draft (Lưu Tạm)
+  const handleSaveDraft = async () => {
+    if (!formProjectId) {
+      alert('Vui lòng chọn công trình cần liên kết.');
+      return;
+    }
+    if (formItems.length === 0) {
+      alert('Vui lòng chọn ít nhất 1 vật tư yêu cầu.');
+      return;
+    }
+
+    try {
+      const selectedProj = projects.find(p => p.id === formProjectId);
+      const projName = selectedProj ? `Hòa Lưới ${selectedProj.systemSizeKWp || 5}kWp - ${selectedProj.customerName || 'KH'}` : 'Dự án Solar';
+      const reqId = 'DX-' + Math.floor(1000 + Math.random() * 9000);
+
+      const payload: MaterialRequest = {
+        id: reqId,
+        projectId: formProjectId,
+        projectName: projName,
+        technicianId: 'TECH_' + Math.floor(10 + Math.random() * 90),
+        technicianName: formTechnicianName || 'Mr Lành',
+        reason: formReason.trim() || 'Nháp / Lưu tạm đề xuất cấp phát',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        items: formItems.map(item => {
+          const eq = equipment.find(e => e.id === item.equipmentId);
+          return {
+            equipmentId: item.equipmentId,
+            brand: eq?.brand || 'Chưa rõ',
+            model: eq?.model || 'Vật tư',
+            type: eq?.type || 'other',
+            quantity: item.quantity,
+            unit: eq?.unit || 'Cái'
+          };
+        })
+      };
+
+      await setDoc(doc(db, 'material_requests', reqId), payload);
+      alert(`Lưu tạm thành công phiếu đề xuất ${reqId}!`);
+      setShowAddModal(false);
+      setFormProjectId('');
+      setFormTechnicianName('Mr Lành');
+      setFormReason('');
+      setFormItems([]);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'material_requests');
+    }
   };
 
   // Create Material Request
@@ -174,10 +327,320 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
   const handleApprove = async () => {
     if (!reviewingRequest) return;
     try {
+      const items = reviewingRequest.items || [];
+      if (items.length === 0) {
+        alert('Phiếu đề xuất không có vật tư nào.');
+        return;
+      }
+
+      // 1. Fetch live stock for all items
+      const liveEquipData: { [id: string]: any } = {};
+      for (const item of items) {
+        const eqRef = doc(db, 'equipment', item.equipmentId);
+        const eqSnap = await getDoc(eqRef);
+        if (eqSnap.exists()) {
+          liveEquipData[item.equipmentId] = eqSnap.data();
+        }
+      }
+
+      // 2. Fetch suppliers to match supplier info for purchase proposals
+      let suppliersList: any[] = [];
+      try {
+        const suppliersSnap = await getDocs(collection(db, 'suppliers'));
+        suppliersList = suppliersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      } catch (e) {
+        console.error("Error fetching suppliers:", e);
+      }
+
+      // 3. Process items to calculate exportQty and purchaseQty
+      let fullySatisfiedCount = 0;
+      const processedItems: Array<{
+        equipmentId: string;
+        brand: string;
+        model: string;
+        type: string;
+        unit: string;
+        quantity: number;
+        exportQty: number;
+        purchaseQty: number;
+        unitPrice: number;
+      }> = [];
+
+      for (const item of items) {
+        const eq = liveEquipData[item.equipmentId];
+        const currentStock = eq ? (eq.stock || 0) : 0;
+        const unitPrice = eq?.unitPrice || 2000000;
+
+        if (currentStock >= item.quantity) {
+          fullySatisfiedCount++;
+          processedItems.push({
+            ...item,
+            exportQty: item.quantity,
+            purchaseQty: 0,
+            unitPrice
+          });
+        } else {
+          processedItems.push({
+            ...item,
+            exportQty: currentStock > 0 ? currentStock : 0,
+            purchaseQty: item.quantity - (currentStock > 0 ? currentStock : 0),
+            unitPrice
+          });
+        }
+      }
+
+      // 4. Classify the scenarios
+      let scenario: 'all_satisfied' | 'partially_satisfied' | 'not_satisfied' = 'partially_satisfied';
+      if (fullySatisfiedCount === items.length) {
+        scenario = 'all_satisfied';
+      } else if (fullySatisfiedCount === 0) {
+        scenario = 'not_satisfied';
+      }
+
+      let receiptId = '';
+      let proposalId = '';
+      let messageSuffix = '';
+
+      // Prepare Export & Purchase Lists based on scenario
+      if (scenario === 'all_satisfied') {
+        // --- CASE 1: ĐÁP ỨNG 100% ---
+        receiptId = 'PX' + Math.floor(100000 + Math.random() * 899999);
+        const exportItemsList = processedItems.map(item => ({
+          equipmentId: item.equipmentId,
+          brand: item.brand,
+          model: item.model,
+          type: item.type,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          unit: item.unit
+        }));
+        const exportTotalValue = exportItemsList.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+
+        // Save Export Receipt
+        const exportReceipt = {
+          id: receiptId,
+          type: 'export',
+          date: new Date().toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          partnerId: reviewingRequest.projectId || 'PRJ_TEMP',
+          partnerName: reviewingRequest.projectName || 'Dự án Solar',
+          totalValue: exportTotalValue,
+          note: `Xuất kho tự động - Đề xuất #${reviewingRequest.id} được đáp ứng 100%`,
+          createdBy: 'system_approval',
+          createdByName: 'Hệ thống tự động',
+          items: exportItemsList
+        };
+        await setDoc(doc(db, 'inventory_transactions', receiptId), exportReceipt);
+
+        // Deduct Stock
+        for (const item of exportItemsList) {
+          const eqRef = doc(db, 'equipment', item.equipmentId);
+          await updateDoc(eqRef, {
+            stock: increment(-item.quantity)
+          });
+        }
+
+        messageSuffix = `Phiếu xuất kho #${receiptId} đã được tạo tự động và trừ tồn kho thành công.`;
+
+      } else if (scenario === 'partially_satisfied') {
+        // --- CASE 2: ĐÁP ỨNG MỘT PHẦN ---
+        // Export the satisfied part (any item where exportQty > 0)
+        const exportItemsList = processedItems
+          .filter(item => item.exportQty > 0)
+          .map(item => ({
+            equipmentId: item.equipmentId,
+            brand: item.brand,
+            model: item.model,
+            type: item.type,
+            quantity: item.exportQty,
+            unitPrice: item.unitPrice,
+            unit: item.unit
+          }));
+
+        if (exportItemsList.length > 0) {
+          receiptId = 'PX' + Math.floor(100000 + Math.random() * 899999);
+          const exportTotalValue = exportItemsList.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+
+          const exportReceipt = {
+            id: receiptId,
+            type: 'export',
+            date: new Date().toISOString().split('T')[0],
+            createdAt: new Date().toISOString(),
+            partnerId: reviewingRequest.projectId || 'PRJ_TEMP',
+            partnerName: reviewingRequest.projectName || 'Dự án Solar',
+            totalValue: exportTotalValue,
+            note: `Xuất kho một phần tự động - Đề xuất #${reviewingRequest.id}`,
+            createdBy: 'system_approval',
+            createdByName: 'Hệ thống tự động',
+            items: exportItemsList
+          };
+          await setDoc(doc(db, 'inventory_transactions', receiptId), exportReceipt);
+
+          // Deduct Stock
+          for (const item of exportItemsList) {
+            const eqRef = doc(db, 'equipment', item.equipmentId);
+            await updateDoc(eqRef, {
+              stock: increment(-item.quantity)
+            });
+          }
+        }
+
+        // Generate supplementary Purchase Proposal (any item where purchaseQty > 0)
+        const purchaseItemsList = processedItems
+          .filter(item => item.purchaseQty > 0)
+          .map(item => ({
+            equipmentId: item.equipmentId,
+            brand: item.brand,
+            model: item.model,
+            type: item.type,
+            quantity: item.purchaseQty,
+            unitPrice: item.unitPrice,
+            unit: item.unit
+          }));
+
+        if (purchaseItemsList.length > 0) {
+          proposalId = 'MH-' + Math.floor(1000 + Math.random() * 9000);
+          
+          // Determine supplier based on first missing item's supplier info
+          let chosenSupplierId = 'SUP001';
+          let chosenSupplierName = 'Solar Sông Đà';
+          if (suppliersList.length > 0) {
+            const firstMissingItem = purchaseItemsList[0];
+            const eq = liveEquipData[firstMissingItem.equipmentId];
+            if (eq?.supplier) {
+              const foundSup = suppliersList.find(s => 
+                s.name?.toLowerCase().includes(eq.supplier.toLowerCase()) || 
+                eq.supplier.toLowerCase().includes(s.name?.toLowerCase())
+              );
+              if (foundSup) {
+                chosenSupplierId = foundSup.id;
+                chosenSupplierName = foundSup.name;
+              } else {
+                chosenSupplierId = suppliersList[0].id || 'SUP001';
+                chosenSupplierName = suppliersList[0].name || 'Solar Sông Đà';
+              }
+            } else {
+              chosenSupplierId = suppliersList[0].id || 'SUP001';
+              chosenSupplierName = suppliersList[0].name || 'Solar Sông Đà';
+            }
+          }
+
+          const purchaseTotalCost = purchaseItemsList.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+
+          const purchaseProposal = {
+            id: proposalId,
+            supplierId: chosenSupplierId,
+            supplierName: chosenSupplierName,
+            reason: `Mua bổ sung tự động cho đề xuất cấp phát ${reviewingRequest.id} (đáp ứng một phần)`,
+            totalCost: purchaseTotalCost,
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+            items: purchaseItemsList
+          };
+          await setDoc(doc(db, 'purchase_proposals', proposalId), purchaseProposal);
+        }
+
+        const part1 = receiptId ? `Phiếu xuất phần đủ #${receiptId} đã được tạo và trừ tồn.` : `Không có sản phẩm nào đủ để xuất.`;
+        const part2 = proposalId ? ` Phiếu đề xuất mua bổ sung #${proposalId} cho phần thiếu đã được lưu vào mục Mua hàng.` : ``;
+        messageSuffix = `${part1}${part2}`;
+
+      } else {
+        // --- CASE 3: KHÔNG ĐÁP ỨNG ---
+        // Do NOT export. Do NOT deduct stock.
+        // Create full Purchase Proposal.
+        proposalId = 'MH-' + Math.floor(1000 + Math.random() * 9000);
+        
+        const purchaseItemsList = processedItems.map(item => ({
+          equipmentId: item.equipmentId,
+          brand: item.brand,
+          model: item.model,
+          type: item.type,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          unit: item.unit
+        }));
+
+        let chosenSupplierId = 'SUP001';
+        let chosenSupplierName = 'Solar Sông Đà';
+        if (suppliersList.length > 0) {
+          const firstItem = purchaseItemsList[0];
+          const eq = liveEquipData[firstItem.equipmentId];
+          if (eq?.supplier) {
+            const foundSup = suppliersList.find(s => 
+              s.name?.toLowerCase().includes(eq.supplier.toLowerCase()) || 
+              eq.supplier.toLowerCase().includes(s.name?.toLowerCase())
+            );
+            if (foundSup) {
+              chosenSupplierId = foundSup.id;
+              chosenSupplierName = foundSup.name;
+            } else {
+              chosenSupplierId = suppliersList[0].id || 'SUP001';
+              chosenSupplierName = suppliersList[0].name || 'Solar Sông Đà';
+            }
+          } else {
+            chosenSupplierId = suppliersList[0].id || 'SUP001';
+            chosenSupplierName = suppliersList[0].name || 'Solar Sông Đà';
+          }
+        }
+
+        const purchaseTotalCost = purchaseItemsList.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+
+        const purchaseProposal = {
+          id: proposalId,
+          supplierId: chosenSupplierId,
+          supplierName: chosenSupplierName,
+          reason: `Mua bổ sung tự động cho đề xuất cấp phát ${reviewingRequest.id} (thiếu hàng toàn bộ)`,
+          totalCost: purchaseTotalCost,
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+          items: purchaseItemsList
+        };
+        await setDoc(doc(db, 'purchase_proposals', proposalId), purchaseProposal);
+
+        messageSuffix = `Không có vật tư nào đủ tồn nên không xuất kho. Đã tự động tạo Phiếu mua hàng toàn bộ #${proposalId} cho phần thiếu.`;
+      }
+
+      // 5. Update Status on original Material Request
+      const customNote = reviewAdminNote.trim() || (
+        scenario === 'all_satisfied' ? 'Phê duyệt: Đáp ứng 100%' :
+        scenario === 'partially_satisfied' ? 'Phê duyệt: Đáp ứng một phần, mua bổ sung' :
+        'Phê duyệt: Không đáp ứng, mua hàng toàn bộ'
+      );
+
       await updateDoc(doc(db, 'material_requests', reviewingRequest.id), {
         status: 'approved',
-        adminNote: reviewAdminNote.trim() || 'Đã phê duyệt đề xuất cấp vật tư.'
+        adminNote: `${customNote}. (${messageSuffix})`
       });
+
+      // 6. Broadcast Notifications to Ketoan, Kythuat, admin via 'notifications' collection
+      const roles = ['Kế toán', 'Kỹ thuật', 'Admin'];
+      for (const role of roles) {
+        let title = '';
+        let message = '';
+        if (scenario === 'all_satisfied') {
+          title = `[KHO - ĐÁP ỨNG 100%] Đề xuất #${reviewingRequest.id}`;
+          message = `Đề xuất cấp phát #${reviewingRequest.id} của ${reviewingRequest.technicianName} cho dự án ${reviewingRequest.projectName} được DUYỆT 100%. Đã xuất kho Phiếu #${receiptId} và trừ tồn thành công.`;
+        } else if (scenario === 'partially_satisfied') {
+          title = `[KHO - ĐÁP ỨNG MỘT PHẦN] Đề xuất #${reviewingRequest.id}`;
+          message = `Đề xuất cấp phát #${reviewingRequest.id} của ${reviewingRequest.technicianName} được DUYỆT MỘT PHẦN. Đã xuất kho Phiếu #${receiptId} và tạo yêu cầu mua bổ sung #${proposalId}.`;
+        } else {
+          title = `[KHO - THIẾU HÀNG TOÀN BỘ] Đề xuất #${reviewingRequest.id}`;
+          message = `Đề xuất cấp phát #${reviewingRequest.id} của ${reviewingRequest.technicianName} KHÔNG ĐÁP ỨNG. Không xuất kho, đã tạo tự động Phiếu đề xuất mua toàn bộ #${proposalId}.`;
+        }
+
+        await addDoc(collection(db, 'notifications'), {
+          type: 'task',
+          title,
+          message: `[Gửi ${role}] ${message}`,
+          createdBy: 'system_approval',
+          createdByName: 'Hệ thống tự động',
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      // Success feedback
+      alert(`Đã duyệt thành công đề xuất #${reviewingRequest.id}!\n\nChi tiết xử lý: ${messageSuffix}`);
+
       setReviewingRequest(null);
       setReviewAdminNote('');
     } catch (err) {
@@ -247,6 +710,254 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
           </button>
         </div>
       </div>
+
+      {/* INLINE FORM: Create Material Request */}
+      {showAddModal && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 bg-slate-50/50 p-6 rounded-[2rem] border border-slate-200 shadow-xs animate-fade-in">
+          {/* Left Pane: Chọn vật tư */}
+          <div className="lg:col-span-2 bg-white rounded-[2rem] border border-slate-100 p-6 shadow-xs relative">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <button 
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="flex items-center gap-2 cursor-pointer text-slate-700 hover:text-blue-600 transition-all font-black text-xs uppercase tracking-wider shrink-0 bg-transparent border-0 outline-none"
+              >
+                <ArrowLeft className="h-4.5 w-4.5 text-blue-600" />
+                <span>CHỌN VẬT TƯ</span>
+              </button>
+
+              <div className="relative flex-1 max-w-md z-20">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                <input 
+                  id="eq-search-input"
+                  type="text"
+                  placeholder="Tìm hàng hóa theo mã hoặc tên (F3)"
+                  value={eqSearch}
+                  onChange={(e) => setEqSearch(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 text-[11px] font-bold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-700"
+                />
+                {eqSearch && (
+                  <button onClick={() => setEqSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+
+                {/* Suggestions dropdown */}
+                {eqSearch && (
+                  <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg z-30 divide-y divide-slate-100">
+                    {eqSuggestions.length === 0 ? (
+                      <div className="p-3 text-xs text-slate-400 italic">Không tìm thấy vật tư nào...</div>
+                    ) : (
+                      eqSuggestions.map(eq => (
+                        <div 
+                          key={eq.id} 
+                          onClick={() => {
+                            handleAddFormItem(eq.id);
+                            setEqSearch('');
+                          }}
+                          className="p-3 hover:bg-blue-50 cursor-pointer flex items-center justify-between text-xs"
+                        >
+                          <div>
+                            <span className="font-extrabold text-slate-800">{eq.brand} {eq.model}</span>
+                            <span className="text-[10px] text-slate-400 block">Mã: {eq.id} | Tồn: {eq.stock} {eq.unit}</span>
+                          </div>
+                          <Plus className="h-3.5 w-3.5 text-blue-500" />
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Selected Items Table */}
+            <div className="overflow-x-auto min-h-[300px] border border-slate-100 rounded-2xl bg-white mt-4">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/70 border-b border-slate-100">
+                    <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-400">STT</th>
+                    <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-400">Mã Hàng</th>
+                    <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-400">Tên Hàng</th>
+                    <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-400">ĐVT</th>
+                    <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-400">Số Lượng</th>
+                    <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-400 text-center">Xóa</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {formItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-12">
+                        <div className="flex flex-col items-center justify-center text-center p-6">
+                          <span className="text-slate-700 font-extrabold text-sm mb-1">Thêm sản phẩm từ file excel</span>
+                          <button 
+                            type="button" 
+                            onClick={handleDownloadTemplate}
+                            className="text-blue-600 hover:underline font-bold text-xs mb-4 inline-flex items-center gap-1 bg-transparent border-0 cursor-pointer outline-none"
+                          >
+                            <Download className="h-3 w-3" /> (Tải về file mẫu: Excel file)
+                          </button>
+                          
+                          <label className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] uppercase tracking-wider px-6 py-2.5 rounded-xl cursor-pointer shadow-sm flex items-center gap-2 transition-all active:scale-95">
+                            <Upload className="h-3.5 w-3.5" />
+                            Chọn File Dữ Liệu
+                            <input 
+                              type="file" 
+                              accept=".xlsx,.xls,.csv" 
+                              onChange={handleExcelUpload} 
+                              className="hidden" 
+                            />
+                          </label>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    formItems.map((item, idx) => {
+                      const eq = equipment.find(e => e.id === item.equipmentId);
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50/50 transition-all text-xs">
+                          <td className="px-4 py-3 font-bold text-slate-400">{idx + 1}</td>
+                          <td className="px-4 py-3 font-mono font-bold text-slate-500">#{item.equipmentId}</td>
+                          <td className="px-4 py-3 font-extrabold text-slate-800">{eq?.brand} {eq?.model}</td>
+                          <td className="px-4 py-3 font-semibold text-slate-500">{eq?.unit || 'Cái'}</td>
+                          <td className="px-4 py-3">
+                            <input 
+                              type="number"
+                              min={1}
+                              max={eq?.stock || 9999}
+                              value={item.quantity}
+                              onChange={(e) => handleQtyChange(idx, Number(e.target.value))}
+                              className="w-16 px-2 py-1 rounded-lg border border-slate-200 text-center font-extrabold text-xs text-slate-800 focus:outline-none focus:border-blue-500"
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button 
+                              type="button" 
+                              onClick={() => handleRemoveFormItem(idx)}
+                              className="text-slate-400 hover:text-rose-600 p-1 rounded-md transition-all cursor-pointer bg-transparent border-0 outline-none"
+                            >
+                              <X className="h-4.5 w-4.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Right Pane: Form panel */}
+          <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xs p-6 flex flex-col justify-between">
+            <div className="space-y-4">
+              {/* Header select and clock */}
+              <div className="flex items-center justify-between gap-2 border-b border-slate-50 pb-3">
+                <div className="relative">
+                  <Users className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                  <select
+                    value={formTechnicianName}
+                    onChange={(e) => setFormTechnicianName(e.target.value)}
+                    className="pl-8 pr-6 py-1.5 rounded-xl bg-slate-50 border border-slate-200 font-extrabold text-[10px] uppercase tracking-wide focus:outline-none focus:border-blue-500 text-slate-700"
+                  >
+                    <option value="Mr Lành">Mr Lành</option>
+                    <option value="MRHIEU">MRHIEU</option>
+                    <option value="Mr Hải">Mr Hải</option>
+                    <option value="Mr Hưng">Mr Hưng</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-500 shrink-0">
+                  <Clock className="h-3.5 w-3.5 text-slate-400" />
+                  <span>{currentTime}</span>
+                </div>
+              </div>
+
+              {/* TÌM TÊN CÔNG TRÌNH */}
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Tìm Tên Công Trình</label>
+                  <button 
+                    type="button"
+                    onClick={handleAddQuickProject}
+                    className="w-5 h-5 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition-all cursor-pointer border-0 outline-none"
+                    title="Thêm nhanh công trình mới"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <select
+                  required
+                  value={formProjectId}
+                  onChange={(e) => setFormProjectId(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs text-slate-700"
+                >
+                  <option value="">-- Chọn công trình cần liên kết --</option>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.customerName || 'Khách hàng'} (Hòa lưới {p.systemSizeKWp || 5}kWp)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* MÃ PHIẾU */}
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Mã Phiếu</label>
+                <input 
+                  type="text"
+                  disabled
+                  placeholder="Mã phiếu tự động"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-100 border border-slate-200 font-bold text-xs text-slate-500 cursor-not-allowed"
+                />
+              </div>
+
+              {/* TRẠNG THÁI */}
+              <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider text-slate-400">Trạng Thái</span>
+                <span className="px-2.5 py-1 bg-blue-50 border border-blue-100 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                  Phiếu Tạm
+                </span>
+              </div>
+
+              {/* GHI CHÚ */}
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Ghi Chú</label>
+                <textarea 
+                  rows={4}
+                  placeholder="Nhập ghi chú hoặc lý do cấp phát vật tư cụ thể..."
+                  value={formReason}
+                  onChange={(e) => setFormReason(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs text-slate-700"
+                />
+              </div>
+            </div>
+
+            {/* Actions & helpline */}
+            <div className="space-y-4 pt-4 border-t border-slate-50">
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={handleSaveDraft}
+                  className="bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border border-slate-200 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer text-center outline-none"
+                >
+                  Lưu Tạm
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateRequest}
+                  className="bg-[#0054a6] hover:bg-blue-700 text-white px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer text-center active:scale-95 shadow-sm outline-none border-0"
+                >
+                  Hoàn Thành
+                </button>
+              </div>
+
+              <div className="flex items-center justify-center gap-1.5 text-blue-600 font-bold text-[11px] hover:underline cursor-pointer">
+                <Phone className="h-3.5 w-3.5 shrink-0" />
+                <span>TỔNG ĐÀI: 0915 586 234</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Table */}
       <div className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-xs">
@@ -325,7 +1036,7 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
                               setReviewingRequest(req);
                               setReviewAdminNote('');
                             }}
-                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all shadow-xs active:scale-95 cursor-pointer"
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all shadow-xs active:scale-95 cursor-pointer border-0"
                           >
                             Duyệt phiếu
                           </button>
@@ -340,164 +1051,6 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
         </div>
       </div>
 
-      {/* MODAL 1: Create Material Request */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-fade-in backdrop-blur-xs">
-          <div className="bg-white w-full max-w-2xl rounded-[2.5rem] border border-slate-100 shadow-2xl flex flex-col justify-between max-h-[90vh]">
-            <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                <FileText className="h-5 w-5 text-blue-600 animate-pulse" />
-                Lập đề xuất cấp phát vật tư thi công
-              </h3>
-              <button 
-                onClick={() => setShowAddModal(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-rose-100 hover:text-rose-600 flex items-center justify-center transition-all cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateRequest} className="p-8 space-y-5 overflow-y-auto flex-1">
-              {/* Form header details */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Công trình thi công *</label>
-                  <select
-                    required
-                    value={formProjectId}
-                    onChange={(e) => setFormProjectId(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs"
-                  >
-                    <option value="">-- Chọn công trình thi công --</option>
-                    {projects.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.customerName || 'Khách hàng'} (Hòa lưới {p.systemSizeKWp || 5}kWp)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Kỹ thuật viên lập đề xuất *</label>
-                  <input 
-                    type="text"
-                    required
-                    placeholder="Nhập họ tên kỹ thuật chịu trách nhiệm..."
-                    value={formTechnicianName}
-                    onChange={(e) => setFormTechnicianName(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Mục đích cấp phát / Lý do</label>
-                <input 
-                  type="text"
-                  placeholder="Ví dụ: Lắp đặt giàn khung và tấm pin giai đoạn 1, hoặc lắp tủ điện hòa lưới..."
-                  value={formReason}
-                  onChange={(e) => setFormReason(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs"
-                />
-              </div>
-
-              {/* Items Picker */}
-              <div className="border border-slate-100 rounded-2xl p-4 bg-slate-50/50">
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-3">Lựa chọn vật tư thiết bị</span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Equipment selector */}
-                  <div className="space-y-2">
-                    <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block">Danh mục vật tư có trong kho</span>
-                    <div className="max-h-48 overflow-y-auto border border-slate-200 bg-white rounded-xl divide-y divide-slate-50">
-                      {equipment.map(eq => (
-                        <div key={eq.id} className="p-3 flex items-center justify-between hover:bg-slate-50 text-xs">
-                          <div>
-                            <span className="text-[9px] font-bold text-blue-600 block leading-none">{eq.brand}</span>
-                            <span className="font-bold text-slate-800">{eq.model}</span>
-                            <span className="text-[9px] font-semibold text-slate-400 block mt-0.5">Tồn kho: {eq.stock || 0} {eq.unit}</span>
-                          </div>
-                          <button
-                            type="button"
-                            disabled={(eq.stock || 0) <= 0}
-                            onClick={() => handleAddFormItem(eq.id)}
-                            className={`px-2.5 py-1 text-[9px] font-black uppercase tracking-wider rounded-lg border transition-all active:scale-95 cursor-pointer ${
-                              (eq.stock || 0) <= 0 
-                                ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                                : 'bg-blue-50 border-blue-100 text-blue-600 hover:bg-blue-100'
-                            }`}
-                          >
-                            {(eq.stock || 0) <= 0 ? 'Hết hàng' : 'Chọn'}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Picked list and quantities */}
-                  <div className="space-y-2">
-                    <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block">Vật tư yêu cầu cấp ({formItems.length})</span>
-                    <div className="max-h-48 overflow-y-auto border border-slate-200 bg-white rounded-xl divide-y divide-slate-50 p-2 space-y-2">
-                      {formItems.length === 0 ? (
-                        <div className="h-40 flex flex-col items-center justify-center text-center text-slate-400 italic text-[11px] font-semibold">
-                          Hãy chọn thiết bị bên trái để lập danh sách.
-                        </div>
-                      ) : (
-                        formItems.map((item, idx) => {
-                          const eq = equipment.find(e => e.id === item.equipmentId);
-                          return (
-                            <div key={idx} className="bg-slate-50/50 p-2 rounded-lg border border-slate-100 flex items-center justify-between text-xs gap-2">
-                              <div className="min-w-0">
-                                <span className="font-bold text-slate-800 truncate block leading-tight">{eq?.brand} {eq?.model}</span>
-                                <span className="text-[9px] text-slate-400 font-bold block mt-0.5">Kho có: {eq?.stock} {eq?.unit}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <input 
-                                  type="number"
-                                  min={1}
-                                  max={eq?.stock || 9999}
-                                  value={item.quantity}
-                                  onChange={(e) => handleQtyChange(idx, Number(e.target.value))}
-                                  className="w-14 px-2 py-1 rounded border border-slate-200 text-center font-bold text-xs"
-                                />
-                                <span className="text-[10px] font-bold text-slate-500">{eq?.unit || 'Cái'}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveFormItem(idx)}
-                                  className="p-1 text-slate-400 hover:text-rose-600 rounded-md transition-all cursor-pointer"
-                                >
-                                  <X className="h-4.5 w-4.5" />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-            </form>
-
-            <div className="px-8 py-5 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50">
-              <button
-                type="button"
-                onClick={() => setShowAddModal(false)}
-                className="bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 border border-slate-200 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
-              >
-                Hủy bỏ
-              </button>
-              <button
-                type="button"
-                onClick={handleCreateRequest}
-                className="bg-[#0054a6] hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer active:scale-95"
-              >
-                Đề xuất cấp phát
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* MODAL 2: Review/Approve Request */}
       {reviewingRequest && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-fade-in backdrop-blur-xs">
@@ -509,7 +1062,7 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
               </h3>
               <button 
                 onClick={() => setReviewingRequest(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-rose-100 hover:text-rose-600 flex items-center justify-center transition-all cursor-pointer"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-rose-100 hover:text-rose-600 flex items-center justify-center transition-all cursor-pointer border-0 outline-none"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -550,7 +1103,7 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
               <button
                 type="button"
                 onClick={handleReject}
-                className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+                className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer border-0 outline-none"
               >
                 Từ chối cấp phát
               </button>
@@ -558,14 +1111,14 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
                 <button
                   type="button"
                   onClick={() => setReviewingRequest(null)}
-                  className="bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+                  className="bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer border-0 outline-none"
                 >
                   Quay lại
                 </button>
                 <button
                   type="button"
                   onClick={handleApprove}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer active:scale-95"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer active:scale-95 border-0 outline-none"
                 >
                   Đồng ý & Duyệt
                 </button>
