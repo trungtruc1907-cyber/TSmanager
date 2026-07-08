@@ -205,28 +205,91 @@
       },
       "required": ["technicianId", "technicianName", "status", "items"]
     },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "Supplier information and tracking for inventory, contacts, and liabilities.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "contactName": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "address": { "type": "string" },
+        "debt": { "type": "number", "description": "Current unpaid liability balance in VND" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "phone"]
+    },
+    "SupplierImport": {
+      "title": "Supplier Import",
+      "description": "Record of stock imported from a supplier, managing costs and debts.",
+      "type": "object",
+      "properties": {
+        "supplierId": { "type": "string" },
+        "supplierName": { "type": "string" },
+        "equipmentId": { "type": "string" },
+        "brand": { "type": "string" },
+        "model": { "type": "string" },
+        "quantity": { "type": "number" },
+        "unitPrice": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "debtAmount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdById": { "type": "string" },
+        "createdByName": { "type": "string" },
+        "note": { "type": "string" }
+      },
+      "required": ["supplierId", "equipmentId", "quantity", "unitPrice", "totalAmount"]
+    },
     "PurchaseProposal": {
       "title": "Purchase Proposal",
       "description": "Proposal for purchase of out of stock equipment.",
       "type": "object",
       "properties": {
-        "requestId": { "type": "string" },
-        "technicianId": { "type": "string" },
-        "technicianName": { "type": "string" },
-        "projectId": { "type": "string" },
-        "projectName": { "type": "string" },
+        "id": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "supplierName": { "type": "string" },
         "reason": { "type": "string" },
+        "totalCost": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "ordering", "completed", "cancelled", "approved"] },
         "items": { "type": "array" },
-        "status": { "type": "string", "enum": ["pending", "ordering", "completed", "cancelled"] },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "resolvedAt": { "type": "string", "format": "date-time" },
-        "resolvedBy": { "type": "string" },
+        "createdAt": { "type": "string" },
         "adminNote": { "type": "string" }
       },
-      "required": ["technicianId", "technicianName", "status", "items"]
+      "required": ["supplierId", "supplierName", "status", "items"]
+    },
+    "InventoryTransaction": {
+      "title": "Inventory Transaction",
+      "description": "Stock import or export transaction record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["import", "export"] },
+        "date": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "partnerId": { "type": "string" },
+        "partnerName": { "type": "string" },
+        "items": { "type": "array" },
+        "totalValue": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "debtAmount": { "type": "number" },
+        "note": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdByName": { "type": "string" }
+      },
+      "required": ["id", "type", "date", "createdAt", "partnerId", "partnerName", "items", "totalValue", "createdBy", "createdByName"]
     }
   },
   "firestore": {
+    "suppliers": {
+      "schema": "Supplier",
+      "description": "List of equipment and material suppliers."
+    },
+    "supplier_imports": {
+      "schema": "SupplierImport",
+      "description": "Warehouse imports tied to suppliers, documenting cash paid vs liabilities."
+    },
     "material_requests": {
       "schema": "MaterialRequest",
       "description": "Technician requests for equipment and panels."
@@ -270,6 +333,10 @@
     "users": {
         "schema": "AppUser",
         "description": "Application user profiles and permissions."
+    },
+    "inventory_transactions": {
+      "schema": "InventoryTransaction",
+      "description": "List of all stock import/export receipts."
     },
     "settings": {
       "schema": "SystemSettings",

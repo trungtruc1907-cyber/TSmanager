@@ -156,28 +156,73 @@ service cloud.firestore {
           && data.technicianName is string && data.technicianName.size() > 0
           && data.status in ['pending', 'approved', 'rejected', 'draft']
           && data.items is list
+          && (!('id' in data) || data.id is string)
           && (!('projectId' in data) || data.projectId is string)
           && (!('projectName' in data) || data.projectName is string)
           && (!('reason' in data) || data.reason is string)
-          && (!('createdAt' in data) || data.createdAt is timestamp || data.createdAt == null)
-          && (!('resolvedAt' in data) || data.resolvedAt is timestamp || data.resolvedAt == null)
+          && (!('createdAt' in data) || data.createdAt is string || data.createdAt is timestamp || data.createdAt == null)
+          && (!('resolvedAt' in data) || data.resolvedAt is string || data.resolvedAt is timestamp || data.resolvedAt == null)
           && (!('resolvedBy' in data) || data.resolvedBy is string || data.resolvedBy == null)
           && (!('adminNote' in data) || data.adminNote is string);
     }
 
     function isValidPurchaseProposal(data) {
-      return data.technicianId is string && data.technicianId.size() > 0
-          && data.technicianName is string && data.technicianName.size() > 0
-          && data.status in ['pending', 'ordering', 'completed', 'cancelled']
+      return data.supplierId is string && data.supplierId.size() > 0
+          && data.supplierName is string && data.supplierName.size() > 0
+          && data.status in ['pending', 'ordering', 'completed', 'cancelled', 'approved']
           && data.items is list
-          && (!('requestId' in data) || data.requestId is string)
-          && (!('projectId' in data) || data.projectId is string)
-          && (!('projectName' in data) || data.projectName is string)
+          && (!('id' in data) || data.id is string)
           && (!('reason' in data) || data.reason is string)
-          && (!('createdAt' in data) || data.createdAt is timestamp || data.createdAt == null)
-          && (!('resolvedAt' in data) || data.resolvedAt is timestamp || data.resolvedAt == null)
+          && (!('totalCost' in data) || data.totalCost is number)
+          && (!('createdAt' in data) || data.createdAt is string || data.createdAt is timestamp || data.createdAt == null)
+          && (!('resolvedAt' in data) || data.resolvedAt is string || data.resolvedAt is timestamp || data.resolvedAt == null)
           && (!('resolvedBy' in data) || data.resolvedBy is string || data.resolvedBy == null)
           && (!('adminNote' in data) || data.adminNote is string);
+    }
+
+    function isValidSupplier(data) {
+      return data.name is string && data.name.size() > 0
+          && data.phone is string && data.phone.size() > 0
+          && (!('contactName' in data) || data.contactName is string)
+          && (!('email' in data) || data.email is string)
+          && (!('address' in data) || data.address is string)
+          && (!('debt' in data) || data.debt is number)
+          && (!('id' in data) || data.id is string)
+          && (!('createdAt' in data) || data.createdAt is timestamp || data.createdAt is string || data.createdAt == null);
+    }
+
+    function isValidSupplierImport(data) {
+      return data.supplierId is string && data.supplierId.size() > 0
+          && data.equipmentId is string && data.equipmentId.size() > 0
+          && data.quantity is number && data.quantity >= 0
+          && data.unitPrice is number && data.unitPrice >= 0
+          && data.totalAmount is number && data.totalAmount >= 0
+          && (!('supplierName' in data) || data.supplierName is string)
+          && (!('brand' in data) || data.brand is string)
+          && (!('model' in data) || data.model is string)
+          && (!('paidAmount' in data) || data.paidAmount is number)
+          && (!('debtAmount' in data) || data.debtAmount is number)
+          && (!('createdById' in data) || data.createdById is string)
+          && (!('createdByName' in data) || data.createdByName is string)
+          && (!('createdAt' in data) || data.createdAt is timestamp || data.createdAt is string || data.createdAt == null)
+          && (!('note' in data) || data.note is string)
+          && (!('id' in data) || data.id is string);
+    }
+
+    function isValidInventoryTransaction(data) {
+      return data.id is string && data.id.size() > 0
+          && data.type in ['import', 'export']
+          && data.date is string && data.date.size() > 0
+          && data.partnerId is string && data.partnerId.size() > 0
+          && data.partnerName is string && data.partnerName.size() > 0
+          && data.items is list
+          && data.totalValue is number
+          && data.createdBy is string && data.createdBy.size() > 0
+          && data.createdByName is string && data.createdByName.size() > 0
+          && (!('paidAmount' in data) || data.paidAmount is number)
+          && (!('debtAmount' in data) || data.debtAmount is number)
+          && (!('note' in data) || data.note is string)
+          && (!('createdAt' in data) || data.createdAt is string || data.createdAt is timestamp || data.createdAt == null);
     }
 
     function isValidSettings(data) {
@@ -258,6 +303,18 @@ service cloud.firestore {
       allow delete: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth));
     }
 
+    match /suppliers/{supplierId} {
+      allow read: if hActive(database, request.auth);
+      allow create, update: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth)) && isValidSupplier(incoming());
+      allow delete: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth));
+    }
+
+    match /supplier_imports/{importId} {
+      allow read: if hActive(database, request.auth);
+      allow create, update: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth)) && isValidSupplierImport(incoming());
+      allow delete: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth));
+    }
+
     match /material_requests/{requestId} {
       allow read: if hActive(database, request.auth);
       allow create: if hActive(database, request.auth) && isValidMaterialRequest(incoming());
@@ -279,6 +336,12 @@ service cloud.firestore {
       allow read: if hActive(database, request.auth);
       allow create: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth)) && isValidPurchaseProposal(incoming());
       allow update: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth)) && isValidPurchaseProposal(incoming());
+      allow delete: if hActive(database, request.auth) && hAdmin(database, request.auth);
+    }
+
+    match /inventory_transactions/{txId} {
+      allow read: if hActive(database, request.auth);
+      allow create, update: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth)) && isValidInventoryTransaction(incoming());
       allow delete: if hActive(database, request.auth) && hAdmin(database, request.auth);
     }
 

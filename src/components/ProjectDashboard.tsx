@@ -53,8 +53,6 @@ export default function ProjectDashboard({ onOpenProject, onOpenTracker, showAll
   const [salesStaff, setSalesStaff] = useState<AppUser[]>([]);
   const [tasks, setTasks] = useState<ProjectTask[]>([]);
   const [crmReminders, setCrmReminders] = useState<any[]>([]);
-  const [equipment, setEquipment] = useState<any[]>([]);
-  const [materialRequests, setMaterialRequests] = useState<any[]>([]);
 
   useEffect(() => {
     if (!userId) return;
@@ -134,27 +132,6 @@ export default function ProjectDashboard({ onOpenProject, onOpenTracker, showAll
       unsubTasks();
       unsubReminders();
     };
-  }, [userId, userRole]);
-
-  useEffect(() => {
-    if (!userId) return;
-    const unsubEquip = onSnapshot(collection(db, 'equipment'), (snapshot) => {
-      setEquipment(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'equipment');
-    });
-    return () => unsubEquip();
-  }, [userId]);
-
-  useEffect(() => {
-    if (!userId || userRole !== 'accountant') return;
-    const q = query(collection(db, 'material_requests'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setMaterialRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (error) => {
-      console.error("Error loading material requests for accountant dashboard:", error);
-    });
-    return () => unsubscribe();
   }, [userId, userRole]);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -318,91 +295,6 @@ export default function ProjectDashboard({ onOpenProject, onOpenTracker, showAll
 
       {userRole === 'operator' || userRole === 'accountant' ? (
         <div className="space-y-8">
-          {/* Section 1: TÌNH HÌNH KHO THIẾT BỊ */}
-          <div className="space-y-6">
-            <div className="flex items-center gap-2 px-2 pt-2">
-              <div className="w-1 h-4 bg-blue-600 rounded-full" />
-              <h3 className="font-black text-xs uppercase tracking-widest text-slate-900 flex items-center gap-2">
-                <Layers className="h-4 w-4 text-blue-600" />
-                Tình Hình Kho Thiết Bị Solar
-              </h3>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-              <StatCard 
-                label="Danh mục sản phẩm" 
-                value={`${equipment.length} dòng thiết bị`} 
-                icon={<Sun className="h-5 w-5" />}
-                color="bg-slate-950 border-slate-800"
-                textColor="text-white"
-                iconColor="text-amber-400"
-                trend="Kho Solar"
-              >
-                <div className="mt-2 pt-2 border-t border-white/10 space-y-1">
-                  <div className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Danh mục chính:</div>
-                  <div className="text-[10px] text-slate-300 flex justify-between">
-                    <span>Tấm Pin (Panel):</span>
-                    <span className="font-bold">{equipment.filter(e => e.type === 'panel').length}</span>
-                  </div>
-                  <div className="text-[10px] text-slate-300 flex justify-between">
-                    <span>Inverter:</span>
-                    <span className="font-bold">{equipment.filter(e => e.type === 'inverter').length}</span>
-                  </div>
-                </div>
-              </StatCard>
-
-              <StatCard 
-                label="Tổng số lượng tồn kho" 
-                value={`${equipment.reduce((sum, e) => sum + (e.stock || 0), 0).toLocaleString('vi-VN')} chiếc`} 
-                icon={<CheckCircle2 className="h-5 w-5" />}
-                color="bg-white border-slate-200"
-                textColor="text-slate-900"
-                iconColor="text-emerald-600"
-                trend="Sẵn sàng cung ứng"
-              >
-                <div className="mt-2 pt-2 border-t border-slate-100/80 space-y-1">
-                  <div className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Phân bổ tồn kho:</div>
-                  <div className="text-[10px] text-slate-600 flex justify-between">
-                    <span>Pin lưu trữ (Battery):</span>
-                    <span className="font-bold">{equipment.filter(e => e.type === 'battery').reduce((sum, e) => sum + (e.stock || 0), 0)}</span>
-                  </div>
-                </div>
-              </StatCard>
-
-              <StatCard 
-                label="Thiết bị cảnh báo hết hàng" 
-                value={`${equipment.filter(e => (e.stock || 0) <= (e.minStock || 5)).length} thiết bị`} 
-                icon={<AlertTriangle className="h-5 w-5" />}
-                color="bg-white border-slate-200"
-                textColor="text-slate-900"
-                iconColor="text-rose-600"
-                trend={`Mức tối thiểu: ${equipment.filter(e => (e.stock || 0) === 0).length} hết hàng`}
-              >
-                <div className="mt-2 pt-2 border-t border-slate-100/80 space-y-1">
-                  <div className="text-[9px] uppercase font-bold text-rose-500 tracking-wider">Yêu cầu nhập gấp:</div>
-                  {equipment.filter(e => (e.stock || 0) <= (e.minStock || 5)).slice(0, 2).map(e => (
-                    <div key={e.id} className="flex justify-between text-[10px] text-rose-700 font-semibold">
-                      <span className="truncate max-w-[120px]">{e.brand} {e.model}</span>
-                      <span>{e.stock || 0} / {e.minStock || 5}</span>
-                    </div>
-                  ))}
-                </div>
-              </StatCard>
-
-              {userRole === 'accountant' && (
-                <StatCard 
-                  label="Tổng giá trị tài sản kho" 
-                  value={formatCurrency(equipment.reduce((sum, e) => sum + ((e.stock || 0) * (e.unitPrice || 0)), 0))} 
-                  icon={<Wallet className="h-5 w-5" />}
-                  color="bg-white border-slate-200"
-                  textColor="text-slate-900"
-                  iconColor="text-blue-600"
-                  trend="Giá trị nhập kho"
-                />
-              )}
-            </div>
-          </div>
-
           {/* Section 2: CÁC CÔNG TRÌNH ĐANG TRIỂN KHAI */}
           <div className="space-y-6">
             <div className="flex items-center justify-between px-2 pt-2">
@@ -499,123 +391,6 @@ export default function ProjectDashboard({ onOpenProject, onOpenTracker, showAll
               )}
             </div>
           </div>
-
-          {/* Section 3: DANH SÁCH CÁC PHIẾU YÊU CẦU VẬT TƯ (Dành riêng cho Kế Toán) */}
-          {userRole === 'accountant' && (
-            <div className="space-y-6 pt-4">
-              <div className="flex items-center gap-2 px-2">
-                <div className="w-1 h-4 bg-emerald-600 rounded-full" />
-                <h3 className="font-black text-xs uppercase tracking-widest text-slate-900 flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-emerald-600" />
-                  Danh Sách Phiếu Yêu Cầu Vật Tư ({materialRequests.length})
-                </h3>
-              </div>
-
-              <div className="space-y-4">
-                {materialRequests.length === 0 ? (
-                  <div className="py-16 text-center bg-white border border-dashed border-slate-200 rounded-[2rem] shadow-xs">
-                    <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                    <p className="text-slate-400 text-sm font-semibold italic">Không có phiếu yêu cầu vật tư nào.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {materialRequests.map((req) => {
-                      const dateStr = req.createdAt?.toDate 
-                        ? req.createdAt.toDate().toLocaleString('vi-VN') 
-                        : req.createdAt 
-                          ? new Date(req.createdAt).toLocaleString('vi-VN') 
-                          : 'Đang xử lý...';
-
-                      return (
-                        <div 
-                          key={req.id}
-                          className={cn(
-                            "bg-white rounded-[2rem] border p-6 shadow-xs transition-all flex flex-col justify-between hover:shadow-md",
-                            req.status === 'pending' ? "border-amber-200" : 
-                            req.status === 'approved' ? "border-emerald-200" : 
-                            "border-rose-200"
-                          )}
-                        >
-                          {/* Slip Header */}
-                          <div className="flex justify-between items-start gap-3 pb-3 border-b border-slate-100">
-                            <div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className={cn(
-                                  "px-2.5 py-1 text-[9px] font-black uppercase rounded-lg border",
-                                  req.status === 'pending' ? "bg-amber-50 border-amber-200 text-amber-700" :
-                                  req.status === 'approved' ? "bg-emerald-50 border-emerald-200 text-emerald-700" :
-                                  "bg-rose-50 border-rose-200 text-rose-700"
-                                )}>
-                                  {req.status === 'pending' ? '🟡 Chờ duyệt' : 
-                                   req.status === 'approved' ? '🟢 Đã duyệt' : '🔴 Từ chối'}
-                                </span>
-                                <span className="text-[10px] font-mono font-black text-slate-800 uppercase tracking-tight">
-                                  Mã: #{req.id?.substring(0, 6).toUpperCase()}
-                                </span>
-                              </div>
-                              <div className="flex flex-wrap items-center gap-1.5 mt-2 text-[11px] text-slate-400 font-bold">
-                                <span className="text-slate-700 font-extrabold">{req.technicianName}</span>
-                                <span>•</span>
-                                <span className="font-mono text-[10px]">{dateStr}</span>
-                              </div>
-                            </div>
-
-                            {req.projectName && (
-                              <span className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-xl max-w-[150px] truncate">
-                                <Briefcase className="h-3 w-3 shrink-0" /> {req.projectName}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Slip Body - Requested Items */}
-                          <div className="py-3.5 space-y-3">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Thiết bị yêu cầu cấp phát:</p>
-                            <div className="grid grid-cols-1 gap-2">
-                              {req.items?.map((item: any, idx: number) => (
-                                <div key={idx} className="bg-slate-50 p-3 rounded-2xl border border-slate-100 flex items-center justify-between">
-                                  <div className="flex items-center gap-2.5">
-                                    <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center shrink-0">
-                                      {item.type === 'panel' ? <Package className="h-4 w-4 text-amber-500" /> :
-                                       item.type === 'inverter' ? <Cpu className="h-4 w-4 text-blue-500" /> :
-                                       item.type === 'battery' ? <Battery className="h-4 w-4 text-emerald-500" /> :
-                                       <Box className="h-4 w-4 text-slate-500" />}
-                                    </div>
-                                    <div className="min-w-0">
-                                      <span className="text-[8px] font-black tracking-widest text-slate-400 uppercase block leading-none">{item.brand}</span>
-                                      <span className="text-xs font-black text-slate-800 line-clamp-1 leading-normal">{item.model}</span>
-                                    </div>
-                                  </div>
-                                  <div className="text-right shrink-0">
-                                    <span className="text-xs font-black text-slate-800">{item.quantity} cái</span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-
-                            <div className="bg-slate-50/50 p-3.5 rounded-2xl border border-dashed border-slate-200">
-                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Lý do:</p>
-                              <p className="text-xs text-slate-600 font-semibold mt-0.5 italic leading-relaxed">"{req.reason || 'Không có lý do chi tiết'}"</p>
-                            </div>
-                          </div>
-
-                          {/* Approval / Rejection notes */}
-                          {req.status !== 'pending' && (
-                            <div className={cn(
-                              "mt-1 p-3 rounded-2xl border text-[11px] leading-relaxed",
-                              req.status === 'approved' ? "bg-emerald-50/30 border-emerald-100 text-emerald-800" : "bg-rose-50/30 border-rose-100 text-rose-800"
-                            )}>
-                              <span className="font-black uppercase tracking-wider text-[9px] block text-slate-500">Ghi chú duyệt:</span>
-                              <p className="font-bold mt-0.5">{req.adminNote || 'Không có ghi chú'}</p>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       ) : (
         <>

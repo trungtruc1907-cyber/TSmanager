@@ -280,9 +280,9 @@ export default function UserManagement({ userId }: UserManagementProps) {
   };
 
   const filteredUsers = users.filter(u => {
-    const matchesSearch = u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (u.username || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+      (u.displayName || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+      (u.email || '').toLowerCase().includes((searchTerm || '').toLowerCase());
     
     if (filterStatus === 'all') return matchesSearch;
     if (filterStatus === 'hidden') return matchesSearch && u.isHidden === true;

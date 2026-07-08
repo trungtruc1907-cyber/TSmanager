@@ -18,10 +18,10 @@ import {
   LogOut,
   UserCog,
   Sliders,
-  Box,
   Bell,
   AlertTriangle,
-  User as UserIcon
+  User as UserIcon,
+  Package
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db, auth, handleFirestoreError, OperationType } from './lib/firebase';
@@ -41,7 +41,6 @@ import { UserRole } from './types';
 // Components
 import CustomerList from './components/CustomerList';
 import ProjectDashboard from './components/ProjectDashboard';
-import CatalogManager from './components/CatalogManager';
 import ProjectEditor from './components/ProjectEditor';
 import ProjectProgressTracker from './components/ProjectProgressTracker';
 import UserManagement from './components/UserManagement';
@@ -49,8 +48,10 @@ import SystemSettings from './components/SystemSettings';
 import WorkSchedulerHub from './components/WorkSchedulerHub';
 import UserProfile from './components/UserProfile';
 import { Logo } from './components/Logo';
+import WarehouseManager from './components/warehouse/WarehouseManager';
+import { WarehouseTab } from './components/warehouse/types';
 
-type View = 'dashboard' | 'customers' | 'projects' | 'catalog' | 'editor' | 'users' | 'tracker' | 'settings' | 'tasks' | 'profile';
+type View = 'dashboard' | 'customers' | 'projects' | 'editor' | 'users' | 'tracker' | 'settings' | 'tasks' | 'profile' | 'warehouse';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -67,6 +68,18 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+
+  // Warehouse horizontal navigation top menu state
+  const [warehouseActiveTabId, setWarehouseActiveTabId] = useState<string>('dashboard');
+  const [warehouseTabs, setWarehouseTabs] = useState<WarehouseTab[]>([
+    { id: 'dashboard', label: 'DASHBOARD', icon: '🏡', closable: false },
+    { id: 'kho', label: 'KHO', icon: '📦', closable: false },
+    { id: 'dexuat', label: 'ĐỀ XUẤT', icon: '📝', closable: false },
+    { id: 'muahang', label: 'MUA HÀNG', icon: '🛒', closable: false },
+    { id: 'nhapkho', label: 'NHẬP KHO', icon: '🚚', closable: false },
+    { id: 'xuatkho', label: 'XUẤT KHO', icon: '📤', closable: false },
+    { id: 'baocao', label: 'BÁO CÁO', icon: '📊', closable: false },
+  ]);
 
   const [userTasks, setUserTasks] = useState<any[]>([]);
   const [crmReminders, setCrmReminders] = useState<any[]>([]);
@@ -583,10 +596,8 @@ export default function App() {
     ] : []),
     { id: 'projects', label: 'Công trình', icon: Sun },
     { id: 'tasks', label: 'Lịch & Công việc', icon: ClipboardList },
+    { id: 'warehouse', label: 'Quản lý Kho', icon: Package },
     { id: 'profile', label: 'Cá nhân', icon: UserIcon },
-    ...(userRole === 'admin' || userRole === 'manager' || userRole === 'operator' || userRole === 'accountant' ? [
-      { id: 'catalog', label: 'Quản lý Kho', icon: Box },
-    ] : []),
     ...(userRole === 'admin' || userRole === 'manager' ? [
       { id: 'users', label: 'Quản lý Nhân sự', icon: UserCog },
       { id: 'settings', label: 'Cấu hình', icon: Sliders }
@@ -651,6 +662,47 @@ export default function App() {
             </div>
           </div>
         </div>
+
+        {/* Warehouse Horizontal Navigation Tabs (Only when activeView === 'warehouse') */}
+        {activeView === 'warehouse' && (
+          <div className="hidden lg:flex items-center gap-1.5 px-4 overflow-x-auto scrollbar-none max-w-4xl py-1.5">
+            {warehouseTabs.map((tab) => {
+              const isActive = warehouseActiveTabId === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setWarehouseActiveTabId(tab.id)}
+                  className={cn(
+                    "px-4 py-1.5 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all duration-200 cursor-pointer shrink-0 rounded-lg border",
+                    isActive 
+                      ? "border-blue-600 text-blue-600 bg-white font-extrabold shadow-sm" 
+                      : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50 font-bold"
+                  )}
+                >
+                  <span className="text-sm leading-none shrink-0">{tab.icon || '📄'}</span>
+                  <span>{tab.label}</span>
+                  {tab.closable && (
+                    <span 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const filtered = warehouseTabs.filter(t => t.id !== tab.id);
+                        setWarehouseTabs(filtered);
+                        if (warehouseActiveTabId === tab.id) {
+                          const closedIdx = warehouseTabs.findIndex(t => t.id === tab.id);
+                          const nextIdx = Math.max(0, closedIdx - 1);
+                          setWarehouseActiveTabId(filtered[nextIdx]?.id || 'dashboard');
+                        }
+                      }}
+                      className="h-3.5 w-3.5 text-slate-400 hover:text-rose-600 rounded-full hover:bg-rose-50 flex items-center justify-center transition-all shrink-0 ml-1 font-sans text-[8px]"
+                    >
+                      ✕
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <div className="flex items-center gap-3">
           {/* Real-time Reminder/Alert Notification Bell */}
@@ -864,18 +916,6 @@ export default function App() {
               )}
             </AnimatePresence>
           </div>
-
-          <div className="hidden md:flex flex-col items-end mr-2">
-            <span className="text-xs font-black text-slate-900 uppercase">{user.displayName || user.email?.split('@')[0]}</span>
-            <span className="text-[9px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-black uppercase tracking-tighter">{userRole}</span>
-          </div>
-          <button 
-            onClick={handleLogout}
-            className="p-2 lg:p-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all border border-transparent hover:border-red-100"
-            title="Đăng xuất"
-          >
-            <LogOut className="h-5 w-5" />
-          </button>
         </div>
       </header>
       
@@ -919,37 +959,28 @@ export default function App() {
             </nav>
 
             <div className="pt-4 border-t border-slate-100 shrink-0 font-sans">
-              {isOnline ? (
-                <div className="p-4 bg-emerald-50/60 rounded-2xl border border-emerald-100/60 flex flex-col gap-1">
-                  <div className="flex items-center gap-1.5 font-sans">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse animate-duration-1000" />
-                    <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest leading-none">HỆ THỐNG TRỰC TUYẾN</p>
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-10 h-10 rounded-full bg-slate-900 text-white font-black text-sm flex items-center justify-center uppercase shrink-0 shadow-sm border border-slate-800">
+                    {(user.displayName || user.email || 'U').charAt(0)}
                   </div>
-                  <p className="text-[10px] text-emerald-700 font-medium leading-tight mt-1">Dữ liệu được đồng bộ liên tục với máy chủ đám mây.</p>
-                </div>
-              ) : (
-                <div className="p-4 bg-amber-50/80 rounded-2xl border border-amber-200/80 flex flex-col gap-1.5 shadow-sm">
-                  <div className="flex items-center gap-1.5 font-sans">
-                    <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                    <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest leading-none">CHẾ ĐỘ NGOẠI TUYẾN</p>
+                  <div className="min-w-0">
+                    <p className="text-xs font-black text-slate-900 uppercase truncate">
+                      {user.displayName || user.email?.split('@')[0]}
+                    </p>
+                    <span className="inline-block text-[8px] px-2 py-0.5 bg-blue-100 text-blue-700 rounded font-black uppercase tracking-widest mt-0.5">
+                      {userRole}
+                    </span>
                   </div>
-                  <p className="text-[10px] text-amber-800 font-medium leading-tight mt-1">Đang hiển thị dữ liệu từ bộ nhớ đệm. Ứng dụng vẫn hoạt động bình thường ngoại tuyến.</p>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const { reconnectFirestore } = await import('./lib/firebase');
-                        await reconnectFirestore();
-                      } catch (err) {
-                        console.warn(err);
-                      }
-                    }}
-                    type="button"
-                    className="mt-1 w-full bg-amber-600 hover:bg-amber-700 active:scale-95 transition-all text-white font-black text-[8px] uppercase tracking-widest py-1.5 rounded-lg text-center cursor-pointer"
-                  >
-                    Kết nối lại
-                  </button>
                 </div>
-              )}
+                <button 
+                  onClick={handleLogout}
+                  className="p-2.5 bg-white text-slate-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-100 border border-slate-200/80 rounded-xl shadow-xs shrink-0 transition-all active:scale-95 cursor-pointer"
+                  title="Đăng xuất"
+                >
+                  <LogOut className="h-4.5 w-4.5" />
+                </button>
+              </div>
             </div>
         </aside>
 
@@ -965,9 +996,18 @@ export default function App() {
               className="max-w-7xl mx-auto w-full"
             >
               {activeView === 'dashboard' && <ProjectDashboard onOpenProject={handleOpenProject} onOpenTracker={handleOpenTracker} userRole={userRole} userId={user.uid} />}
+              {activeView === 'warehouse' && (
+                <WarehouseManager 
+                  userRole={userRole} 
+                  userId={user.uid} 
+                  activeTabId={warehouseActiveTabId}
+                  setActiveTabId={setWarehouseActiveTabId}
+                  tabs={warehouseTabs}
+                  setTabs={setWarehouseTabs}
+                />
+              )}
               {activeView === 'customers' && userRole !== 'operator' && userRole !== 'accountant' && <CustomerList onViewProject={handleViewCustomerProject} userId={user.uid} userRole={userRole} />}
               {activeView === 'projects' && <ProjectDashboard onOpenProject={handleOpenProject} onOpenTracker={handleOpenTracker} showAll userRole={userRole} userId={user.uid} />}
-              {activeView === 'catalog' && <CatalogManager userId={user.uid} userRole={userRole} />}
               {activeView === 'tasks' && <WorkSchedulerHub userId={user.uid} userRole={userRole} />}
               {activeView === 'users' && <UserManagement userId={user.uid} />}
               {activeView === 'settings' && <SystemSettings userId={user.uid} />}

@@ -64,6 +64,7 @@ export interface Equipment {
   minStock?: number;
   location?: string;
   unit?: string;
+  supplier?: string;
   history?: Array<{
     id: string;
     type: 'import' | 'export';
@@ -161,3 +162,33 @@ export interface SalesTask {
   dueDate: any;
   status: 'pending' | 'completed';
 }
+
+export interface Supplier {
+  id: string;
+  name: string;
+  contactName?: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  debt: number; // Current liability balance in VND
+  createdAt: any;
+}
+
+export interface SupplierImport {
+  id: string;
+  supplierId: string;
+  supplierName?: string;
+  equipmentId: string;
+  brand?: string;
+  model?: string;
+  quantity: number;
+  unitPrice: number;
+  totalAmount: number;
+  paidAmount: number;
+  debtAmount: number;
+  createdAt: any;
+  createdById?: string;
+  createdByName?: string;
+  note?: string;
+}
+
