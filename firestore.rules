@@ -11,6 +11,7 @@ service cloud.firestore {
     // We explicitly look up roles using get() or exists() on the users collection.
     function hAdmin(db, auth) {
       return auth != null && (
+        auth.uid == '4VzTxCbeMbbg2pXA4jPbwcwsX2k1' ||
         auth.token.email == 'trungtruc1907@gmail.com' ||
         auth.token.email == 'mrhieu@truongsonsolar.local' ||
         (auth.token.email is string && auth.token.email.matches('mrhieu@.*')) ||
@@ -327,7 +328,7 @@ service cloud.firestore {
     match /purchase_proposals/{proposalId} {
       allow read: if hActive(database, request.auth);
       allow create: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth)) && isValidPurchaseProposal(incoming());
-      allow update: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth)) && isValidPurchaseProposal(incoming());
+      allow update: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth)) && isValidPurchaseProposal(incoming());
       allow delete: if hActive(database, request.auth) && hAdmin(database, request.auth);
     }
 

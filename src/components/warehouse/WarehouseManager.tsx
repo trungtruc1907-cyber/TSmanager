@@ -249,6 +249,7 @@ export default function WarehouseManager({
             suppliers={suppliers}
             onOpenDocument={handleOpenDocument}
             userId={userId}
+            purchaseProposals={purchaseProposals}
           />
         );
       case 'xuatkho':
