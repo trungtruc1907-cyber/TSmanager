@@ -60,6 +60,7 @@ export default function WarehouseManager({
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [suppliers, setSuppliers] = useState<WarehouseSupplier[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [materialRequests, setMaterialRequests] = useState<MaterialRequest[]>([]);
   const [purchaseProposals, setPurchaseProposals] = useState<PurchaseProposal[]>([]);
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
@@ -138,10 +139,18 @@ export default function WarehouseManager({
         (err) => handleFirestoreError(err, OperationType.LIST, 'customers')
       );
 
+      const unsubProj = onSnapshot(collection(db, 'projects'), 
+        (snap) => {
+          setProjects(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, 'projects')
+      );
+
       return () => {
         unsubEquip();
         unsubSup();
         unsubCust();
+        unsubProj();
         unsubReq();
         unsubProp();
         unsubTx();
@@ -374,6 +383,8 @@ export default function WarehouseManager({
             equipment={equipment}
             transactions={transactions}
             suppliers={suppliers}
+            customers={customers}
+            projects={projects}
           />
         );
       default:
