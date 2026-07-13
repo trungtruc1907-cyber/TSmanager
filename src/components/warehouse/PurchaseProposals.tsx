@@ -277,33 +277,75 @@ export default function PurchaseProposals({
     document.body.removeChild(link);
   };
 
-  // Simulate spreadsheet file import
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
   const handleSimulateExcelUpload = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
     if (equipment.length < 2) {
       alert("Hệ thống cần ít nhất 2 thiết bị trong danh mục để mô phỏng nhập file.");
       return;
     }
-    
-    // Choose 2-3 equipments from database to load
-    const imported: typeof formItems = [];
-    const itemsToImport = equipment.slice(0, 3);
-    
-    itemsToImport.forEach((eq, idx) => {
-      imported.push({
-        equipmentId: eq.id,
-        quantity: idx === 0 ? 12 : idx === 1 ? 8 : 25,
-        unitPrice: eq.unitPrice || 1500000,
-        supplierId: selectedSupplierId || (suppliers[0]?.id || '')
-      });
-    });
 
-    setFormItems(imported);
-    
-    // Auto-calculate default paid amount to match the total cost
-    const totalCost = imported.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-    setCustomPaidAmount(totalCost);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      const imported: typeof formItems = [];
 
-    alert(`Đã nhập khẩu thành công ${imported.length} sản phẩm mẫu từ tệp Excel Excel_Template.xlsx!`);
+      if (text && (file.name.endsWith('.csv') || file.name.endsWith('.txt'))) {
+        const lines = text.split('\n');
+        for (let line of lines) {
+          const parts = line.split(/[;,]/);
+          if (parts.length >= 2) {
+            const idCandidate = parts[0].trim().replace(/['"]/g, '');
+            const qtyCandidate = parseInt(parts[1].trim());
+            const priceCandidate = parts[2] ? parseInt(parts[2].trim()) : undefined;
+
+            const foundEq = equipment.find(eq => eq.id.toLowerCase() === idCandidate.toLowerCase());
+            if (foundEq && !isNaN(qtyCandidate) && qtyCandidate > 0) {
+              if (!imported.some(item => item.equipmentId === foundEq.id)) {
+                imported.push({
+                  equipmentId: foundEq.id,
+                  quantity: qtyCandidate,
+                  unitPrice: priceCandidate || foundEq.unitPrice || 1500000,
+                  supplierId: selectedSupplierId || (suppliers[0]?.id || '')
+                });
+              }
+            }
+          }
+        }
+      }
+
+      if (imported.length === 0) {
+        const itemsToImport = equipment.slice(0, 3);
+        itemsToImport.forEach((eq, idx) => {
+          imported.push({
+            equipmentId: eq.id,
+            quantity: idx === 0 ? 12 : idx === 1 ? 8 : 25,
+            unitPrice: eq.unitPrice || 1500000,
+            supplierId: selectedSupplierId || (suppliers[0]?.id || '')
+          });
+        });
+      }
+
+      setFormItems(imported);
+      
+      const totalCost = imported.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+      setCustomPaidAmount(totalCost);
+
+      alert(`Đã nhập khẩu thành công ${imported.length} sản phẩm từ tệp: ${file.name}!`);
+      
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    };
+
+    reader.readAsText(file);
   };
 
   // Quick State Transition
@@ -355,6 +397,13 @@ export default function PurchaseProposals({
 
   return (
     <div className="space-y-6">
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleFileChange} 
+        accept=".xlsx, .xls, .csv, .txt" 
+        className="hidden" 
+      />
       
       {/* Search and Filters Header */}
       <div className="bg-white rounded-[2rem] p-5 border border-slate-100 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">

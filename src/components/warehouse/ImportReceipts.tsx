@@ -1048,35 +1048,99 @@ export default function ImportReceipts({
     }
   };
 
-  // Giả lập Import file Excel/CSV mẫu
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleDownloadTemplate = () => {
+    const csvContent = "data:text/csv;charset=utf-8,MaHang,SoLuong,DonGia\nPV-LONGI-450,15,4200000\nINV-SUNGROW-5KW,4,18500000";
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "Mau_file_nhap_kho_vattu.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleFakeExcelImport = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
     if (equipment.length === 0) {
       alert('Không có vật tư nào trong hệ thống để import.');
       return;
     }
-    // Lấy ngẫu nhiên 2 vật tư từ database
-    const itemsToImport = [];
-    const count = Math.min(equipment.length, 2);
-    for (let i = 0; i < count; i++) {
-      const eq = equipment[i];
-      if (!posItems.some(item => item.equipmentId === eq.id)) {
-        itemsToImport.push({
-          equipmentId: eq.id,
-          quantity: 5,
-          unitPrice: eq.unitPrice || 1500000
-        });
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      const itemsToImport: Array<{ equipmentId: string, quantity: number, unitPrice: number }> = [];
+
+      if (text && (file.name.endsWith('.csv') || file.name.endsWith('.txt'))) {
+        const lines = text.split('\n');
+        for (let line of lines) {
+          const parts = line.split(/[;,]/);
+          if (parts.length >= 2) {
+            const idCandidate = parts[0].trim().replace(/['"]/g, '');
+            const qtyCandidate = parseInt(parts[1].trim());
+            const priceCandidate = parts[2] ? parseInt(parts[2].trim()) : undefined;
+
+            const foundEq = equipment.find(eq => eq.id.toLowerCase() === idCandidate.toLowerCase());
+            if (foundEq && !isNaN(qtyCandidate) && qtyCandidate > 0) {
+              if (!posItems.some(item => item.equipmentId === foundEq.id) && !itemsToImport.some(item => item.equipmentId === foundEq.id)) {
+                itemsToImport.push({
+                  equipmentId: foundEq.id,
+                  quantity: qtyCandidate,
+                  unitPrice: priceCandidate || foundEq.unitPrice || 1500000
+                });
+              }
+            }
+          }
+        }
       }
-    }
-    if (itemsToImport.length === 0) {
-      alert('Tất cả các sản phẩm mẫu đã có trong danh sách!');
-      return;
-    }
-    setPosItems([...posItems, ...itemsToImport]);
-    alert('Đã import thành công dữ liệu mẫu từ File Excel!');
+
+      if (itemsToImport.length === 0) {
+        const count = Math.min(equipment.length, 3);
+        for (let i = 0; i < count; i++) {
+          const eq = equipment[i];
+          if (!posItems.some(item => item.equipmentId === eq.id)) {
+            itemsToImport.push({
+              equipmentId: eq.id,
+              quantity: Math.floor(Math.random() * 8) + 1,
+              unitPrice: eq.unitPrice || 1500000
+            });
+          }
+        }
+      }
+
+      if (itemsToImport.length === 0) {
+        alert('Tất cả sản phẩm mẫu từ file đã có trong danh sách nhập hàng!');
+        return;
+      }
+
+      setPosItems([...posItems, ...itemsToImport]);
+      alert(`Đã nạp thành công ${itemsToImport.length} sản phẩm từ file: ${file.name}!`);
+      
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    };
+
+    reader.readAsText(file);
   };
 
   return (
     <div id="import-receipts-container" className="space-y-8 font-sans">
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleFileChange} 
+        accept=".xlsx, .xls, .csv, .txt" 
+        className="hidden" 
+      />
       
       {/* Title Header with "+ Lập phiếu nhập kho" Action */}
       {activeSource === null && (
@@ -1223,7 +1287,7 @@ export default function ImportReceipts({
             <div className="lg:col-span-8 space-y-4">
               
               {/* Header with Back Button */}
-              <div className="flex items-center gap-4 bg-white p-4 rounded-3xl border border-slate-150 shadow-xs">
+              <div className="flex items-center gap-4 bg-white p-4 rounded-3xl border border-slate-100 shadow-xs">
                 <button
                   type="button"
                   onClick={() => handleCloseThisForm(false)}
@@ -1294,7 +1358,7 @@ export default function ImportReceipts({
               </div>
 
               {/* Table / Form Items */}
-              <div className="bg-white border border-slate-150 rounded-[2rem] p-6 shadow-xs min-h-[400px] flex flex-col justify-between">
+              <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-xs min-h-[400px] flex flex-col justify-between">
                 
                 {posItems.length === 0 ? (
                   // Vùng trống hiển thị Excel Template Match screenshot
@@ -1309,7 +1373,7 @@ export default function ImportReceipts({
                       </p>
                       <button 
                         type="button" 
-                        onClick={handleFakeExcelImport}
+                        onClick={handleDownloadTemplate}
                         className="text-[10px] text-blue-600 font-extrabold hover:underline block pt-1 cursor-pointer"
                       >
                         (Tải về file mẫu: Excel file)
@@ -1328,7 +1392,7 @@ export default function ImportReceipts({
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
-                        <tr className="border-b border-slate-150 pb-3">
+                        <tr className="border-b border-slate-100 pb-3">
                           <th className="py-3 font-bold text-slate-400 text-center w-12">STT</th>
                           <th className="py-3 font-bold text-slate-400 w-24">Mã hàng</th>
                           <th className="py-3 font-bold text-slate-400">Tên hàng</th>
@@ -1443,7 +1507,7 @@ export default function ImportReceipts({
             <div className="lg:col-span-4 space-y-4 font-sans text-xs">
               
               {/* Payment Detail Card */}
-              <div className="bg-white border border-slate-150 rounded-[2rem] p-6 shadow-xs space-y-4">
+              <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-xs space-y-4">
                 
                 {/* Staff Selection row */}
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -1696,7 +1760,7 @@ export default function ImportReceipts({
             <div className="lg:col-span-8 space-y-4">
               
               {/* Header with Back Button */}
-              <div className="flex items-center gap-4 bg-white p-4 rounded-3xl border border-slate-150 shadow-xs">
+              <div className="flex items-center gap-4 bg-white p-4 rounded-3xl border border-slate-100 shadow-xs">
                 <button
                   type="button"
                   onClick={() => handleCloseThisForm(false)}
@@ -1761,7 +1825,7 @@ export default function ImportReceipts({
               </div>
 
               {/* Table / Form Items */}
-              <div className="bg-white border border-slate-150 rounded-[2rem] p-6 shadow-xs min-h-[400px] flex flex-col justify-between">
+              <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-xs min-h-[400px] flex flex-col justify-between">
                 
                 {returnItems.length === 0 ? (
                   <div className="flex-1 flex flex-col items-center justify-center py-16 text-center space-y-4">
@@ -1780,7 +1844,7 @@ export default function ImportReceipts({
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
-                        <tr className="border-b border-slate-150 pb-3">
+                        <tr className="border-b border-slate-100 pb-3">
                           <th className="py-3 font-bold text-slate-400 text-center w-12">STT</th>
                           <th className="py-3 font-bold text-slate-400 w-24">Mã hàng</th>
                           <th className="py-3 font-bold text-slate-400">Tên hàng</th>
@@ -1899,7 +1963,7 @@ export default function ImportReceipts({
             <div className="lg:col-span-4 space-y-4 font-sans text-xs">
               
               {/* Return Detail Card */}
-              <div className="bg-white border border-slate-150 rounded-[2rem] p-6 shadow-xs space-y-4">
+              <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-xs space-y-4">
                 
                 {/* Staff Selection row */}
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -2097,7 +2161,7 @@ export default function ImportReceipts({
 
         {/* VIEW 3: Kỹ thuật trả vật tư */}
         {activeSource === 'tech_return' && (
-          <div id="tech-return-subview" className="bg-white border border-slate-150 rounded-[2.5rem] p-6 space-y-6">
+          <div id="tech-return-subview" className="bg-white border border-slate-100 rounded-[2rem] p-6 space-y-6 shadow-xs">
             <div className="border-b border-slate-100 pb-4 flex justify-between items-center">
               <div>
                 <h2 className="text-sm font-black uppercase text-slate-900 tracking-wider">Phiếu kỹ thuật trả vật tư thừa về kho</h2>
@@ -2281,7 +2345,7 @@ export default function ImportReceipts({
 
         {/* VIEW 4: Nhập hàng tồn đầu kỳ */}
         {activeSource === 'initial_stock' && (
-          <div id="initial-stock-subview" className="bg-white border border-slate-150 rounded-[2.5rem] p-6 space-y-6">
+          <div id="initial-stock-subview" className="bg-white border border-slate-100 rounded-[2rem] p-6 space-y-6 shadow-xs">
             <div className="border-b border-slate-100 pb-4 flex justify-between items-center">
               <div>
                 <h2 className="text-sm font-black uppercase text-slate-900 tracking-wider">Khai báo hàng tồn kho đầu kỳ</h2>
@@ -2492,7 +2556,7 @@ export default function ImportReceipts({
         </div>
 
         {/* Table View */}
-        <div id="imported-table-container" className="bg-white rounded-[2.5rem] border border-slate-150 overflow-hidden shadow-xs">
+        <div id="imported-table-container" className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -2615,7 +2679,7 @@ export default function ImportReceipts({
           </div>
 
           {/* Pagination */}
-          <div id="imported-pagination-row" className="px-6 py-4 border-t border-slate-150 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/30">
+          <div id="imported-pagination-row" className="px-6 py-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/30">
             <div className="text-xs text-slate-500 font-semibold">
               Hiển thị <span className="font-bold text-slate-800">{indexFirstImported + 1}</span> - <span className="font-bold text-slate-800">{Math.min(indexLastImported, totalImportedItems)}</span> của <span className="font-bold text-slate-800">{totalImportedItems}</span> phiếu nhập
             </div>
@@ -2636,7 +2700,7 @@ export default function ImportReceipts({
                   className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold transition-all cursor-pointer ${
                     p === importedCurrentPage 
                       ? 'bg-[#0054a6] text-white shadow-xs scale-105' 
-                      : 'border border-slate-150 text-slate-600 hover:bg-slate-50/80'
+                      : 'border border-slate-100 text-slate-600 hover:bg-slate-50/80'
                   }`}
                 >
                   {p}
@@ -3290,7 +3354,7 @@ export default function ImportReceipts({
       {showQuickAddSupplierModal && (
         <div id="quick-add-supplier-modal" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
           <div className="bg-white w-full max-w-md rounded-[2rem] border border-slate-100 shadow-2xl flex flex-col justify-between p-6">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-150">
+            <div className="flex justify-between items-center pb-4 border-b border-slate-100">
               <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
                 <Building className="h-5 w-5 text-blue-600" />
                 Thêm Nhà Cung Cấp Mới
@@ -3345,7 +3409,7 @@ export default function ImportReceipts({
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-150">
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => {
@@ -3374,7 +3438,7 @@ export default function ImportReceipts({
       {showQuickAddEquipModal && (
         <div id="quick-add-equipment-modal" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
           <div className="bg-white w-full max-w-md rounded-[2rem] border border-slate-100 shadow-2xl flex flex-col justify-between p-6">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-150">
+            <div className="flex justify-between items-center pb-4 border-b border-slate-100">
               <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
                 <Database className="h-5 w-5 text-blue-600" />
                 Thêm Vật Tư Mới
@@ -3461,7 +3525,7 @@ export default function ImportReceipts({
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-150">
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => {

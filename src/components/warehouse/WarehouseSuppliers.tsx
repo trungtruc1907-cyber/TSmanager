@@ -60,6 +60,14 @@ export default function WarehouseSuppliers({ suppliers, userRole }: WarehouseSup
   const [showAddEditModal, setShowAddEditModal] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<WarehouseSupplier | null>(null);
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
   // Form states
   const [formName, setFormName] = useState('');
   const [formContactName, setFormContactName] = useState('');
@@ -80,6 +88,12 @@ export default function WarehouseSuppliers({ suppliers, userRole }: WarehouseSup
       (sup.id || '').toLowerCase().includes(searchLower)
     );
   });
+
+  const totalItems = filteredSuppliers.length;
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
+  const indexFirst = (currentPage - 1) * pageSize;
+  const indexLast = indexFirst + pageSize;
+  const paginatedSuppliers = filteredSuppliers.slice(indexFirst, indexLast);
 
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
@@ -249,14 +263,14 @@ export default function WarehouseSuppliers({ suppliers, userRole }: WarehouseSup
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
-              {filteredSuppliers.length === 0 ? (
+              {paginatedSuppliers.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-slate-400 font-bold italic">
                     Không tìm thấy nhà cung cấp nào phù hợp...
                   </td>
                 </tr>
               ) : (
-                filteredSuppliers.map(sup => (
+                paginatedSuppliers.map(sup => (
                   <tr key={sup.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4 font-mono font-black text-slate-400">#{sup.id}</td>
                     <td className="px-6 py-4 font-extrabold text-slate-800">{sup.name}</td>
@@ -336,6 +350,85 @@ export default function WarehouseSuppliers({ suppliers, userRole }: WarehouseSup
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination */}
+        <div id="suppliers-pagination-row" className="px-6 py-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/30">
+          <div className="text-xs text-slate-500 font-semibold flex items-center gap-2">
+            <span>Hiển thị</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="px-1.5 py-0.5 rounded border border-slate-200 bg-white text-xs font-bold text-slate-700 outline-none focus:border-emerald-500"
+            >
+              <option value={5}>5 dòng</option>
+              <option value={10}>10 dòng</option>
+              <option value={20}>20 dòng</option>
+              <option value={50}>50 dòng</option>
+            </select>
+            <span>
+              | dòng <span className="font-bold text-slate-800">{totalItems > 0 ? indexFirst + 1 : 0}</span> - <span className="font-bold text-slate-800">{Math.min(indexLast, totalItems)}</span> của <span className="font-bold text-slate-800">{totalItems}</span> nhà cung cấp
+            </span>
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-slate-100 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent transition-all cursor-pointer"
+              >
+                Trước
+              </button>
+              
+              {Array.from({ length: totalPages }).map((_, idx) => {
+                const p = idx + 1;
+                // Smart pagination (show first, last, and current +/- 1 or 2)
+                if (
+                  totalPages > 7 &&
+                  p !== 1 &&
+                  p !== totalPages &&
+                  Math.abs(p - currentPage) > 1
+                ) {
+                  if (p === 2 && currentPage > 3) {
+                    return <span key={p} className="text-slate-400 px-1 text-xs font-bold">...</span>;
+                  }
+                  if (p === totalPages - 1 && currentPage < totalPages - 2) {
+                    return <span key={p} className="text-slate-400 px-1 text-xs font-bold">...</span>;
+                  }
+                  return null;
+                }
+
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setCurrentPage(p)}
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold transition-all cursor-pointer ${
+                      p === currentPage 
+                        ? 'bg-emerald-600 text-white shadow-xs scale-105' 
+                        : 'border border-slate-100 text-slate-600 hover:bg-slate-50/80'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+
+              <button
+                type="button"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-slate-100 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent transition-all cursor-pointer"
+              >
+                Sau
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

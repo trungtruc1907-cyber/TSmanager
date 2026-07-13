@@ -44,6 +44,14 @@ export default function WarehouseCustomers({ customers, transactions, userRole }
   // Tab filter in main dashboard (All, Construction, Commercial)
   const [mainTabFilter, setMainTabFilter] = useState<'all' | 'construction' | 'commercial'>('all');
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, activeSource, mainTabFilter]);
+
   // Modals & form states
   const [showAddEditModal, setShowAddEditModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -100,6 +108,12 @@ export default function WarehouseCustomers({ customers, transactions, userRole }
     );
   });
 
+  const totalItems = filteredCustomers.length;
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
+  const indexFirst = (currentPage - 1) * pageSize;
+  const indexLast = indexFirst + pageSize;
+  const paginatedCustomers = filteredCustomers.slice(indexFirst, indexLast);
+
   // Calculate statistics
   const stats = React.useMemo(() => {
     let totalConstruction = 0;
@@ -130,7 +144,7 @@ export default function WarehouseCustomers({ customers, transactions, userRole }
     setFormPhone('');
     setFormEmail('');
     setFormAddress('');
-    setFormCustomerType(type || activeSource || 'construction');
+    setFormCustomerType(type || 'commercial');
     setFormUsageType('residential');
     setFormPhaseType('1phase');
     setFormDebt(0);
@@ -258,10 +272,10 @@ export default function WarehouseCustomers({ customers, transactions, userRole }
 
           <div className="flex items-center gap-2.5">
             <button
-              onClick={() => openAddModal()}
+              onClick={() => openAddModal('commercial')}
               className="bg-[#0054a6] hover:bg-blue-700 text-white font-black text-[10px] uppercase tracking-wider px-4 py-2.5 rounded-xl cursor-pointer shadow-xs flex items-center gap-1.5 transition-all active:scale-95 border-0 outline-none"
             >
-              <Plus className="h-4 w-4" /> Thêm khách hàng
+              <Plus className="h-4 w-4" /> Thêm khách hàng thương mại
             </button>
           </div>
         </div>
@@ -475,16 +489,14 @@ export default function WarehouseCustomers({ customers, transactions, userRole }
               Thương mại ({stats.totalCommercial})
             </button>
           </div>
-        ) : (
+        ) : activeSource === 'commercial' ? (
           <button
-            onClick={() => openAddModal(activeSource)}
-            className={`font-black text-[10px] uppercase tracking-wider px-4 py-2.5 rounded-xl cursor-pointer shadow-xs flex items-center gap-1.5 transition-all active:scale-95 border-0 outline-none ${
-              activeSource === 'construction' ? 'bg-[#0054a6] text-white hover:bg-blue-700' : 'bg-emerald-600 text-white hover:bg-emerald-700'
-            }`}
+            onClick={() => openAddModal('commercial')}
+            className="font-black text-[10px] uppercase tracking-wider px-4 py-2.5 rounded-xl cursor-pointer shadow-xs flex items-center gap-1.5 transition-all active:scale-95 border-0 outline-none bg-emerald-600 text-white hover:bg-emerald-700"
           >
-            <Plus className="h-4 w-4" /> Thêm {activeSource === 'construction' ? 'KH thi công' : 'KH thương mại'}
+            <Plus className="h-4 w-4" /> Thêm KH thương mại
           </button>
-        )}
+        ) : null}
       </div>
 
       {/* 5. Main Datatable of customers */}
@@ -503,14 +515,14 @@ export default function WarehouseCustomers({ customers, transactions, userRole }
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
-              {filteredCustomers.length === 0 ? (
+              {paginatedCustomers.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-slate-400 font-bold italic">
                     Không tìm thấy khách hàng nào phù hợp...
                   </td>
                 </tr>
               ) : (
-                filteredCustomers.map(cust => {
+                paginatedCustomers.map(cust => {
                   const type = getCustomerType(cust);
                   const custTx = getCustomerTransactions(cust);
                   const debt = (cust as any).debt || 0;
@@ -605,6 +617,85 @@ export default function WarehouseCustomers({ customers, transactions, userRole }
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        <div id="customers-pagination-row" className="px-6 py-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/30">
+          <div className="text-xs text-slate-500 font-semibold flex items-center gap-2">
+            <span>Hiển thị</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="px-1.5 py-0.5 rounded border border-slate-200 bg-white text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+            >
+              <option value={5}>5 dòng</option>
+              <option value={10}>10 dòng</option>
+              <option value={20}>20 dòng</option>
+              <option value={50}>50 dòng</option>
+            </select>
+            <span>
+              | dòng <span className="font-bold text-slate-800">{totalItems > 0 ? indexFirst + 1 : 0}</span> - <span className="font-bold text-slate-800">{Math.min(indexLast, totalItems)}</span> của <span className="font-bold text-slate-800">{totalItems}</span> khách hàng
+            </span>
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-slate-100 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent transition-all cursor-pointer"
+              >
+                Trước
+              </button>
+              
+              {Array.from({ length: totalPages }).map((_, idx) => {
+                const p = idx + 1;
+                // Smart pagination (show first, last, and current +/- 1 or 2)
+                if (
+                  totalPages > 7 &&
+                  p !== 1 &&
+                  p !== totalPages &&
+                  Math.abs(p - currentPage) > 1
+                ) {
+                  if (p === 2 && currentPage > 3) {
+                    return <span key={p} className="text-slate-400 px-1 text-xs font-bold">...</span>;
+                  }
+                  if (p === totalPages - 1 && currentPage < totalPages - 2) {
+                    return <span key={p} className="text-slate-400 px-1 text-xs font-bold">...</span>;
+                  }
+                  return null;
+                }
+
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setCurrentPage(p)}
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold transition-all cursor-pointer ${
+                      p === currentPage 
+                        ? 'bg-[#0054a6] text-white shadow-xs scale-105' 
+                        : 'border border-slate-100 text-slate-600 hover:bg-slate-50/80'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+
+              <button
+                type="button"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-slate-100 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent transition-all cursor-pointer"
+              >
+                Sau
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 6. Add / Edit Customer Modal */}
@@ -633,46 +724,48 @@ export default function WarehouseCustomers({ customers, transactions, userRole }
             <form onSubmit={handleSaveCustomer} className="p-6 space-y-4">
               
               {/* Customer Type Switch */}
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">
-                  Loại hình khách hàng *
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <label className={`flex items-center justify-center gap-2 p-3 border-2 rounded-2xl cursor-pointer transition-all ${
-                    formCustomerType === 'construction' 
-                      ? 'border-[#0054a6] bg-blue-50/50 text-[#0054a6] font-black' 
-                      : 'border-slate-100 bg-slate-50 text-slate-500 font-bold'
-                  }`}>
-                    <input 
-                      type="radio" 
-                      name="formCustomerType" 
-                      value="construction"
-                      checked={formCustomerType === 'construction'}
-                      onChange={() => setFormCustomerType('construction')}
-                      className="hidden"
-                    />
-                    <Building2 className="h-4 w-4" />
-                    <span>Thi công dự án</span>
+              {editingCustomer && (
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">
+                    Loại hình khách hàng *
                   </label>
-                  
-                  <label className={`flex items-center justify-center gap-2 p-3 border-2 rounded-2xl cursor-pointer transition-all ${
-                    formCustomerType === 'commercial' 
-                      ? 'border-emerald-500 bg-emerald-50/50 text-emerald-600 font-black' 
-                      : 'border-slate-100 bg-slate-50 text-slate-500 font-bold'
-                  }`}>
-                    <input 
-                      type="radio" 
-                      name="formCustomerType" 
-                      value="commercial"
-                      checked={formCustomerType === 'commercial'}
-                      onChange={() => setFormCustomerType('commercial')}
-                      className="hidden"
-                    />
-                    <ShoppingCart className="h-4 w-4" />
-                    <span>Thương mại lẻ</span>
-                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className={`flex items-center justify-center gap-2 p-3 border-2 rounded-2xl cursor-pointer transition-all ${
+                      formCustomerType === 'construction' 
+                        ? 'border-[#0054a6] bg-blue-50/50 text-[#0054a6] font-black' 
+                        : 'border-slate-100 bg-slate-50 text-slate-500 font-bold'
+                    }`}>
+                      <input 
+                        type="radio" 
+                        name="formCustomerType" 
+                        value="construction"
+                        checked={formCustomerType === 'construction'}
+                        onChange={() => setFormCustomerType('construction')}
+                        className="hidden"
+                      />
+                      <Building2 className="h-4 w-4" />
+                      <span>Thi công dự án</span>
+                    </label>
+                    
+                    <label className={`flex items-center justify-center gap-2 p-3 border-2 rounded-2xl cursor-pointer transition-all ${
+                      formCustomerType === 'commercial' 
+                        ? 'border-emerald-500 bg-emerald-50/50 text-emerald-600 font-black' 
+                        : 'border-slate-100 bg-slate-50 text-slate-500 font-bold'
+                    }`}>
+                      <input 
+                        type="radio" 
+                        name="formCustomerType" 
+                        value="commercial"
+                        checked={formCustomerType === 'commercial'}
+                        onChange={() => setFormCustomerType('commercial')}
+                        className="hidden"
+                      />
+                      <ShoppingCart className="h-4 w-4" />
+                      <span>Thương mại lẻ</span>
+                    </label>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Name */}
               <div>

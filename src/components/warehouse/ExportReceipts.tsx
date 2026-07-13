@@ -124,6 +124,14 @@ export default function ExportReceipts({
   const [quickEquipUnit, setQuickEquipUnit] = useState('Cái');
   const [quickEquipPrice, setQuickEquipPrice] = useState(0);
 
+  // Thêm nhanh khách hàng (Quick Add Customer) States
+  const [showQuickAddCustomerModal, setShowQuickAddCustomerModal] = useState(false);
+  const [quickCustName, setQuickCustName] = useState('');
+  const [quickCustPhone, setQuickCustPhone] = useState('');
+  const [quickCustEmail, setQuickCustEmail] = useState('');
+  const [quickCustAddress, setQuickCustAddress] = useState('');
+  const [quickCustDebt, setQuickCustDebt] = useState(0);
+
   // Listen / Fetch initial database records
   useEffect(() => {
     const unsubUsers = onSnapshot(collection(db, 'users'), (s) => {
@@ -251,12 +259,19 @@ export default function ExportReceipts({
   const filteredProjects = useMemo(() => {
     const q = constProjectSearch.toLowerCase().trim();
     if (!q) return projects;
-    return projects.filter(p => 
-      (p.customerName || '').toLowerCase().includes(q) ||
-      (p.projectName || '').toLowerCase().includes(q) ||
-      (p.id || '').toLowerCase().includes(q)
-    );
-  }, [constProjectSearch, projects]);
+    return projects.filter(p => {
+      const customerObj = customers.find(c => c.id === p.customerId);
+      const customerPhone = customerObj ? (customerObj.phone || '') : '';
+      return (
+        (p.customerName || '').toLowerCase().includes(q) ||
+        (p.projectName || '').toLowerCase().includes(q) ||
+        (p.id || '').toLowerCase().includes(q) ||
+        (p.customerPhone || '').toLowerCase().includes(q) ||
+        (p.phone || '').toLowerCase().includes(q) ||
+        customerPhone.toLowerCase().includes(q)
+      );
+    });
+  }, [constProjectSearch, projects, customers]);
 
   // Autocomplete Customers for Commercial
   const selectedCustomerObj = useMemo(() => {
@@ -452,6 +467,47 @@ export default function ExportReceipts({
       handleCloseThisForm(true);
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'inventory_transactions');
+    }
+  };
+
+  // Quick Add Customer Save
+  const handleQuickAddCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickCustName.trim() || !quickCustPhone.trim()) {
+      alert('Vui lòng nhập đầy đủ Tên khách hàng và Số điện thoại!');
+      return;
+    }
+
+    try {
+      const custId = 'CUST' + Math.floor(1000 + Math.random() * 9000);
+      const payload: any = {
+        id: custId,
+        name: quickCustName.trim(),
+        phone: quickCustPhone.trim(),
+        email: quickCustEmail.trim() || null,
+        address: quickCustAddress.trim() || null,
+        customerType: 'commercial',
+        debt: Number(quickCustDebt) || 0,
+        createdAt: new Date().toISOString()
+      };
+
+      await setDoc(doc(db, 'customers', custId), payload);
+      
+      // Auto-select this newly created customer
+      setCommCustomerId(custId);
+      setCommCustomerSearch(payload.name);
+
+      // Reset form states
+      setQuickCustName('');
+      setQuickCustPhone('');
+      setQuickCustEmail('');
+      setQuickCustAddress('');
+      setQuickCustDebt(0);
+      setShowQuickAddCustomerModal(false);
+
+      alert(`Thêm nhanh khách hàng "${payload.name}" thành công và đã tự động chọn.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'customers');
     }
   };
 
@@ -884,7 +940,7 @@ export default function ExportReceipts({
           <div className="lg:col-span-8 space-y-4">
             
             {/* Header Block with Back button */}
-            <div className="flex items-center gap-4 bg-white p-4 rounded-3xl border border-slate-150 shadow-xs">
+            <div className="flex items-center gap-4 bg-white p-4 rounded-3xl border border-slate-100 shadow-xs">
               <button
                 type="button"
                 onClick={() => handleCloseThisForm(false)}
@@ -972,7 +1028,7 @@ export default function ExportReceipts({
             </div>
 
             {/* Cart list containing selected items for Construction Export */}
-            <div className="bg-white border border-slate-150 rounded-[2rem] p-6 shadow-xs min-h-[400px] flex flex-col justify-between">
+            <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-xs min-h-[400px] flex flex-col justify-between">
               
               {constItems.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center py-20 text-center space-y-3 font-sans">
@@ -1095,7 +1151,7 @@ export default function ExportReceipts({
 
           {/* Right Block: Project & Staff Select details (lg:col-span-4) */}
           <div className="lg:col-span-4 space-y-6">
-            <div className="bg-white border border-slate-150 rounded-[2rem] p-6 shadow-xs font-sans text-xs">
+            <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-xs font-sans text-xs">
               <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-3 mb-4">
                 Thông tin phiếu xuất thi công
               </h3>
@@ -1108,7 +1164,7 @@ export default function ExportReceipts({
                     type="text"
                     disabled
                     value={constReceiptId}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-150 font-mono font-bold text-slate-500 text-xs"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-100 font-mono font-bold text-slate-500 text-xs"
                   />
                 </div>
 
@@ -1176,23 +1232,31 @@ export default function ExportReceipts({
                       {filteredProjects.length === 0 ? (
                         <div className="px-3 py-2 text-slate-400 text-xs italic">Không tìm thấy công trình nào</div>
                       ) : (
-                        filteredProjects.map(p => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => {
-                              setConstProjectId(p.id);
-                              setConstProjectSearch(`${p.customerName} (Hòa lưới ${p.systemSizeKWp || 5}kWp)`);
-                              setIsConstProjectDropdownOpen(false);
-                            }}
-                            className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors flex flex-col gap-0.5 border-b border-slate-50 last:border-b-0 cursor-pointer ${
-                              constProjectId === p.id ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
-                            }`}
-                          >
-                            <span className="font-bold text-xs">{p.customerName || 'KH Solar'}</span>
-                            <span className="text-[10px] text-slate-500">Quy mô: Hòa lưới {p.systemSizeKWp || 5}kWp | Địa chỉ: {p.address || 'Hệ thống'}</span>
-                          </button>
-                        ))
+                        filteredProjects.map(p => {
+                          const customerObj = customers.find(c => c.id === p.customerId);
+                          const customerPhone = p.customerPhone || p.phone || (customerObj ? customerObj.phone : '');
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => {
+                                setConstProjectId(p.id);
+                                setConstProjectSearch(`${p.customerName} (Hòa lưới ${p.systemSizeKWp || 5}kWp)`);
+                                setIsConstProjectDropdownOpen(false);
+                              }}
+                              className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors flex flex-col gap-0.5 border-b border-slate-50 last:border-b-0 cursor-pointer ${
+                                constProjectId === p.id ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
+                              }`}
+                            >
+                              <span className="font-bold text-xs">{p.customerName || 'KH Solar'}</span>
+                              <span className="text-[10px] text-slate-500">
+                                Quy mô: Hòa lưới {p.systemSizeKWp || 5}kWp
+                                {customerPhone && ` | SĐT: ${customerPhone}`}
+                                {p.address && ` | Địa chỉ: ${p.address}`}
+                              </span>
+                            </button>
+                          );
+                        })
                       )}
                     </div>
                   )}
@@ -1242,7 +1306,7 @@ export default function ExportReceipts({
           <div className="lg:col-span-8 space-y-4">
             
             {/* Header Block with Back button */}
-            <div className="flex items-center gap-4 bg-white p-4 rounded-3xl border border-slate-150 shadow-xs">
+            <div className="flex items-center gap-4 bg-white p-4 rounded-3xl border border-slate-100 shadow-xs">
               <button
                 type="button"
                 onClick={() => handleCloseThisForm(false)}
@@ -1330,7 +1394,7 @@ export default function ExportReceipts({
             </div>
 
             {/* Cart list containing selected items for Commercial Export */}
-            <div className="bg-white border border-slate-150 rounded-[2rem] p-6 shadow-xs min-h-[400px] flex flex-col justify-between">
+            <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-xs min-h-[400px] flex flex-col justify-between">
               
               {commItems.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center py-20 text-center space-y-3 font-sans">
@@ -1439,7 +1503,7 @@ export default function ExportReceipts({
 
           {/* Right Block: Customer Select & Invoice fields (lg:col-span-4) */}
           <div className="lg:col-span-4 space-y-6">
-            <div className="bg-white border border-slate-150 rounded-[2rem] p-6 shadow-xs font-sans text-xs">
+            <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-xs font-sans text-xs">
               <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-3 mb-4">
                 Thông tin xuất bán thương mại
               </h3>
@@ -1452,7 +1516,7 @@ export default function ExportReceipts({
                     type="text"
                     disabled
                     value={commReceiptId}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-150 font-mono font-bold text-slate-500 text-xs"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-100 font-mono font-bold text-slate-500 text-xs"
                   />
                 </div>
 
@@ -1478,7 +1542,16 @@ export default function ExportReceipts({
 
                 {/* Searchable Autocomplete Customer Selection */}
                 <div className="space-y-1.5 relative">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Chọn khách hàng có sẵn <span className="text-slate-400 font-bold">(hoặc tự nhập tay)</span></label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Chọn khách hàng có sẵn <span className="text-slate-400 font-bold">(hoặc tự nhập tay)</span></label>
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickAddCustomerModal(true)}
+                      className="text-[10px] font-black text-[#0054a6] hover:text-blue-700 uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Plus className="h-3 w-3" /> Thêm nhanh
+                    </button>
+                  </div>
                   
                   <div className="relative flex items-center">
                     <input
@@ -1608,7 +1681,7 @@ export default function ExportReceipts({
           <div className="lg:col-span-8 space-y-4">
             
             {/* Header Block with Back button */}
-            <div className="flex items-center gap-4 bg-white p-4 rounded-3xl border border-slate-150 shadow-xs">
+            <div className="flex items-center gap-4 bg-white p-4 rounded-3xl border border-slate-100 shadow-xs">
               <button
                 type="button"
                 onClick={() => handleCloseThisForm(false)}
@@ -1696,7 +1769,7 @@ export default function ExportReceipts({
             </div>
 
             {/* Cart list containing selected items for Disposal Export */}
-            <div className="bg-white border border-slate-150 rounded-[2rem] p-6 shadow-xs min-h-[400px] flex flex-col justify-between">
+            <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-xs min-h-[400px] flex flex-col justify-between">
               
               {dispItems.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center py-20 text-center space-y-3 font-sans">
@@ -1822,7 +1895,7 @@ export default function ExportReceipts({
 
           {/* Right Block: Staff & Reason details (lg:col-span-4) */}
           <div className="lg:col-span-4 space-y-6">
-            <div className="bg-white border border-slate-150 rounded-[2rem] p-6 shadow-xs font-sans text-xs">
+            <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-xs font-sans text-xs">
               <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-3 mb-4">
                 Thông tin hội đồng xuất hủy
               </h3>
@@ -1835,7 +1908,7 @@ export default function ExportReceipts({
                     type="text"
                     disabled
                     value={dispReceiptId}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-150 font-mono font-bold text-slate-500 text-xs"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-100 font-mono font-bold text-slate-500 text-xs"
                   />
                 </div>
 
@@ -2136,7 +2209,7 @@ export default function ExportReceipts({
       {showQuickAddEquipModal && (
         <div id="quick-add-equipment-modal" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
           <div className="bg-white w-full max-w-md rounded-[2rem] border border-slate-100 shadow-2xl flex flex-col justify-between p-6">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-150 font-sans">
+            <div className="flex justify-between items-center pb-4 border-b border-slate-100 font-sans">
               <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
                 <Database className="h-5 w-5 text-blue-600" />
                 Thêm nhanh vật tư mới
@@ -2223,7 +2296,7 @@ export default function ExportReceipts({
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-150">
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => {
@@ -2243,6 +2316,120 @@ export default function ExportReceipts({
                   className="bg-[#0054a6] hover:bg-blue-700 text-white px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer active:scale-95"
                 >
                   Tạo mới
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ----------------------------------------------------------- */}
+      {/* MODAL: QUICK ADD NEW CUSTOMER */}
+      {/* ----------------------------------------------------------- */}
+      {showQuickAddCustomerModal && (
+        <div id="quick-add-customer-modal" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-md rounded-[2rem] border border-slate-100 shadow-2xl flex flex-col justify-between p-6 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-center pb-4 border-b border-slate-100 font-sans">
+              <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                <User className="h-5 w-5 text-blue-600" />
+                Thêm nhanh khách hàng mới
+              </h3>
+              <button 
+                type="button"
+                onClick={() => {
+                  setShowQuickAddCustomerModal(false);
+                  setQuickCustName('');
+                  setQuickCustPhone('');
+                  setQuickCustEmail('');
+                  setQuickCustAddress('');
+                  setQuickCustDebt(0);
+                }}
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-rose-100 hover:text-rose-600 flex items-center justify-center transition-all cursor-pointer border border-slate-200"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickAddCustomer} className="space-y-4 py-4 font-sans text-xs">
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Tên khách hàng / Đối tác <span className="text-red-500">*</span></label>
+                <input 
+                  type="text"
+                  required
+                  placeholder="VD: Nguyễn Văn A, Công ty Solar..."
+                  value={quickCustName}
+                  onChange={(e) => setQuickCustName(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Số điện thoại <span className="text-red-500">*</span></label>
+                  <input 
+                    type="text"
+                    required
+                    placeholder="VD: 0912345678"
+                    value={quickCustPhone}
+                    onChange={(e) => setQuickCustPhone(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Email (không bắt buộc)</label>
+                  <input 
+                    type="email"
+                    placeholder="VD: khachhang@gmail.com"
+                    value={quickCustEmail}
+                    onChange={(e) => setQuickCustEmail(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Địa chỉ</label>
+                <input 
+                  type="text"
+                  placeholder="VD: 123 Đường ABC, Quận 1, TP. HCM"
+                  value={quickCustAddress}
+                  onChange={(e) => setQuickCustAddress(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Dư nợ ban đầu (VND - nếu có)</label>
+                <input 
+                  type="number"
+                  min={0}
+                  placeholder="VD: 0"
+                  value={quickCustDebt || ''}
+                  onChange={(e) => setQuickCustDebt(Number(e.target.value))}
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowQuickAddCustomerModal(false);
+                    setQuickCustName('');
+                    setQuickCustPhone('');
+                    setQuickCustEmail('');
+                    setQuickCustAddress('');
+                    setQuickCustDebt(0);
+                  }}
+                  className="bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 border border-slate-200 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  className="bg-[#0054a6] hover:bg-blue-700 text-white px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer active:scale-95"
+                >
+                  Lưu khách hàng
                 </button>
               </div>
             </form>

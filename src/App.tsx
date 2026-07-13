@@ -76,6 +76,7 @@ export default function App() {
     { id: 'kho', label: 'KHO', icon: '📦', closable: false },
     { id: 'nhapkho', label: 'NHẬP HÀNG', icon: '🚚', closable: false },
     { id: 'xuatkho', label: 'XUẤT KHO', icon: '📤', closable: false },
+    { id: 'khachhang', label: 'KHÁCH HÀNG', icon: '👥', closable: false },
     { id: 'nhacungcap', label: 'NHÀ CUNG CẤP', icon: '🏢', closable: false },
     { id: 'baocao', label: 'BÁO CÁO', icon: '📊', closable: false },
   ]);
