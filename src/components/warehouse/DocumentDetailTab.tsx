@@ -16,8 +16,8 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { db } from '../../lib/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { Equipment, InventoryTransaction, MaterialRequest, PurchaseProposal } from './types';
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { Equipment, InventoryTransaction, MaterialRequest, PurchaseProposal, WarehouseSupplier } from './types';
 
 const getSafeISOString = (dateVal: any): string => {
   if (!dateVal) return '';
@@ -61,6 +61,7 @@ interface DocumentDetailTabProps {
   transactions: InventoryTransaction[];
   requests: MaterialRequest[];
   proposals: PurchaseProposal[];
+  suppliers?: WarehouseSupplier[];
   onOpenProject?: (id: string) => void;
   onClose?: () => void;
 }
@@ -72,6 +73,7 @@ export default function DocumentDetailTab({
   transactions,
   requests,
   proposals,
+  suppliers = [],
   onOpenProject,
   onClose
 }: DocumentDetailTabProps) {
@@ -95,6 +97,19 @@ export default function DocumentDetailTab({
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleUpdateProposalSupplier = async (newSupplierId: string) => {
+    try {
+      const selectedSup = suppliers.find(s => s.id === newSupplierId);
+      if (!selectedSup) return;
+      await updateDoc(doc(db, 'purchase_proposals', documentId), {
+        supplierId: newSupplierId,
+        supplierName: selectedSup.name
+      });
+    } catch (err) {
+      console.error("Error updating proposal supplier:", err);
+    }
   };
 
   // ----------------------------------------------------
@@ -121,7 +136,7 @@ export default function DocumentDetailTab({
     }
 
     return (
-      <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xs space-y-8 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0">
+      <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xs space-y-8 max-w-4xl mx-auto printable-document-card print:border-none print:shadow-none print:p-0">
         
         {/* Header Ribbon / Control actions for interactive screen */}
         <div className="flex justify-between items-center pb-6 border-b border-slate-100 print:hidden gap-4">
@@ -308,7 +323,7 @@ export default function DocumentDetailTab({
     }
 
     return (
-      <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xs space-y-8 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0">
+      <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xs space-y-8 max-w-4xl mx-auto printable-document-card print:border-none print:shadow-none print:p-0">
         
         {/* Header Ribbon / Control actions for interactive screen */}
         <div className="flex justify-between items-center pb-6 border-b border-slate-100 print:hidden gap-4">
@@ -496,7 +511,7 @@ export default function DocumentDetailTab({
     }
 
     return (
-      <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xs space-y-8 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0">
+      <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xs space-y-8 max-w-4xl mx-auto printable-document-card print:border-none print:shadow-none print:p-0">
         
         <div className="flex justify-between items-center pb-6 border-b border-slate-100 print:hidden gap-4">
           <div className="flex items-center gap-3">
@@ -624,6 +639,22 @@ export default function DocumentDetailTab({
               ))}
             </tbody>
           </table>
+
+          {/* Money totals and signature lines for Case C */}
+          <div className="grid grid-cols-3 gap-4 text-center text-xs pt-12">
+            <div className="space-y-16">
+              <p className="font-black text-slate-800 uppercase tracking-wider">Kỹ thuật lập đề xuất</p>
+              <p className="font-extrabold text-slate-400 italic">(Ký, ghi rõ họ tên)</p>
+            </div>
+            <div className="space-y-16">
+              <p className="font-black text-slate-800 uppercase tracking-wider">Phó/Trưởng phòng kỹ thuật</p>
+              <p className="font-extrabold text-slate-400 italic">(Ký, duyệt chủng loại)</p>
+            </div>
+            <div className="space-y-16">
+              <p className="font-black text-slate-800 uppercase tracking-wider">Ban Giám Đốc duyệt</p>
+              <p className="font-black text-slate-800">{docItem.status === 'approved' ? 'Đã phê duyệt (Hệ thống)' : 'Chờ phê duyệt'}</p>
+            </div>
+          </div>
         </div>
 
       </div>
@@ -654,7 +685,7 @@ export default function DocumentDetailTab({
     }
 
     return (
-      <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xs space-y-8 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0">
+      <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xs space-y-8 max-w-4xl mx-auto printable-document-card print:border-none print:shadow-none print:p-0">
         
         <div className="flex justify-between items-center pb-6 border-b border-slate-100 print:hidden gap-4">
           <div className="flex items-center gap-3">
@@ -718,9 +749,26 @@ export default function DocumentDetailTab({
           <div className="grid grid-cols-2 gap-6 text-xs text-slate-700">
             <div>
               <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Đơn vị thụ hưởng / Nhà phân phối</p>
-              <p className="font-extrabold text-slate-950 mt-1">{docItem.supplierName}</p>
-              <p className="font-semibold text-slate-500">Mã đối tác: {docItem.supplierId}</p>
-              <p className="font-medium text-slate-500 mt-1">Lý do thu mua: <span className="italic font-bold">"{docItem.reason}"</span></p>
+              {docItem.status === 'pending' && suppliers.length > 0 ? (
+                <div className="mt-2 space-y-1">
+                  <select
+                    value={docItem.supplierId}
+                    onChange={(e) => handleUpdateProposalSupplier(e.target.value)}
+                    className="w-full text-xs font-bold text-slate-800 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    {suppliers.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-400 font-semibold italic">Mã đối tác hiện tại: {docItem.supplierId}</p>
+                </div>
+              ) : (
+                <>
+                  <p className="font-extrabold text-slate-950 mt-1">{docItem.supplierName}</p>
+                  <p className="font-semibold text-slate-500">Mã đối tác: {docItem.supplierId}</p>
+                </>
+              )}
+              <p className="font-medium text-slate-500 mt-2">Lý do thu mua: <span className="italic font-bold">"{docItem.reason}"</span></p>
             </div>
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col justify-center">
               <span className="text-[9px] font-black uppercase text-slate-400 block">Tổng chi phí thu mua tạm tính</span>
@@ -756,6 +804,22 @@ export default function DocumentDetailTab({
               ))}
             </tbody>
           </table>
+
+          {/* Money totals and signature lines for Case D */}
+          <div className="grid grid-cols-3 gap-4 text-center text-xs pt-12">
+            <div className="space-y-16">
+              <p className="font-black text-slate-800 uppercase tracking-wider">Người lập đơn mua</p>
+              <p className="font-extrabold text-slate-400 italic">(Ký, ghi rõ họ tên)</p>
+            </div>
+            <div className="space-y-16">
+              <p className="font-black text-slate-800 uppercase tracking-wider">Phòng Kế toán - Cung ứng</p>
+              <p className="font-extrabold text-slate-400 italic">(Ký, ghi rõ họ tên)</p>
+            </div>
+            <div className="space-y-16">
+              <p className="font-black text-slate-800 uppercase tracking-wider">Thủ trưởng đơn vị duyệt</p>
+              <p className="font-black text-slate-800">{docItem.status === 'completed' || docItem.status === 'ordering' || docItem.status === 'approved' ? 'Đã phê duyệt (Hệ thống)' : 'Chờ phê duyệt'}</p>
+            </div>
+          </div>
         </div>
 
       </div>

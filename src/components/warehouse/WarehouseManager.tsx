@@ -30,6 +30,7 @@ import MaterialRequests from './MaterialRequests';
 import PurchaseProposals from './PurchaseProposals';
 import ImportReceipts from './ImportReceipts';
 import ExportReceipts from './ExportReceipts';
+import WarehouseSuppliers from './WarehouseSuppliers';
 import WarehouseReports from './WarehouseReports';
 import DocumentDetailTab from './DocumentDetailTab';
 
@@ -69,6 +70,7 @@ export default function WarehouseManager({
     { id: 'muahang', label: 'MUA HÀNG', icon: '🛒', closable: false },
     { id: 'nhapkho', label: 'NHẬP KHO', icon: '🚚', closable: false },
     { id: 'xuatkho', label: 'XUẤT KHO', icon: '📤', closable: false },
+    { id: 'nhacungcap', label: 'NHÀ CUNG CẤP', icon: '🏢', closable: false },
     { id: 'baocao', label: 'BÁO CÁO', icon: '📊', closable: false },
   ];
 
@@ -185,6 +187,7 @@ export default function WarehouseManager({
           transactions={transactions}
           requests={materialRequests}
           proposals={purchaseProposals}
+          suppliers={suppliers}
           onOpenProject={onOpenProject}
           onClose={() => {
             const catTabId = activeTabObj.documentType === 'pn' ? 'nhapkho' :
@@ -219,6 +222,7 @@ export default function WarehouseManager({
             equipment={equipment}
             transactions={transactions}
             userRole={userRole}
+            suppliers={suppliers}
           />
         );
       case 'dexuat':
@@ -226,6 +230,7 @@ export default function WarehouseManager({
           <MaterialRequests 
             requests={materialRequests}
             equipment={equipment}
+            suppliers={suppliers}
             userRole={userRole}
             onOpenDocument={handleOpenDocument}
             onOpenProject={onOpenProject}
@@ -259,6 +264,13 @@ export default function WarehouseManager({
             equipment={equipment}
             onOpenDocument={handleOpenDocument}
             userId={userId}
+          />
+        );
+      case 'nhacungcap':
+        return (
+          <WarehouseSuppliers 
+            suppliers={suppliers}
+            userRole={userRole}
           />
         );
       case 'baocao':

@@ -280,7 +280,7 @@ export default function ImportReceipts({
   // Combine real Firestore purchase proposals with our simulated list to keep it interactive
   const getCombinedPOs = () => {
     const formattedRealPOs = purchaseProposals
-      .filter(p => p.status === 'approved' || p.status === 'completed' || p.status === 'ordering')
+      .filter(p => p.status === 'ordering' || p.status === 'completed')
       .map(p => {
         const itemTypes = p.items.map(item => item.type || 'other');
         const totalTypes = p.items.length;
@@ -318,10 +318,13 @@ export default function ImportReceipts({
     const allSimulated = [...simulatedPOs, ...moreSimulated];
     
     // De-duplicate so that if we have real POs they take precedence over matching simulated ones
-    return [
+    const combined = [
       ...formattedRealPOs,
       ...allSimulated.filter(sim => !formattedRealPOs.some(real => real.id === sim.id))
     ];
+
+    // Sort by createdAt descending so that the newest real orders are displayed at the very top
+    return combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   };
 
   const allPOs = getCombinedPOs();
@@ -396,7 +399,7 @@ export default function ImportReceipts({
       ]);
     }
     
-    setFormPaidAmount(0);
+    setFormPaidAmount(po.paidAmount !== undefined ? po.paidAmount : 0);
     setShowAddModal(true);
   };
 
@@ -845,7 +848,7 @@ export default function ImportReceipts({
               >
                 <option value="all">Tất cả trạng thái</option>
                 <option value="delivered_full">Đã nhận đủ hàng</option>
-                <option value="delivered_partial">Nhận thiếu hàng</option>
+                <option value="delivered_partial">Chờ nhập kho (Đã đặt hàng)</option>
               </select>
               <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
             </div>
@@ -959,20 +962,20 @@ export default function ImportReceipts({
 
                         {/* Status badge */}
                         <td className="px-6 py-5">
-                          {po.status === 'delivered_full' ? (
+                          {po.originalStatus === 'completed' || completedPOIds.includes(po.id) ? (
                             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100">
                               Đã nhận đủ hàng
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-100">
-                              Nhận thiếu hàng
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100">
+                              Đã đặt hàng (Chờ nhập)
                             </span>
                           )}
                         </td>
 
                         {/* Actions */}
                         <td className="px-6 py-5 text-center">
-                          <div className="flex items-center justify-center gap-1.5 relative">
+                          <div className="flex items-center justify-center gap-2">
                             {(() => {
                               const isPOCompleted = po.originalStatus === 'completed' || completedPOIds.includes(po.id);
                               if (isPOCompleted) {
@@ -996,47 +999,24 @@ export default function ImportReceipts({
                               return (
                                 <>
                                   <button
+                                    id={`btn-view-detail-${po.id}`}
+                                    onClick={() => {
+                                      if (po.isReal) {
+                                        onOpenDocument(po.id, 'muahang', `Đơn ${po.id}`);
+                                      } else {
+                                        alert(`Chi tiết phiếu mua hàng giả lập #${po.id}`);
+                                      }
+                                    }}
+                                    className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer hover:shadow-xs"
+                                  >
+                                    Xem chi tiết
+                                  </button>
+                                  <button
                                     onClick={() => handleOpenImportModal(po)}
-                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs active:scale-95"
+                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-xs active:scale-95 font-bold"
                                   >
                                     Nhập kho
                                   </button>
-                                  
-                                  <div className="relative">
-                                    <button
-                                      onClick={() => setActiveMenuId(activeMenuId === po.id ? null : po.id)}
-                                      className="p-2 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-lg transition-all cursor-pointer"
-                                    >
-                                      <MoreVertical className="h-4 w-4" />
-                                    </button>
-                                    
-                                    {activeMenuId === po.id && (
-                                      <div className="absolute right-0 mt-1 w-44 bg-white border border-slate-100 rounded-xl shadow-lg z-50 overflow-hidden divide-y divide-slate-50 text-left">
-                                        <button
-                                          onClick={() => {
-                                            setActiveMenuId(null);
-                                            if (po.isReal) {
-                                              onOpenDocument(po.id, 'muahang', `Đơn ${po.id}`);
-                                            } else {
-                                              alert(`Chi tiết phiếu mua hàng giả lập #${po.id}`);
-                                            }
-                                          }}
-                                          className="w-full px-4 py-2.5 text-xs font-semibold hover:bg-slate-50 text-slate-700 block transition-colors cursor-pointer"
-                                        >
-                                          Xem đơn mua gốc
-                                        </button>
-                                        <button
-                                          onClick={() => {
-                                            setActiveMenuId(null);
-                                            handleOpenImportModal(po);
-                                          }}
-                                          className="w-full px-4 py-2.5 text-xs font-semibold hover:bg-slate-50 text-blue-600 block transition-colors cursor-pointer"
-                                        >
-                                          Xử lý nhập khẩn cấp
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
                                 </>
                               );
                             })()}

@@ -78,6 +78,7 @@ export default function App() {
     { id: 'muahang', label: 'MUA HÀNG', icon: '🛒', closable: false },
     { id: 'nhapkho', label: 'NHẬP KHO', icon: '🚚', closable: false },
     { id: 'xuatkho', label: 'XUẤT KHO', icon: '📤', closable: false },
+    { id: 'nhacungcap', label: 'NHÀ CUNG CẤP', icon: '🏢', closable: false },
     { id: 'baocao', label: 'BÁO CÁO', icon: '📊', closable: false },
   ]);
 
@@ -884,7 +885,7 @@ export default function App() {
 
         {/* Warehouse Horizontal Navigation Tabs (Only when activeView === 'warehouse') */}
         {activeView === 'warehouse' && (
-          <div className="w-full bg-slate-50/40 border-b border-slate-200 px-4 lg:px-8 overflow-x-auto scrollbar-none flex items-end pt-2">
+          <div className="w-full bg-slate-50/40 border-b border-slate-200 px-4 lg:px-8 overflow-x-auto scrollbar-none flex items-end pt-2 no-print">
             <div className="flex items-end gap-1.5 scroll-smooth">
               {warehouseTabs.map((tab) => {
                 const isActive = warehouseActiveTabId === tab.id;

@@ -160,10 +160,10 @@ service cloud.firestore {
     }
 
     function isValidPurchaseProposal(data) {
-      return data.supplierId is string && data.supplierId.size() > 0
-          && data.supplierName is string && data.supplierName.size() > 0
-          && data.status in ['pending', 'ordering', 'completed', 'cancelled', 'approved']
-          && data.items is list
+      return (!('supplierId' in data) || (data.supplierId is string && data.supplierId.size() > 0))
+          && (!('supplierName' in data) || (data.supplierName is string && data.supplierName.size() > 0))
+          && (!('status' in data) || data.status in ['pending', 'ordering', 'completed', 'cancelled', 'approved'])
+          && (!('items' in data) || data.items is list)
           && (!('id' in data) || data.id is string)
           && (!('reason' in data) || data.reason is string)
           && (!('totalCost' in data) || data.totalCost is number)
@@ -176,9 +176,9 @@ service cloud.firestore {
     function isValidSupplier(data) {
       return data.name is string && data.name.size() > 0
           && data.phone is string && data.phone.size() > 0
-          && (!('contactName' in data) || data.contactName is string)
-          && (!('email' in data) || data.email is string)
-          && (!('address' in data) || data.address is string)
+          && (!('contactName' in data) || data.contactName is string || data.contactName == null)
+          && (!('email' in data) || data.email is string || data.email == null)
+          && (!('address' in data) || data.address is string || data.address == null)
           && (!('debt' in data) || data.debt is number)
           && (!('id' in data) || data.id is string)
           && (!('createdAt' in data) || data.createdAt is timestamp || data.createdAt is string || data.createdAt == null);
@@ -292,31 +292,26 @@ service cloud.firestore {
 
     match /equipment/{equipmentId} {
       allow read: if true;
-      allow create, update: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth)) && isValidEquipment(incoming());
+      allow create, update: if hActive(database, request.auth) && isValidEquipment(incoming());
       allow delete: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth));
     }
 
     match /suppliers/{supplierId} {
       allow read: if hActive(database, request.auth);
-      allow create, update: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth)) && isValidSupplier(incoming());
+      allow create, update: if hActive(database, request.auth) && isValidSupplier(incoming());
       allow delete: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth));
     }
 
     match /supplier_imports/{importId} {
       allow read: if hActive(database, request.auth);
-      allow create, update: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth)) && isValidSupplierImport(incoming());
+      allow create, update: if hActive(database, request.auth) && isValidSupplierImport(incoming());
       allow delete: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth));
     }
 
     match /material_requests/{requestId} {
       allow read: if hActive(database, request.auth);
       allow create: if hActive(database, request.auth) && isValidMaterialRequest(incoming());
-      allow update: if hActive(database, request.auth) && (
-        hAdmin(database, request.auth) || 
-        hAccountant(database, request.auth) || 
-        hOperator(database, request.auth) || 
-        resource.data.status == 'draft'
-      ) && isValidMaterialRequest(incoming());
+      allow update: if hActive(database, request.auth) && isValidMaterialRequest(incoming());
       allow delete: if hActive(database, request.auth) && (
         hAdmin(database, request.auth) || 
         hAccountant(database, request.auth) || 
@@ -327,14 +322,13 @@ service cloud.firestore {
 
     match /purchase_proposals/{proposalId} {
       allow read: if hActive(database, request.auth);
-      allow create: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth)) && isValidPurchaseProposal(incoming());
-      allow update: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth)) && isValidPurchaseProposal(incoming());
+      allow create, update: if hActive(database, request.auth) && isValidPurchaseProposal(incoming());
       allow delete: if hActive(database, request.auth) && hAdmin(database, request.auth);
     }
 
     match /inventory_transactions/{txId} {
       allow read: if hActive(database, request.auth);
-      allow create, update: if hActive(database, request.auth) && (hAdmin(database, request.auth) || hAccountant(database, request.auth) || hOperator(database, request.auth)) && isValidInventoryTransaction(incoming());
+      allow create, update: if hActive(database, request.auth) && isValidInventoryTransaction(incoming());
       allow delete: if hActive(database, request.auth) && hAdmin(database, request.auth);
     }
 

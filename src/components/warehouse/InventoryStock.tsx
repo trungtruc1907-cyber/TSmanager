@@ -44,7 +44,7 @@ import {
   Pie, 
   Cell 
 } from 'recharts';
-import { Equipment, InventoryTransaction } from './types';
+import { Equipment, InventoryTransaction, WarehouseSupplier } from './types';
 
 const renderFakeQrCodeSvg = (id: string) => {
   const squares = [];
@@ -73,9 +73,10 @@ interface InventoryStockProps {
   equipment: Equipment[];
   transactions: InventoryTransaction[];
   userRole: string;
+  suppliers?: WarehouseSupplier[];
 }
 
-export default function InventoryStock({ equipment, transactions, userRole }: InventoryStockProps) {
+export default function InventoryStock({ equipment, transactions, userRole, suppliers = [] }: InventoryStockProps) {
   // Predefined high-fidelity mockup items representing the screenshot
   const mockupItems = [
     {
@@ -1367,51 +1368,7 @@ export default function InventoryStock({ equipment, transactions, userRole }: In
 
       </div>
 
-      {/* Floating Quick Action menu reveal bottom corner */}
-      <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3" id="floating-actions-block">
-        {showFabMenu && (
-          <div className="bg-white border border-slate-100 p-3 rounded-2xl shadow-2xl flex flex-col gap-2 animate-slide-up text-xs font-black uppercase tracking-wider text-slate-700">
-            <button className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 rounded-xl text-left cursor-pointer transition-all">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              Nhập kho
-            </button>
-            <button className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 rounded-xl text-left cursor-pointer transition-all">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-              Xuất kho
-            </button>
-            <button className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 rounded-xl text-left cursor-pointer transition-all">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-              Điều chuyển
-            </button>
-            <button className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 rounded-xl text-left cursor-pointer transition-all">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-              Kiểm kê
-            </button>
-            <button 
-              onClick={() => {
-                setShowPrintQrModal(true);
-                setShowFabMenu(false);
-                setSelectedQrItems(selectedItem ? [selectedItem.id] : []);
-              }}
-              className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 rounded-xl text-left cursor-pointer transition-all"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-              In mã QR
-            </button>
-            <button className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 rounded-xl text-left cursor-pointer transition-all">
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-              Tạo đề xuất mua
-            </button>
-          </div>
-        )}
-        <button 
-          onClick={() => setShowFabMenu(!showFabMenu)}
-          className="w-12 h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-blue-500/20 active:scale-95 transition-all cursor-pointer z-50 border border-blue-500"
-          title="Tác vụ nhanh"
-        >
-          <Plus className={`h-6 w-6 transition-all ${showFabMenu ? 'rotate-45' : ''}`} />
-        </button>
-      </div>
+
 
       {/* QR Barcode simulated active scanner modal */}
       {showQrScanner && (
@@ -1575,13 +1532,16 @@ export default function InventoryStock({ equipment, transactions, userRole }: In
 
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Nhà cung cấp phân phối</label>
-                <input 
-                  type="text"
-                  placeholder="Chọn nhà cung cấp chính..."
+                <select
                   value={formSupplier}
                   onChange={(e) => setFormSupplier(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs"
-                />
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs cursor-pointer"
+                >
+                  <option value="">-- Chọn nhà cung cấp --</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div>

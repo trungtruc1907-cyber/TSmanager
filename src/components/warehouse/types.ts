@@ -50,6 +50,10 @@ export interface PurchaseProposal {
   createdAt: any;
   reason: string;
   adminNote?: string;
+  paidAmount?: number;
+  debtAmount?: number;
+  orderNote?: string;
+  orderedAt?: string;
 }
 
 export interface InventoryTransaction {

@@ -61,11 +61,12 @@
   }
 
   /* Structural fixes for print - avoid hiding parents */
-  html, body, #root, #root > div {
+  html, body, #root, #root > div, main, [id="warehouse-management-module"], .flex-1, .overflow-hidden, .overflow-y-auto {
     height: auto !important;
     overflow: visible !important;
     display: block !important;
     background: white !important;
+    position: static !important;
   }
 
   .proposal-container {

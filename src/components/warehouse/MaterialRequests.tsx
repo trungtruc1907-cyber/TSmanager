@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, doc, setDoc, updateDoc, getDocs, onSnapshot, query, orderBy, getDoc, addDoc, increment, deleteDoc } from 'firebase/firestore';
-import { MaterialRequest, Equipment } from './types';
+import { MaterialRequest, Equipment, WarehouseSupplier } from './types';
 
 const getSafeISOString = (dateVal: any): string => {
   if (!dateVal) return '';
@@ -64,12 +64,13 @@ const getSafeISOString = (dateVal: any): string => {
 interface MaterialRequestsProps {
   requests: MaterialRequest[];
   equipment: Equipment[];
+  suppliers?: WarehouseSupplier[];
   userRole: string;
   onOpenDocument: (id: string, type: 'pn' | 'px' | 'dexuat' | 'muahang', label: string) => void;
   onOpenProject?: (id: string) => void;
 }
 
-export default function MaterialRequests({ requests, equipment, userRole, onOpenDocument, onOpenProject }: MaterialRequestsProps) {
+export default function MaterialRequests({ requests, equipment, suppliers = [], userRole, onOpenDocument, onOpenProject }: MaterialRequestsProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'draft'>('all');
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
@@ -80,6 +81,9 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
 
   // Database lists
   const [projects, setProjects] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<Record<string, any>>({});
+  const [projectSearch, setProjectSearch] = useState('');
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
 
   // Create Request Form State
   const [formProjectId, setFormProjectId] = useState('');
@@ -90,11 +94,73 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
   // Search equipment in creation mode
   const [eqSearch, setEqSearch] = useState('');
 
+  // Quick Add Goods Modal & Form States
+  const [showQuickAddGoodsModal, setShowQuickAddGoodsModal] = useState(false);
+  const [quickBrand, setQuickBrand] = useState('');
+  const [quickModel, setQuickModel] = useState('');
+  const [quickType, setQuickType] = useState<'panel' | 'inverter' | 'battery' | 'mounting' | 'accessory' | 'other'>('other');
+  const [quickUnit, setQuickUnit] = useState('Cái');
+  const [quickStock, setQuickStock] = useState(10);
+  const [quickUnitPrice, setQuickUnitPrice] = useState(0);
+  const [quickSupplier, setQuickSupplier] = useState('Chưa liên kết');
+
+  // Quick Add Goods Handler
+  const handleQuickAddGoods = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickBrand.trim() || !quickModel.trim()) {
+      alert('Vui lòng nhập Thương hiệu và Model.');
+      return;
+    }
+    try {
+      const newId = 'VT' + Math.floor(100 + Math.random() * 900);
+      const payload: Equipment = {
+        id: newId,
+        brand: quickBrand.trim(),
+        model: quickModel.trim(),
+        type: quickType,
+        capacity: 0,
+        unit: quickUnit.trim(),
+        stock: Number(quickStock),
+        minStock: 5,
+        unitPrice: Number(quickUnitPrice),
+        sellingPrice: Number(quickUnitPrice * 1.2),
+        location: 'Kệ A1',
+        supplier: quickSupplier,
+        details: 'Được thêm nhanh từ form đề xuất'
+      };
+
+      await setDoc(doc(db, 'equipment', newId), payload);
+      
+      // Automatically add the newly created item into the formItems of the active request
+      handleAddFormItem(newId);
+
+      // Reset Form State & Close Modal
+      setShowQuickAddGoodsModal(false);
+      setQuickBrand('');
+      setQuickModel('');
+      setQuickType('other');
+      setQuickUnit('Cái');
+      setQuickStock(10);
+      setQuickUnitPrice(0);
+      setQuickSupplier('Chưa liên kết');
+
+      alert(`Đã thêm nhanh vật tư mới "${payload.brand} ${payload.model}" thành công và tự động chọn vào danh sách đề xuất!`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'equipment');
+    }
+  };
+
   // Current formatted time for form
   const [currentTime, setCurrentTime] = useState('');
 
   // Review Form State
   const [reviewAdminNote, setReviewAdminNote] = useState('');
+
+  const getProjectDisplayName = (p: any) => {
+    if (!p) return '';
+    const custName = p.customerName || customers[p.customerId]?.name || 'Khách hàng';
+    return `Hòa Lưới ${p.systemSizeKWp || 5}kWp - ${custName}`;
+  };
 
   // Clock update effect
   useEffect(() => {
@@ -121,17 +187,24 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Load Projects
+  // Load Projects & Customers
   useEffect(() => {
-    const fetchProjects = async () => {
+    const fetchProjectsAndCustomers = async () => {
       try {
         const snap = await getDocs(collection(db, 'projects'));
         setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+        const custSnap = await getDocs(collection(db, 'customers'));
+        const custMap: Record<string, any> = {};
+        custSnap.docs.forEach(doc => {
+          custMap[doc.id] = { id: doc.id, ...doc.data() };
+        });
+        setCustomers(custMap);
       } catch (err) {
-        console.error('Error fetching projects:', err);
+        console.error('Error fetching projects or customers:', err);
       }
     };
-    fetchProjects();
+    fetchProjectsAndCustomers();
   }, []);
 
   // Filter Requests
@@ -150,7 +223,9 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
   const eqSuggestions = equipment.filter(eq => 
     (eq.id || '').toLowerCase().includes(eqSearch.toLowerCase()) ||
     (eq.brand || '').toLowerCase().includes(eqSearch.toLowerCase()) ||
-    (eq.model || '').toLowerCase().includes(eqSearch.toLowerCase())
+    (eq.model || '').toLowerCase().includes(eqSearch.toLowerCase()) ||
+    (eq.details || '').toLowerCase().includes(eqSearch.toLowerCase()) ||
+    (eq.type || '').toLowerCase().includes(eqSearch.toLowerCase())
   );
 
   // Items handling for new request
@@ -276,7 +351,7 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
 
     try {
       const selectedProj = projects.find(p => p.id === formProjectId);
-      const projName = selectedProj ? `Hòa Lưới ${selectedProj.systemSizeKWp || 5}kWp - ${selectedProj.customerName || 'KH'}` : 'Dự án Solar';
+      const projName = selectedProj ? getProjectDisplayName(selectedProj) : 'Dự án Solar';
       const reqId = editingRequestId || ('DX-' + Math.floor(1000 + Math.random() * 9000));
 
       const payload: MaterialRequest = {
@@ -319,7 +394,7 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
 
     try {
       const selectedProj = projects.find(p => p.id === formProjectId);
-      const projName = selectedProj ? `Hòa Lưới ${selectedProj.systemSizeKWp || 5}kWp - ${selectedProj.customerName || 'KH'}` : 'Dự án Solar';
+      const projName = selectedProj ? getProjectDisplayName(selectedProj) : 'Dự án Solar';
       
       const reqId = editingRequestId || ('DX-' + Math.floor(1000 + Math.random() * 9000));
       
@@ -381,6 +456,69 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
       } catch (e) {
         console.error("Error fetching suppliers:", e);
       }
+
+      // Helper to group items by supplier and create purchase proposals automatically
+      const createGroupedPurchaseProposals = async (itemsToPurchase: Array<{
+        equipmentId: string;
+        brand: string;
+        model: string;
+        type: string;
+        quantity: number;
+        unitPrice: number;
+        unit: string;
+      }>, reasonType: string) => {
+        const groups: { [supplierId: string]: { supplierName: string; items: typeof itemsToPurchase } } = {};
+        
+        for (const item of itemsToPurchase) {
+          let chosenSupplierId = 'SUP001';
+          let chosenSupplierName = 'Solar Sông Đà';
+          
+          if (suppliersList.length > 0) {
+            const eq = liveEquipData[item.equipmentId];
+            if (eq?.supplier) {
+              const foundSup = suppliersList.find(s => 
+                s.name?.toLowerCase().includes(eq.supplier!.toLowerCase()) || 
+                eq.supplier!.toLowerCase().includes(s.name?.toLowerCase())
+              );
+              if (foundSup) {
+                chosenSupplierId = foundSup.id;
+                chosenSupplierName = foundSup.name;
+              } else {
+                chosenSupplierId = suppliersList[0].id || 'SUP001';
+                chosenSupplierName = suppliersList[0].name || 'Solar Sông Đà';
+              }
+            } else {
+              chosenSupplierId = suppliersList[0].id || 'SUP001';
+              chosenSupplierName = suppliersList[0].name || 'Solar Sông Đà';
+            }
+          }
+          
+          if (!groups[chosenSupplierId]) {
+            groups[chosenSupplierId] = { supplierName: chosenSupplierName, items: [] };
+          }
+          groups[chosenSupplierId].items.push(item);
+        }
+        
+        const proposalIds: string[] = [];
+        for (const [supId, group] of Object.entries(groups)) {
+          const propId = 'MH-' + Math.floor(1000 + Math.random() * 9000);
+          const totalCost = group.items.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0);
+          
+          const purchaseProposal = {
+            id: propId,
+            supplierId: supId,
+            supplierName: group.supplierName,
+            reason: `Mua bổ sung tự động cho đề xuất cấp phát ${reviewingRequest.id} (${reasonType})`,
+            totalCost,
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+            items: group.items
+          };
+          await setDoc(doc(db, 'purchase_proposals', propId), purchaseProposal);
+          proposalIds.push(propId);
+        }
+        return proposalIds;
+      };
 
       // 3. Process items to calculate exportQty and purchaseQty
       let fullySatisfiedCount = 0;
@@ -528,58 +666,22 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
             unit: item.unit
           }));
 
+        let createdProposalIds: string[] = [];
         if (purchaseItemsList.length > 0) {
-          proposalId = 'MH-' + Math.floor(1000 + Math.random() * 9000);
-          
-          // Determine supplier based on first missing item's supplier info
-          let chosenSupplierId = 'SUP001';
-          let chosenSupplierName = 'Solar Sông Đà';
-          if (suppliersList.length > 0) {
-            const firstMissingItem = purchaseItemsList[0];
-            const eq = liveEquipData[firstMissingItem.equipmentId];
-            if (eq?.supplier) {
-              const foundSup = suppliersList.find(s => 
-                s.name?.toLowerCase().includes(eq.supplier.toLowerCase()) || 
-                eq.supplier.toLowerCase().includes(s.name?.toLowerCase())
-              );
-              if (foundSup) {
-                chosenSupplierId = foundSup.id;
-                chosenSupplierName = foundSup.name;
-              } else {
-                chosenSupplierId = suppliersList[0].id || 'SUP001';
-                chosenSupplierName = suppliersList[0].name || 'Solar Sông Đà';
-              }
-            } else {
-              chosenSupplierId = suppliersList[0].id || 'SUP001';
-              chosenSupplierName = suppliersList[0].name || 'Solar Sông Đà';
-            }
-          }
-
-          const purchaseTotalCost = purchaseItemsList.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-
-          const purchaseProposal = {
-            id: proposalId,
-            supplierId: chosenSupplierId,
-            supplierName: chosenSupplierName,
-            reason: `Mua bổ sung tự động cho đề xuất cấp phát ${reviewingRequest.id} (đáp ứng một phần)`,
-            totalCost: purchaseTotalCost,
-            status: 'pending',
-            createdAt: new Date().toISOString(),
-            items: purchaseItemsList
-          };
-          await setDoc(doc(db, 'purchase_proposals', proposalId), purchaseProposal);
+          createdProposalIds = await createGroupedPurchaseProposals(purchaseItemsList, 'đáp ứng một phần');
+          proposalId = createdProposalIds.join(', ');
         }
 
         const part1 = receiptId ? `Phiếu xuất phần đủ #${receiptId} đã được tạo và trừ tồn.` : `Không có sản phẩm nào đủ để xuất.`;
-        const part2 = proposalId ? ` Phiếu đề xuất mua bổ sung #${proposalId} cho phần thiếu đã được lưu vào mục Mua hàng.` : ``;
+        const part2 = createdProposalIds.length > 0 
+          ? ` Các phiếu đề xuất mua bổ sung #${createdProposalIds.join(', #')} cho phần thiếu đã được lưu vào mục Mua hàng.` 
+          : ``;
         messageSuffix = `${part1}${part2}`;
 
       } else {
         // --- CASE 3: KHÔNG ĐÁP ỨNG ---
         // Do NOT export. Do NOT deduct stock.
         // Create full Purchase Proposal.
-        proposalId = 'MH-' + Math.floor(1000 + Math.random() * 9000);
-        
         const purchaseItemsList = processedItems.map(item => ({
           equipmentId: item.equipmentId,
           brand: item.brand,
@@ -590,44 +692,10 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
           unit: item.unit
         }));
 
-        let chosenSupplierId = 'SUP001';
-        let chosenSupplierName = 'Solar Sông Đà';
-        if (suppliersList.length > 0) {
-          const firstItem = purchaseItemsList[0];
-          const eq = liveEquipData[firstItem.equipmentId];
-          if (eq?.supplier) {
-            const foundSup = suppliersList.find(s => 
-              s.name?.toLowerCase().includes(eq.supplier.toLowerCase()) || 
-              eq.supplier.toLowerCase().includes(s.name?.toLowerCase())
-            );
-            if (foundSup) {
-              chosenSupplierId = foundSup.id;
-              chosenSupplierName = foundSup.name;
-            } else {
-              chosenSupplierId = suppliersList[0].id || 'SUP001';
-              chosenSupplierName = suppliersList[0].name || 'Solar Sông Đà';
-            }
-          } else {
-            chosenSupplierId = suppliersList[0].id || 'SUP001';
-            chosenSupplierName = suppliersList[0].name || 'Solar Sông Đà';
-          }
-        }
+        const createdProposalIds = await createGroupedPurchaseProposals(purchaseItemsList, 'thiếu hàng toàn bộ');
+        proposalId = createdProposalIds.join(', ');
 
-        const purchaseTotalCost = purchaseItemsList.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-
-        const purchaseProposal = {
-          id: proposalId,
-          supplierId: chosenSupplierId,
-          supplierName: chosenSupplierName,
-          reason: `Mua bổ sung tự động cho đề xuất cấp phát ${reviewingRequest.id} (thiếu hàng toàn bộ)`,
-          totalCost: purchaseTotalCost,
-          status: 'pending',
-          createdAt: new Date().toISOString(),
-          items: purchaseItemsList
-        };
-        await setDoc(doc(db, 'purchase_proposals', proposalId), purchaseProposal);
-
-        messageSuffix = `Không có vật tư nào đủ tồn nên không xuất kho. Đã tự động tạo Phiếu mua hàng toàn bộ #${proposalId} cho phần thiếu.`;
+        messageSuffix = `Không có vật tư nào đủ tồn nên không xuất kho. Đã tự động tạo các Phiếu mua hàng toàn bộ #${createdProposalIds.join(', #')} cho phần thiếu.`;
       }
 
       // 5. Update Status on original Material Request
@@ -764,48 +832,213 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
                 <span>CHỌN VẬT TƯ</span>
               </button>
 
-              <div className="relative flex-1 max-w-md z-20">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                <input 
-                  id="eq-search-input"
-                  type="text"
-                  placeholder="Tìm hàng hóa theo mã hoặc tên (F3)"
-                  value={eqSearch}
-                  onChange={(e) => setEqSearch(e.target.value)}
-                  className="w-full pl-9 pr-8 py-2 text-[11px] font-bold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-700"
-                />
-                {eqSearch && (
-                  <button onClick={() => setEqSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
+              <div className="flex flex-wrap items-center gap-2 flex-1 max-w-xl justify-end z-20">
+                <div className="relative flex-1 min-w-[200px] max-w-md">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                  <input 
+                    id="eq-search-input"
+                    type="text"
+                    placeholder="Tìm hàng hóa theo mã hoặc tên (F3)"
+                    value={eqSearch}
+                    onChange={(e) => setEqSearch(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2 text-[11px] font-bold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-700"
+                  />
+                  {eqSearch && (
+                    <button onClick={() => setEqSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 bg-transparent border-0 outline-none">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
 
-                {/* Suggestions dropdown */}
-                {eqSearch && (
-                  <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg z-30 divide-y divide-slate-100">
-                    {eqSuggestions.length === 0 ? (
-                      <div className="p-3 text-xs text-slate-400 italic">Không tìm thấy vật tư nào...</div>
-                    ) : (
-                      eqSuggestions.map(eq => (
-                        <div 
-                          key={eq.id} 
-                          onClick={() => {
-                            handleAddFormItem(eq.id);
-                            setEqSearch('');
-                          }}
-                          className="p-3 hover:bg-blue-50 cursor-pointer flex items-center justify-between text-xs"
-                        >
-                          <div>
-                            <span className="font-extrabold text-slate-800">{eq.brand} {eq.model}</span>
-                            <span className="text-[10px] text-slate-400 block">Mã: {eq.id} | Tồn: {eq.stock} {eq.unit}</span>
+                  {/* Suggestions dropdown */}
+                  {eqSearch && (
+                    <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg z-30 divide-y divide-slate-100">
+                      {eqSuggestions.length === 0 ? (
+                        <div className="p-3 text-xs text-slate-400 italic">Không tìm thấy vật tư nào...</div>
+                      ) : (
+                        eqSuggestions.map(eq => (
+                          <div 
+                            key={eq.id} 
+                            onClick={() => {
+                              handleAddFormItem(eq.id);
+                              setEqSearch('');
+                            }}
+                            className="p-3 hover:bg-blue-50 cursor-pointer flex items-center justify-between text-xs"
+                          >
+                            <div>
+                              <span className="font-extrabold text-slate-800">{eq.brand} {eq.model}</span>
+                              <span className="text-[10px] text-slate-400 block">Mã: {eq.id} | Tồn: {eq.stock} {eq.unit}</span>
+                            </div>
+                            <Plus className="h-3.5 w-3.5 text-blue-500" />
                           </div>
-                          <Plus className="h-3.5 w-3.5 text-blue-500" />
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowQuickAddGoodsModal(true)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-wider px-3.5 py-2 rounded-xl cursor-pointer shadow-xs flex items-center gap-1.5 transition-all active:scale-95 h-[34px]"
+                >
+                  <Plus className="h-4 w-4" /> Thêm nhanh hàng hóa
+                </button>
               </div>
+
+              {/* HIGH-FIDELITY MODAL: Thêm nhanh hàng hóa */}
+              {showQuickAddGoodsModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
+                  <div className="bg-white rounded-[2rem] border border-slate-100 shadow-2xl w-full max-w-md flex flex-col overflow-hidden animate-scale-up">
+                    
+                    {/* Header */}
+                    <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                      <div className="flex items-center gap-2">
+                        <Package className="h-5 w-5 text-emerald-600" />
+                        <h3 className="text-xs font-black uppercase text-slate-800 tracking-wider">THÊM NHANH HÀNG HÓA MỚI</h3>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => setShowQuickAddGoodsModal(false)}
+                        className="text-slate-400 hover:text-slate-600 transition-all cursor-pointer bg-transparent border-0 outline-none"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    {/* Form body */}
+                    <form onSubmit={handleQuickAddGoods} className="p-6 space-y-4">
+                      
+                      {/* Brand & Model */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Thương hiệu *</label>
+                          <input 
+                            type="text"
+                            required
+                            placeholder="Ví dụ: Jinko, Sofar"
+                            value={quickBrand}
+                            onChange={(e) => setQuickBrand(e.target.value)}
+                            className="w-full px-3 py-2 text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 text-slate-700"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Model / Mã SP *</label>
+                          <input 
+                            type="text"
+                            required
+                            placeholder="Ví dụ: 475W, 50KTL"
+                            value={quickModel}
+                            onChange={(e) => setQuickModel(e.target.value)}
+                            className="w-full px-3 py-2 text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 text-slate-700"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Type & Unit */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Chủng loại</label>
+                          <select 
+                            value={quickType}
+                            onChange={(e) => setQuickType(e.target.value as any)}
+                            className="w-full px-3 py-2 text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 text-slate-700 appearance-none"
+                          >
+                            <option value="panel">Tấm pin Solar</option>
+                            <option value="inverter">Biến tần Inverter</option>
+                            <option value="battery">Pin Lithium</option>
+                            <option value="mounting">Khung giá đỡ</option>
+                            <option value="accessory">Phụ kiện điện</option>
+                            <option value="other">Vật tư khác</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Đơn vị tính</label>
+                          <input 
+                            type="text"
+                            placeholder="Tấm, Cái, Bộ, m..."
+                            value={quickUnit}
+                            onChange={(e) => setQuickUnit(e.target.value)}
+                            className="w-full px-3 py-2 text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 text-slate-700"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Stock & Unit Price */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Tồn kho ban đầu</label>
+                          <input 
+                            type="number"
+                            min={0}
+                            value={quickStock}
+                            onChange={(e) => setQuickStock(Number(e.target.value))}
+                            className="w-full px-3 py-2 text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 text-slate-700"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Đơn giá mua (VNĐ)</label>
+                          <input 
+                            type="number"
+                            min={0}
+                            step={1000}
+                            value={quickUnitPrice}
+                            onChange={(e) => setQuickUnitPrice(Number(e.target.value))}
+                            className="w-full px-3 py-2 text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 text-slate-700"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Supplier */}
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Nhà cung cấp</label>
+                        <select 
+                          value={quickSupplier}
+                          onChange={(e) => setQuickSupplier(e.target.value)}
+                          className="w-full px-3 py-2 text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 text-slate-700"
+                        >
+                          <option value="Chưa liên kết">-- Chưa liên kết / Tự do --</option>
+                          {suppliers.map(sup => (
+                            <option key={sup.id} value={sup.name}>{sup.name}</option>
+                          ))}
+                          {suppliers.length === 0 && (
+                            <>
+                              <option value="Solar Sông Đà">Solar Sông Đà</option>
+                              <option value="Growatt Việt Nam">Growatt Việt Nam</option>
+                              <option value="Jinko Solar APAC">Jinko Solar APAC</option>
+                              <option value="Nhôm Định Hình Việt Pháp">Nhôm Định Hình Việt Pháp</option>
+                            </>
+                          )}
+                        </select>
+                      </div>
+
+                      <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-100 flex items-start gap-2.5">
+                        <AlertTriangle className="h-4.5 w-4.5 text-amber-600 shrink-0 mt-0.5" />
+                        <p className="text-[10px] text-amber-700 leading-relaxed font-semibold">
+                          Hàng hóa được thêm sẽ lưu trực tiếp vào cơ sở dữ liệu danh mục kho và tự động thêm vào phiếu đề xuất đang tạo với số lượng mặc định là 1.
+                        </p>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => setShowQuickAddGoodsModal(false)}
+                          className="px-4 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-xl transition-all cursor-pointer bg-transparent border-0 outline-none"
+                        >
+                          Hủy bỏ
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-5 py-2 text-[10px] font-black uppercase tracking-wider text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer border-0"
+                        >
+                          Lưu & Thêm nhanh
+                        </button>
+                      </div>
+
+                    </form>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Selected Items Table */}
@@ -910,7 +1143,7 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
               </div>
 
               {/* TÌM TÊN CÔNG TRÌNH */}
-              <div>
+              <div className="relative">
                 <div className="flex justify-between items-center mb-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Tìm Tên Công Trình</label>
                   <button 
@@ -922,19 +1155,97 @@ export default function MaterialRequests({ requests, equipment, userRole, onOpen
                     <Plus className="h-3.5 w-3.5" />
                   </button>
                 </div>
-                <select
-                  required
-                  value={formProjectId}
-                  onChange={(e) => setFormProjectId(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs text-slate-700"
-                >
-                  <option value="">-- Chọn công trình cần liên kết --</option>
-                  {projects.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.customerName || 'Khách hàng'} (Hòa lưới {p.systemSizeKWp || 5}kWp)
-                    </option>
-                  ))}
-                </select>
+                
+                {/* Selected display button */}
+                <div className="relative">
+                  <button
+                    id="btn-project-dropdown"
+                    type="button"
+                    onClick={() => setShowProjectDropdown(!showProjectDropdown)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs text-slate-700 flex justify-between items-center text-left transition-all"
+                  >
+                    <span className="truncate">
+                      {formProjectId 
+                        ? getProjectDisplayName(projects.find(p => p.id === formProjectId)) 
+                        : '-- Chọn công trình cần liên kết --'}
+                    </span>
+                    <ChevronDown className="h-4 w-4 text-slate-400 shrink-0 ml-2" />
+                  </button>
+
+                  {showProjectDropdown && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-40" 
+                        onClick={() => {
+                          setShowProjectDropdown(false);
+                          setProjectSearch('');
+                        }} 
+                      />
+                      <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-55 p-2 flex flex-col gap-2 max-h-64 overflow-hidden">
+                        {/* Search Input inside Dropdown */}
+                        <div className="relative z-50">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                          <input
+                            id="input-project-search"
+                            type="text"
+                            placeholder="Nhập tên công trình để tìm nhanh..."
+                            value={projectSearch}
+                            onChange={(e) => setProjectSearch(e.target.value)}
+                            className="w-full pl-9 pr-4 py-1.5 text-xs font-semibold rounded-lg bg-slate-50 border border-slate-100 focus:outline-none focus:bg-white focus:border-blue-500 text-slate-700"
+                            autoFocus
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+
+                        {/* Project Options List */}
+                        <div className="overflow-y-auto flex-1 divide-y divide-slate-50 max-h-48 relative z-50">
+                          {(() => {
+                            const query = projectSearch.toLowerCase().trim();
+                            const filtered = projects.filter(p => {
+                              const displayName = getProjectDisplayName(p).toLowerCase();
+                              const idMatch = p.id.toLowerCase().includes(query);
+                              return displayName.includes(query) || idMatch;
+                            });
+
+                            if (filtered.length === 0) {
+                              return (
+                                <div className="py-4 text-center text-xs text-slate-400 font-semibold">
+                                  Không tìm thấy công trình nào
+                                </div>
+                              );
+                            }
+
+                            return filtered.map(p => {
+                              const isSelected = p.id === formProjectId;
+                              return (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setFormProjectId(p.id);
+                                    setShowProjectDropdown(false);
+                                    setProjectSearch('');
+                                  }}
+                                  className={`w-full px-3 py-2 text-left text-xs font-bold rounded-lg transition-colors flex items-center justify-between cursor-pointer ${
+                                    isSelected 
+                                      ? 'bg-blue-50 text-blue-600' 
+                                      : 'hover:bg-slate-50 text-slate-700'
+                                  }`}
+                                >
+                                  <div className="truncate flex-1 pr-2">
+                                    <div className="truncate">{getProjectDisplayName(p)}</div>
+                                    <div className="text-[10px] text-slate-400 font-semibold uppercase">Mã: {p.id}</div>
+                                  </div>
+                                  {isSelected && <span className="text-blue-600 text-xs font-black">✓</span>}
+                                </button>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
 
               {/* MÃ PHIẾU */}
