@@ -115,8 +115,6 @@ export default function WarehouseDashboard({
     const totalStockVal = equipment.reduce((sum, eq) => sum + (eq.stock || 0) * (eq.unitPrice || 0), 0);
     const totalItemsQty = equipment.reduce((sum, eq) => sum + (eq.stock || 0), 0);
     
-    const pendingReqs = requests.filter(r => r.status === 'pending').length;
-    const deliveryProposals = proposals.filter(p => p.status === 'ordering' || p.status === 'approved').length;
     const importsToday = transactions.filter(t => t.type === 'import' && isToday(t.createdAt)).length;
     const exportsToday = transactions.filter(t => t.type === 'export' && isToday(t.createdAt)).length;
 
@@ -142,27 +140,7 @@ export default function WarehouseDashboard({
         icon: Layers3,
       },
       {
-        title: 'Đề xuất chờ xử lý',
-        value: pendingReqs.toString(),
-        unit: 'Phiếu',
-        trend: pendingReqs > 0 ? `Cần duyệt gấp` : 'Đã duyệt hết',
-        trendType: pendingReqs > 0 ? 'down' : 'up',
-        bgColor: 'bg-amber-50',
-        iconColor: 'text-amber-600',
-        icon: FileText,
-      },
-      {
-        title: 'Đơn mua đang giao',
-        value: deliveryProposals.toString(),
-        unit: 'Đơn hàng',
-        trend: 'Đang vận chuyển',
-        trendType: 'up',
-        bgColor: 'bg-purple-50',
-        iconColor: 'text-purple-600',
-        icon: ShoppingCart,
-      },
-      {
-        title: 'Nhập kho hôm nay',
+        title: 'Nhập hàng hôm nay',
         value: importsToday.toString(),
         unit: 'Phiếu nhập',
         trend: 'Hôm nay',
@@ -182,7 +160,7 @@ export default function WarehouseDashboard({
         icon: ArrowUpRight,
       }
     ];
-  }, [equipment, requests, proposals, transactions]);
+  }, [equipment, transactions]);
 
   // Compute live lineChartData for past 7 days
   const lineChartData = React.useMemo(() => {
@@ -358,7 +336,7 @@ export default function WarehouseDashboard({
       const time = getSafeTime(tx.createdAt);
       rawActivities.push({
         name: tx.createdByName || 'Thủ kho Solar',
-        action: tx.type === 'import' ? 'Nhập kho' : 'Xuất kho',
+        action: tx.type === 'import' ? 'Nhập hàng' : 'Xuất kho',
         ref: tx.id,
         timestamp: time,
         color: tx.type === 'import' ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'
@@ -398,20 +376,14 @@ export default function WarehouseDashboard({
 
   // Compute live todo list
   const todoList = React.useMemo(() => {
-    const pendingRequestsCount = requests.filter(r => r.status === 'pending').length;
-    const pendingProposalsCount = proposals.filter(p => p.status === 'pending').length;
-    const orderingProposalsCount = proposals.filter(p => p.status === 'ordering').length;
     const lowStockCount = equipment.filter(eq => (eq.stock || 0) <= (eq.minStock || 5)).length;
     const overDebtCount = suppliers.filter(s => s.debt > 50000000).length;
 
     return [
-      { label: `${pendingRequestsCount} đề xuất vật tư chờ duyệt`, count: pendingRequestsCount, type: 'dexuat', color: 'bg-amber-50 text-amber-600 border-amber-100' },
-      { label: `${pendingProposalsCount} đơn mua chờ xác nhận`, count: pendingProposalsCount, type: 'muahang', color: 'bg-orange-50 text-orange-600 border-orange-100' },
-      { label: `${orderingProposalsCount} đơn mua đang giao`, count: orderingProposalsCount, type: 'muahang', color: 'bg-blue-50 text-blue-600 border-blue-100' },
       { label: `${lowStockCount} vật tư sắp hết / hết hàng`, count: lowStockCount, type: 'kho', color: 'bg-yellow-50 text-yellow-600 border-yellow-100' },
       { label: `${overDebtCount} NCC có công nợ lớn (>50M)`, count: overDebtCount, type: 'baocao', color: 'bg-rose-50 text-rose-600 border-rose-100' },
     ].filter(t => t.count > 0);
-  }, [requests, proposals, equipment, suppliers]);
+  }, [equipment, suppliers]);
 
   const totalTodoCount = React.useMemo(() => {
     return todoList.reduce((sum, t) => sum + t.count, 0);
@@ -454,7 +426,7 @@ export default function WarehouseDashboard({
         <div className="xl:col-span-3 space-y-6">
           
           {/* Row 1: KPI Stats Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {kpiData.map((kpi, idx) => {
               const IconComp = kpi.icon;
               return (
@@ -519,7 +491,7 @@ export default function WarehouseDashboard({
               <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-wider mb-2 text-slate-500">
                 <div className="flex items-center gap-1.5">
                   <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                  <span>Nhập kho</span>
+                  <span>Nhập hàng</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
@@ -739,7 +711,7 @@ export default function WarehouseDashboard({
 
               <div className="mt-4 pt-3 border-t border-slate-50">
                 <button 
-                  onClick={() => onNavigateTab('muahang')}
+                  onClick={() => onNavigateTab('nhacungcap')}
                   className="w-full text-center text-[10px] font-black uppercase text-blue-600 tracking-wider hover:underline hover:text-blue-700 cursor-pointer"
                 >
                   Xem tất cả
@@ -931,34 +903,8 @@ export default function WarehouseDashboard({
 
             {/* Grid of action buttons */}
             <div className="grid grid-cols-2 gap-3">
-              
-              {/* Card 1: Tạo đề xuất */}
-              <div 
-                onClick={() => onNavigateTab('dexuat')}
-                className="flex flex-col items-center justify-center p-4 bg-indigo-50/50 hover:bg-indigo-50 border border-indigo-100/40 rounded-2xl text-center cursor-pointer transition-all active:scale-95 group"
-              >
-                <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 mb-2 group-hover:scale-105 transition-transform">
-                  <FileText className="h-4.5 w-4.5" />
-                </div>
-                <span className="text-[10px] font-black text-indigo-950 uppercase tracking-wider">
-                  Tạo đề xuất
-                </span>
-              </div>
 
-              {/* Card 2: Tạo đơn mua */}
-              <div 
-                onClick={() => onNavigateTab('muahang')}
-                className="flex flex-col items-center justify-center p-4 bg-purple-50/50 hover:bg-purple-50 border border-purple-100/40 rounded-2xl text-center cursor-pointer transition-all active:scale-95 group"
-              >
-                <div className="w-9 h-9 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 mb-2 group-hover:scale-105 transition-transform">
-                  <ShoppingCart className="h-4.5 w-4.5" />
-                </div>
-                <span className="text-[10px] font-black text-purple-950 uppercase tracking-wider">
-                  Tạo đơn mua
-                </span>
-              </div>
-
-              {/* Card 3: Nhập kho */}
+              {/* Card 3: Nhập hàng */}
               <div 
                 onClick={() => onNavigateTab('nhapkho')}
                 className="flex flex-col items-center justify-center p-4 bg-emerald-50/50 hover:bg-emerald-50 border border-emerald-100/40 rounded-2xl text-center cursor-pointer transition-all active:scale-95 group"
@@ -967,7 +913,7 @@ export default function WarehouseDashboard({
                   <Truck className="h-4.5 w-4.5" />
                 </div>
                 <span className="text-[10px] font-black text-emerald-950 uppercase tracking-wider">
-                  Nhập kho
+                  Nhập hàng
                 </span>
               </div>
 

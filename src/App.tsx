@@ -74,13 +74,29 @@ export default function App() {
   const [warehouseTabs, setWarehouseTabs] = useState<WarehouseTab[]>([
     { id: 'dashboard', label: 'DASHBOARD', icon: '🏡', closable: false },
     { id: 'kho', label: 'KHO', icon: '📦', closable: false },
-    { id: 'dexuat', label: 'ĐỀ XUẤT', icon: '📝', closable: false },
-    { id: 'muahang', label: 'MUA HÀNG', icon: '🛒', closable: false },
-    { id: 'nhapkho', label: 'NHẬP KHO', icon: '🚚', closable: false },
+    { id: 'nhapkho', label: 'NHẬP HÀNG', icon: '🚚', closable: false },
     { id: 'xuatkho', label: 'XUẤT KHO', icon: '📤', closable: false },
     { id: 'nhacungcap', label: 'NHÀ CUNG CẤP', icon: '🏢', closable: false },
     { id: 'baocao', label: 'BÁO CÁO', icon: '📊', closable: false },
   ]);
+  const [tabConfirmClose, setTabConfirmClose] = useState<WarehouseTab | null>(null);
+
+  const handleCloseWarehouseTab = (tabId: string, skipConfirm = false) => {
+    const tabObj = warehouseTabs.find(t => t.id === tabId);
+    if (!tabObj) return;
+
+    if (!skipConfirm && tabId.startsWith('form_')) {
+      setTabConfirmClose(tabObj);
+    } else {
+      const filtered = warehouseTabs.filter(t => t.id !== tabId);
+      setWarehouseTabs(filtered);
+      if (warehouseActiveTabId === tabId) {
+        const closedIdx = warehouseTabs.findIndex(t => t.id === tabId);
+        const nextIdx = Math.max(0, closedIdx - 1);
+        setWarehouseActiveTabId(filtered[nextIdx]?.id || 'dashboard');
+      }
+    }
+  };
 
   const [userTasks, setUserTasks] = useState<any[]>([]);
   const [crmReminders, setCrmReminders] = useState<any[]>([]);
@@ -906,13 +922,7 @@ export default function App() {
                       <span 
                         onClick={(e) => {
                           e.stopPropagation();
-                          const filtered = warehouseTabs.filter(t => t.id !== tab.id);
-                          setWarehouseTabs(filtered);
-                          if (warehouseActiveTabId === tab.id) {
-                            const closedIdx = warehouseTabs.findIndex(t => t.id === tab.id);
-                            const nextIdx = Math.max(0, closedIdx - 1);
-                            setWarehouseActiveTabId(filtered[nextIdx]?.id || 'dashboard');
-                          }
+                          handleCloseWarehouseTab(tab.id, false);
                         }}
                         className="h-3.5 w-3.5 text-slate-400 hover:text-rose-600 hover:bg-rose-100/50 rounded-full flex items-center justify-center transition-all shrink-0 ml-1 font-sans text-[8px]"
                       >
@@ -1013,6 +1023,7 @@ export default function App() {
                   tabs={warehouseTabs}
                   setTabs={setWarehouseTabs}
                   onOpenProject={handleOpenProject}
+                  onCloseFormTab={handleCloseWarehouseTab}
                 />
               )}
               {activeView === 'customers' && userRole !== 'operator' && userRole !== 'accountant' && <CustomerList onViewProject={handleViewCustomerProject} userId={user.uid} userRole={userRole} />}
@@ -1217,6 +1228,62 @@ export default function App() {
           ))}
         </AnimatePresence>
       </div>
+
+      {/* Custom Confirmation Modal for Closing Tabs */}
+      <AnimatePresence>
+        {tabConfirmClose && (
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[200] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-[2rem] shadow-2xl max-w-md w-full border border-slate-100 p-6 space-y-6"
+            >
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                  <X className="h-6 w-6" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-black text-slate-900 tracking-tight uppercase">Xác nhận đóng tab</h3>
+                  <p className="text-slate-500 text-xs font-semibold leading-relaxed">
+                    Bạn đang đóng tab <span className="font-extrabold text-slate-800">{tabConfirmClose.label}</span>. 
+                    Mọi thông tin đang nhập trong biểu mẫu này sẽ bị mất và không thể phục hồi.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setTabConfirmClose(null)}
+                  className="px-4 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-700 font-bold text-xs transition-all active:scale-95 cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (tabConfirmClose) {
+                      const tabId = tabConfirmClose.id;
+                      const filtered = warehouseTabs.filter(t => t.id !== tabId);
+                      setWarehouseTabs(filtered);
+                      if (warehouseActiveTabId === tabId) {
+                        const closedIdx = warehouseTabs.findIndex(t => t.id === tabId);
+                        const nextIdx = Math.max(0, closedIdx - 1);
+                        setWarehouseActiveTabId(filtered[nextIdx]?.id || 'dashboard');
+                      }
+                    }
+                    setTabConfirmClose(null);
+                  }}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs transition-all active:scale-95 cursor-pointer shadow-lg shadow-rose-600/10"
+                >
+                  Xác nhận đóng
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

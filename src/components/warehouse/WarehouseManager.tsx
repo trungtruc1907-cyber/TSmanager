@@ -22,14 +22,14 @@ import {
   PurchaseProposal, 
   InventoryTransaction 
 } from './types';
+import { Customer } from '../../types';
 
 // Sub-views
 import WarehouseDashboard from './WarehouseDashboard';
 import InventoryStock from './InventoryStock';
-import MaterialRequests from './MaterialRequests';
-import PurchaseProposals from './PurchaseProposals';
 import ImportReceipts from './ImportReceipts';
 import ExportReceipts from './ExportReceipts';
+import WarehouseCustomers from './WarehouseCustomers';
 import WarehouseSuppliers from './WarehouseSuppliers';
 import WarehouseReports from './WarehouseReports';
 import DocumentDetailTab from './DocumentDetailTab';
@@ -42,6 +42,7 @@ interface WarehouseManagerProps {
   tabs?: WarehouseTab[];
   setTabs?: React.Dispatch<React.SetStateAction<WarehouseTab[]>>;
   onOpenProject?: (id: string) => void;
+  onCloseFormTab?: (tabId: string, skipConfirm?: boolean) => void;
 }
 
 export default function WarehouseManager({ 
@@ -51,12 +52,14 @@ export default function WarehouseManager({
   setActiveTabId: externalSetActiveTabId,
   tabs: externalTabs,
   setTabs: externalSetTabs,
-  onOpenProject
+  onOpenProject,
+  onCloseFormTab
 }: WarehouseManagerProps) {
   
   // Real-time Firestore states
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [suppliers, setSuppliers] = useState<WarehouseSupplier[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [materialRequests, setMaterialRequests] = useState<MaterialRequest[]>([]);
   const [purchaseProposals, setPurchaseProposals] = useState<PurchaseProposal[]>([]);
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
@@ -66,10 +69,9 @@ export default function WarehouseManager({
   const defaultTabs: WarehouseTab[] = [
     { id: 'dashboard', label: 'DASHBOARD', icon: '🏡', closable: false },
     { id: 'kho', label: 'KHO', icon: '📦', closable: false },
-    { id: 'dexuat', label: 'ĐỀ XUẤT', icon: '📝', closable: false },
-    { id: 'muahang', label: 'MUA HÀNG', icon: '🛒', closable: false },
-    { id: 'nhapkho', label: 'NHẬP KHO', icon: '🚚', closable: false },
+    { id: 'nhapkho', label: 'NHẬP HÀNG', icon: '🚚', closable: false },
     { id: 'xuatkho', label: 'XUẤT KHO', icon: '📤', closable: false },
+    { id: 'khachhang', label: 'KHÁCH HÀNG', icon: '👥', closable: false },
     { id: 'nhacungcap', label: 'NHÀ CUNG CẤP', icon: '🏢', closable: false },
     { id: 'baocao', label: 'BÁO CÁO', icon: '📊', closable: false },
   ];
@@ -129,9 +131,17 @@ export default function WarehouseManager({
         (err) => handleFirestoreError(err, OperationType.LIST, 'inventory_transactions')
       );
 
+      const unsubCust = onSnapshot(collection(db, 'customers'), 
+        (snap) => {
+          setCustomers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer)));
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, 'customers')
+      );
+
       return () => {
         unsubEquip();
         unsubSup();
+        unsubCust();
         unsubReq();
         unsubProp();
         unsubTx();
@@ -161,28 +171,28 @@ export default function WarehouseManager({
   };
 
   // Handler to close dynamic tab
-  const handleCloseTab = (tabId: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Avoid triggering tab switch on close icon click
-    const filteredTabs = tabs.filter(t => t.id !== tabId);
-    setTabs(filteredTabs);
-
-    // If closing active tab, redirect to dashboard or nearest tab
-    if (activeTabId === tabId) {
-      const closedIndex = tabs.findIndex(t => t.id === tabId);
-      const nextActiveIndex = Math.max(0, closedIndex - 1);
-      setActiveTabId(filteredTabs[nextActiveIndex]?.id || 'dashboard');
+  const handleCloseFormTab = (tabId: string, skipConfirm = false) => {
+    if (onCloseFormTab) {
+      onCloseFormTab(tabId, skipConfirm);
+    } else {
+      const filteredTabs = tabs.filter(t => t.id !== tabId);
+      setTabs(filteredTabs);
+      if (activeTabId === tabId) {
+        const closedIndex = tabs.findIndex(t => t.id === tabId);
+        const nextActiveIndex = Math.max(0, closedIndex - 1);
+        setActiveTabId(filteredTabs[nextActiveIndex]?.id || 'dashboard');
+      }
     }
   };
 
-  // Render correct content
-  const renderTabContent = () => {
-    // If it is a dynamic document tab (not matches standard)
-    const activeTabObj = tabs.find(t => t.id === activeTabId);
-    if (activeTabObj && activeTabObj.closable && activeTabObj.documentType) {
+  // Render correct content for a specific tab
+  const renderSpecificTabContent = (tabObj: WarehouseTab) => {
+    // 1. Dynamic document detail tabs
+    if (tabObj.closable && tabObj.documentType) {
       return (
         <DocumentDetailTab 
-          documentId={activeTabObj.id}
-          documentType={activeTabObj.documentType}
+          documentId={tabObj.id}
+          documentType={tabObj.documentType}
           equipment={equipment}
           transactions={transactions}
           requests={materialRequests}
@@ -190,12 +200,10 @@ export default function WarehouseManager({
           suppliers={suppliers}
           onOpenProject={onOpenProject}
           onClose={() => {
-            const catTabId = activeTabObj.documentType === 'pn' ? 'nhapkho' :
-                             activeTabObj.documentType === 'px' ? 'xuatkho' :
-                             activeTabObj.documentType === 'dexuat' ? 'dexuat' :
-                             activeTabObj.documentType === 'muahang' ? 'muahang' : 'dashboard';
+            const catTabId = tabObj.documentType === 'pn' ? 'nhapkho' :
+                             tabObj.documentType === 'px' ? 'xuatkho' : 'dashboard';
             
-            const filteredTabs = tabs.filter(t => t.id !== activeTabObj.id);
+            const filteredTabs = tabs.filter(t => t.id !== tabObj.id);
             setTabs(filteredTabs);
             setActiveTabId(catTabId);
           }}
@@ -203,7 +211,57 @@ export default function WarehouseManager({
       );
     }
 
-    switch (activeTabId) {
+    // 2. Dynamic form tabs (Nhập kho forms)
+    if (tabObj.id === 'form_import_goods' || tabObj.id === 'form_supplier_return' || tabObj.id === 'form_tech_return' || tabObj.id === 'form_initial_stock') {
+      const sourceMap: Record<string, 'import_goods' | 'supplier_return' | 'tech_return' | 'initial_stock'> = {
+        'form_import_goods': 'import_goods',
+        'form_supplier_return': 'supplier_return',
+        'form_tech_return': 'tech_return',
+        'form_initial_stock': 'initial_stock'
+      };
+      const activeSourceVal = sourceMap[tabObj.id];
+
+      return (
+        <ImportReceipts 
+          transactions={transactions}
+          equipment={equipment}
+          suppliers={suppliers}
+          onOpenDocument={handleOpenDocument}
+          userId={userId}
+          purchaseProposals={purchaseProposals}
+          activeSourceExternal={activeSourceVal}
+          onCloseForm={(skipConfirm?: boolean) => {
+            handleCloseFormTab(tabObj.id, skipConfirm);
+          }}
+        />
+      );
+    }
+
+    // 3. Dynamic form tabs (Xuất kho forms)
+    if (tabObj.id === 'form_construction_export' || tabObj.id === 'form_commercial_export' || tabObj.id === 'form_disposal_export') {
+      const sourceMap: Record<string, 'construction_export' | 'commercial_export' | 'disposal_export'> = {
+        'form_construction_export': 'construction_export',
+        'form_commercial_export': 'commercial_export',
+        'form_disposal_export': 'disposal_export'
+      };
+      const activeSourceVal = sourceMap[tabObj.id];
+
+      return (
+        <ExportReceipts 
+          transactions={transactions}
+          equipment={equipment}
+          onOpenDocument={handleOpenDocument}
+          userId={userId}
+          activeSourceExternal={activeSourceVal}
+          onCloseForm={(skipConfirm?: boolean) => {
+            handleCloseFormTab(tabObj.id, skipConfirm);
+          }}
+        />
+      );
+    }
+
+    // 4. Standard static tabs
+    switch (tabObj.id) {
       case 'dashboard':
         return (
           <WarehouseDashboard 
@@ -225,27 +283,6 @@ export default function WarehouseManager({
             suppliers={suppliers}
           />
         );
-      case 'dexuat':
-        return (
-          <MaterialRequests 
-            requests={materialRequests}
-            equipment={equipment}
-            suppliers={suppliers}
-            userRole={userRole}
-            onOpenDocument={handleOpenDocument}
-            onOpenProject={onOpenProject}
-          />
-        );
-      case 'muahang':
-        return (
-          <PurchaseProposals 
-            proposals={purchaseProposals}
-            equipment={equipment}
-            suppliers={suppliers}
-            userRole={userRole}
-            onOpenDocument={handleOpenDocument}
-          />
-        );
       case 'nhapkho':
         return (
           <ImportReceipts 
@@ -255,6 +292,32 @@ export default function WarehouseManager({
             onOpenDocument={handleOpenDocument}
             userId={userId}
             purchaseProposals={purchaseProposals}
+            onOpenFormTab={(sourceType) => {
+              const tabId = `form_${sourceType}`;
+              const labelMap: Record<string, string> = {
+                'import_goods': '🚚 Nhập hàng',
+                'supplier_return': '↩️ Trả hàng NCC',
+                'tech_return': '🛠️ Kỹ thuật trả vật tư',
+                'initial_stock': '📦 Nhập tồn đầu kỳ'
+              };
+              const iconMap: Record<string, string> = {
+                'import_goods': '🚚',
+                'supplier_return': '↩️',
+                'tech_return': '🛠️',
+                'initial_stock': '📦'
+              };
+              const tabExists = tabs.some(t => t.id === tabId);
+              if (!tabExists) {
+                const newTab: WarehouseTab = {
+                  id: tabId,
+                  label: labelMap[sourceType],
+                  icon: iconMap[sourceType],
+                  closable: true
+                };
+                setTabs([...tabs, newTab]);
+              }
+              setActiveTabId(tabId);
+            }}
           />
         );
       case 'xuatkho':
@@ -264,6 +327,38 @@ export default function WarehouseManager({
             equipment={equipment}
             onOpenDocument={handleOpenDocument}
             userId={userId}
+            onOpenFormTab={(sourceType) => {
+              const tabId = `form_${sourceType}`;
+              const labelMap: Record<string, string> = {
+                'construction_export': '🏗️ Xuất kho thi công',
+                'commercial_export': '🛍️ Xuất kho thương mại',
+                'disposal_export': '🗑️ Xuất hủy/Thanh lý'
+              };
+              const iconMap: Record<string, string> = {
+                'construction_export': '🏗️',
+                'commercial_export': '🛍️',
+                'disposal_export': '🗑️'
+              };
+              const tabExists = tabs.some(t => t.id === tabId);
+              if (!tabExists) {
+                const newTab: WarehouseTab = {
+                  id: tabId,
+                  label: labelMap[sourceType],
+                  icon: iconMap[sourceType],
+                  closable: true
+                };
+                setTabs([...tabs, newTab]);
+              }
+              setActiveTabId(tabId);
+            }}
+          />
+        );
+      case 'khachhang':
+        return (
+          <WarehouseCustomers 
+            customers={customers}
+            transactions={transactions}
+            userRole={userRole}
           />
         );
       case 'nhacungcap':
@@ -301,7 +396,16 @@ export default function WarehouseManager({
             <span className="text-xs font-bold uppercase tracking-widest animate-pulse">Đang nạp dữ liệu kho...</span>
           </div>
         ) : (
-          renderTabContent()
+          <div className="relative w-full">
+            {tabs.map((tab) => {
+              const isActive = tab.id === activeTabId;
+              return (
+                <div key={tab.id} className={isActive ? "block animate-in fade-in duration-200" : "hidden"}>
+                  {renderSpecificTabContent(tab)}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
