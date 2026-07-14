@@ -278,6 +278,13 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
   const [showPrintQrModal, setShowPrintQrModal] = useState(false);
   const [selectedQrItems, setSelectedQrItems] = useState<string[]>([]);
 
+  // Excel Import states
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [parsedImportRows, setParsedImportRows] = useState<any[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+
   // Form State for Add/Edit
   const [formId, setFormId] = useState('');
   const [formBrand, setFormBrand] = useState('');
@@ -452,45 +459,165 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
     XLSX.writeFile(wb, `Báo_cáo_tồn_kho_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
-  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleDownloadTemplate = () => {
+    const sampleData = [
+      {
+        'Mã vật tư': 'VT101',
+        'Thương hiệu': 'Longi',
+        'Model': 'Tấm pin LR5-72HPH 550W',
+        'ĐVT': 'Tấm',
+        'Tồn thực tế': 150,
+        'Định mức tối thiểu': 10,
+        'Giá nhập': 2850000,
+        'Giá bán lẻ': 3400000,
+        'Vị trí': 'Kệ A1',
+        'Nhà cung cấp': 'Longi Solar Group',
+        'Mô tả': 'Tấm pin mặt trời mono đơn tinh thể hiệu suất cao'
+      },
+      {
+        'Mã vật tư': 'VT102',
+        'Thương hiệu': 'Growatt',
+        'Model': 'Inverter MIN 5000TL-X',
+        'ĐVT': 'Bộ',
+        'Tồn thực tế': 45,
+        'Định mức tối thiểu': 5,
+        'Giá nhập': 14200000,
+        'Giá bán lẻ': 16500000,
+        'Vị trí': 'Kệ B2',
+        'Nhà cung cấp': 'Growatt Việt Nam',
+        'Mô tả': 'Inverter hòa lưới 1 pha 5kW chất lượng cao'
+      }
+    ];
 
+    const ws = XLSX.utils.json_to_sheet(sampleData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Mau_Khai_Bao");
+
+    // Auto-fit columns
+    const maxLens = Object.keys(sampleData[0]).map(key => {
+      return Math.max(key.length, ...sampleData.map(row => String(row[key as keyof typeof row] || '').length)) + 3;
+    });
+    ws['!cols'] = maxLens.map(len => ({ wch: len }));
+
+    XLSX.writeFile(wb, "Mau_Danh_Muc_Vat_Tu.xlsx");
+  };
+
+  const handleFileChange = (file: File | null) => {
+    if (!file) {
+      setImportFile(null);
+      setParsedImportRows([]);
+      return;
+    }
+    setImportFile(file);
+    
     const reader = new FileReader();
-    reader.onload = async (evt) => {
+    reader.onload = (evt) => {
       try {
         const bstr = evt.target?.result;
         const wb = XLSX.read(bstr, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(ws) as any[];
-
-        let importedCount = 0;
-        for (const row of data) {
-          const id = row['Mã vật tư'] || 'EQ' + Math.floor(100000 + Math.random() * 900000);
-          const payload: Equipment = {
-            id,
-            brand: String(row['Thương hiệu'] || row['Tên vật tư']?.split(' ')[0] || 'Chưa rõ'),
-            model: String(row['Model'] || row['Tên vật tư'] || 'Chưa rõ'),
-            type: 'other',
-            capacity: Number(row['Công suất'] || 0),
-            unit: String(row['ĐVT'] || 'Cái'),
-            stock: Number(row['Tồn thực tế'] || row['Tồn kho'] || 0),
-            minStock: Number(row['Định mức tối thiểu'] || row['Tồn tối thiểu'] || 5),
-            unitPrice: Number(row['Giá nhập'] || 0),
-            sellingPrice: Number(row['Giá bán lẻ'] || 0),
-            location: String(row['Vị trí'] || row['Vị trí kho'] || 'Kệ A1'),
-            supplier: String(row['Nhà cung cấp'] || 'Chưa liên kết'),
-            details: String(row['Mô tả'] || '')
-          };
-          await setDoc(doc(db, 'equipment', id), payload);
-          importedCount++;
-        }
-        alert(`Nhập thành công ${importedCount} vật tư từ Excel!`);
+        
+        // Map data to preview layout
+        const mapped = data.map((row, idx) => ({
+          index: idx + 1,
+          id: row['Mã vật tư'] || 'VT' + Math.floor(100 + Math.random() * 900),
+          brand: String(row['Thương hiệu'] || row['Tên vật tư']?.split(' ')[0] || 'Chưa rõ'),
+          model: String(row['Model'] || row['Tên vật tư'] || 'Chưa rõ'),
+          unit: String(row['ĐVT'] || 'Cái'),
+          stock: Number(row['Tồn thực tế'] || row['Tồn kho'] || 0),
+          minStock: Number(row['Định mức tối thiểu'] || row['Tồn tối thiểu'] || 5),
+          unitPrice: Number(row['Giá nhập'] || 0),
+          sellingPrice: Number(row['Giá bán lẻ'] || 0),
+          location: String(row['Vị trí'] || row['Vị trí kho'] || 'Kệ A1'),
+          supplier: String(row['Nhà cung cấp'] || 'Chưa liên kết'),
+          details: String(row['Mô tả'] || '')
+        }));
+        
+        setParsedImportRows(mapped);
       } catch (err) {
-        alert('Lỗi phân tích tệp Excel. Vui lòng thử lại.');
+        alert('Lỗi đọc và phân tích tệp Excel. Vui lòng kiểm tra lại cấu trúc file mẫu.');
+        setImportFile(null);
+        setParsedImportRows([]);
       }
     };
     reader.readAsBinaryString(file);
+  };
+
+  const handleConfirmImport = async () => {
+    if (parsedImportRows.length === 0) {
+      alert('Chưa có dữ liệu nào để nhập!');
+      return;
+    }
+    
+    setImporting(true);
+    try {
+      let importedCount = 0;
+      for (const row of parsedImportRows) {
+        const payload: Equipment = {
+          id: row.id,
+          brand: row.brand,
+          model: row.model,
+          type: 'other',
+          capacity: 0,
+          unit: row.unit,
+          stock: row.stock,
+          minStock: row.minStock,
+          unitPrice: row.unitPrice,
+          sellingPrice: row.sellingPrice,
+          location: row.location,
+          supplier: row.supplier,
+          details: row.details
+        };
+        await setDoc(doc(db, 'equipment', row.id), payload);
+        
+        // If this item was previously hidden/deleted, restore it
+        if (deletedIds.includes(row.id)) {
+          const updatedDeletedIds = deletedIds.filter(id => id !== row.id);
+          setDeletedIds(updatedDeletedIds);
+          localStorage.setItem('warehouse_deleted_item_ids', JSON.stringify(updatedDeletedIds));
+        }
+        
+        importedCount++;
+      }
+      
+      alert(`Đã nhập thành công ${importedCount} vật tư vào kho!`);
+      // Reset and close
+      setShowImportModal(false);
+      setImportFile(null);
+      setParsedImportRows([]);
+    } catch (err) {
+      console.error("Lỗi khi nhập dữ liệu:", err);
+      alert('Có lỗi xảy ra khi lưu dữ liệu. Vui lòng thử lại.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      const fileExt = file.name.split('.').pop()?.toLowerCase();
+      if (fileExt === 'xlsx' || fileExt === 'xls') {
+        handleFileChange(file);
+      } else {
+        alert('Hệ thống chỉ hỗ trợ tệp định dạng Excel (.xlsx, .xls)!');
+      }
+    }
   };
 
   // Form open handlers
@@ -754,11 +881,13 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
                   <Download className="h-3.5 w-3.5 text-slate-400" />
                   Xuất báo cáo Excel
                 </button>
-                <label className="w-full text-left px-4 py-2.5 hover:bg-slate-50 text-slate-700 flex items-center gap-2 cursor-pointer">
+                <button 
+                  onClick={() => { setShowImportModal(true); setShowFabMenu(false); }}
+                  className="w-full text-left px-4 py-2.5 hover:bg-slate-50 text-slate-700 flex items-center gap-2 cursor-pointer"
+                >
                   <Upload className="h-3.5 w-3.5 text-slate-400" />
                   Nhập danh mục Excel
-                  <input type="file" accept=".xlsx, .xls" onChange={(e) => { handleImportExcel(e); setShowFabMenu(false); }} className="hidden" />
-                </label>
+                </button>
               </div>
             )}
           </div>
@@ -1727,6 +1856,198 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
                 className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer"
               >
                 Đóng lại
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* 5. MODAL: Nhập danh mục Excel & Tải tệp mẫu */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-fade-in backdrop-blur-xs">
+          <div className="bg-white w-full max-w-4xl rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-2xl flex flex-col justify-between max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                  <Upload className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Nhập danh mục thiết bị từ Excel</h3>
+                  <p className="text-[10px] text-slate-400 font-bold mt-1">Đồng bộ danh sách vật tư hàng loạt nhanh chóng qua file bảng tính</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportFile(null);
+                  setParsedImportRows([]);
+                }}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-rose-100 hover:text-rose-600 flex items-center justify-center transition-all cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-8 overflow-y-auto flex-1 space-y-6">
+              
+              {/* Step 1: Download sample & instructions */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-center bg-slate-50 border border-slate-200/50 rounded-2xl p-5">
+                <div className="md:col-span-8 space-y-2">
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Tải về tệp mẫu Excel chuẩn</h4>
+                  <p className="text-slate-500 text-[11px] leading-relaxed">
+                    Hệ thống yêu cầu tệp Excel có các tiêu đề cột chính xác: <strong>Mã vật tư, Thương hiệu, Model, ĐVT, Tồn thực tế, Định mức tối thiểu, Giá nhập, Giá bán lẻ, Vị trí, Nhà cung cấp, Mô tả</strong>. Nhấn nút bên cạnh để tải file mẫu chuẩn.
+                  </p>
+                </div>
+                <div className="md:col-span-4 text-left md:text-right">
+                  <button
+                    type="button"
+                    onClick={handleDownloadTemplate}
+                    className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-widest px-4 py-3 rounded-xl transition-all shadow-sm shadow-emerald-200 cursor-pointer"
+                  >
+                    <Download className="h-4 w-4" />
+                    Tải file Excel mẫu
+                  </button>
+                </div>
+              </div>
+
+              {/* Step 2: Drag & Drop upload frame */}
+              {!importFile ? (
+                <div 
+                  onDragEnter={handleDrag}
+                  onDragOver={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDrop={handleDrop}
+                  className={`border-2 border-dashed rounded-3xl p-10 flex flex-col items-center justify-center text-center transition-all cursor-pointer ${
+                    dragActive 
+                      ? 'border-blue-500 bg-blue-50/30' 
+                      : 'border-slate-300 hover:border-blue-500 hover:bg-slate-50/50'
+                  }`}
+                >
+                  <input 
+                    type="file"
+                    id="excel-file-uploader"
+                    accept=".xlsx, .xls"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        handleFileChange(e.target.files[0]);
+                      }
+                    }}
+                  />
+                  <label htmlFor="excel-file-uploader" className="w-full h-full cursor-pointer flex flex-col items-center justify-center">
+                    <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mb-4 text-slate-400">
+                      <FileText className="h-6 w-6" />
+                    </div>
+                    <span className="text-xs font-black text-slate-800 uppercase tracking-wider">Kéo thả tệp Excel của bạn vào đây</span>
+                    <span className="text-[10px] text-slate-400 font-bold mt-1">Hoặc nhấp chuột để chọn từ máy tính (.xlsx, .xls)</span>
+                  </label>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Selected File Details Banner */}
+                  <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-white border border-blue-200 rounded-xl flex items-center justify-center text-blue-600 font-bold shrink-0">
+                        XLS
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-slate-800 truncate max-w-md">{importFile.name}</p>
+                        <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                          Dung lượng: {(importFile.size / 1024).toFixed(1)} KB — Đã phân tích <strong>{parsedImportRows.length}</strong> dòng vật tư
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setImportFile(null);
+                        setParsedImportRows([]);
+                      }}
+                      className="text-[10px] text-slate-400 hover:text-red-500 font-black uppercase tracking-widest px-3 py-1.5 bg-white border border-slate-100 rounded-lg shadow-2xs"
+                    >
+                      Chọn lại file
+                    </button>
+                  </div>
+
+                  {/* Parsed Data Preview Grid */}
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+                    <div className="bg-slate-50 px-5 py-3.5 border-b border-slate-200 flex justify-between items-center">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Danh sách vật tư xem trước</span>
+                      <span className="text-[9px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded font-black">PREVIEW</span>
+                    </div>
+
+                    <div className="overflow-x-auto max-h-[30vh]">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-50/50 border-b border-slate-100 text-slate-400">
+                            <th className="px-4 py-2 text-[9px] font-black uppercase tracking-wider">Mã vật tư</th>
+                            <th className="px-4 py-2 text-[9px] font-black uppercase tracking-wider">Thương hiệu</th>
+                            <th className="px-4 py-2 text-[9px] font-black uppercase tracking-wider">Model/Tên vật tư</th>
+                            <th className="px-4 py-2 text-[9px] font-black uppercase tracking-wider">ĐVT</th>
+                            <th className="px-4 py-2 text-[9px] font-black uppercase tracking-wider text-center">Tồn kho</th>
+                            <th className="px-4 py-2 text-[9px] font-black uppercase tracking-wider text-right">Đơn giá nhập</th>
+                            <th className="px-4 py-2 text-[9px] font-black uppercase tracking-wider">Vị trí</th>
+                            <th className="px-4 py-2 text-[9px] font-black uppercase tracking-wider">Nhà cung cấp</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50 text-slate-700">
+                          {parsedImportRows.map((row, index) => (
+                            <tr key={index} className="hover:bg-slate-50/50">
+                              <td className="px-4 py-2.5 font-mono text-[10px] font-black text-slate-950">{row.id}</td>
+                              <td className="px-4 py-2.5 font-bold">{row.brand}</td>
+                              <td className="px-4 py-2.5 font-black text-slate-800">{row.model}</td>
+                              <td className="px-4 py-2.5 font-semibold text-slate-500">{row.unit}</td>
+                              <td className="px-4 py-2.5 text-center font-bold text-emerald-600">{row.stock}</td>
+                              <td className="px-4 py-2.5 text-right font-extrabold text-slate-800">
+                                {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(row.unitPrice)}
+                              </td>
+                              <td className="px-4 py-2.5 font-bold text-slate-600">{row.location}</td>
+                              <td className="px-4 py-2.5 text-slate-500 truncate max-w-[120px]" title={row.supplier}>{row.supplier}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-8 py-5 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportFile(null);
+                  setParsedImportRows([]);
+                }}
+                className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={importing || parsedImportRows.length === 0}
+                onClick={handleConfirmImport}
+                className="bg-[#0054a6] hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer active:scale-95 flex items-center gap-2"
+              >
+                {importing ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Đang lưu trữ...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" />
+                    Xác nhận nhập danh mục ({parsedImportRows.length})
+                  </>
+                )}
               </button>
             </div>
 
