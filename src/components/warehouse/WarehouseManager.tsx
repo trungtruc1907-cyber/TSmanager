@@ -12,7 +12,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, doc, getDoc } from 'firebase/firestore';
 import { seedWarehouseData } from './seedData';
 import { 
   WarehouseTab, 
@@ -89,8 +89,14 @@ export default function WarehouseManager({
   useEffect(() => {
     const initAndSubscribe = async () => {
       try {
-        // Trigger seeding if database collections are empty
-        await seedWarehouseData(db);
+        // Check if warehouse data has been explicitly cleared
+        const settingsSnap = await getDoc(doc(db, 'settings', 'warehouse'));
+        const warehouseSettings = settingsSnap.exists() ? settingsSnap.data() : null;
+        
+        if (!warehouseSettings?.cleared) {
+          // Trigger seeding if database collections are empty
+          await seedWarehouseData(db);
+        }
       } catch (err) {
         console.error('Error seeding initial data:', err);
       }

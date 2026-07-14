@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, collection, getDocs, writeBatch } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { 
   Save, 
@@ -18,7 +18,10 @@ import {
   CheckCircle2, 
   Cloud, 
   Plus, 
-  HardDrive 
+  HardDrive,
+  Database,
+  RefreshCw,
+  RotateCcw
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -321,6 +324,141 @@ export default function SystemSettings({ userId }: SystemSettingsProps) {
       setError(null);
     };
     reader.readAsDataURL(file);
+  };
+
+  // Warehouse Data Administration States and Handlers
+  const [clearingWarehouse, setClearingWarehouse] = useState(false);
+  const [restoringWarehouse, setRestoringWarehouse] = useState(false);
+
+  const handleClearWarehouseData = async () => {
+    const isConfirmed = window.confirm(
+      "CẢNH BÁO: Bạn đang thực hiện xóa TOÀN BỘ dữ liệu của module Quản lý kho!\n\n" +
+      "Hành động này sẽ xóa vĩnh viễn tất cả:\n" +
+      "- Danh mục Thiết bị & Vật tư tồn kho (equipment)\n" +
+      "- Danh sách Nhà cung cấp & Công nợ (suppliers)\n" +
+      "- Toàn bộ các đề xuất vật tư kỹ thuật (material_requests)\n" +
+      "- Các đề xuất mua hàng (purchase_proposals)\n" +
+      "- Tất cả hóa đơn/phiếu Nhập kho & Xuất kho (inventory_transactions)\n" +
+      "- Khách hàng thương mại và công nợ liên quan (commercial customers)\n\n" +
+      "Bạn có chắc chắn muốn tiếp tục?"
+    );
+    if (!isConfirmed) return;
+
+    const isDoubleConfirmed = window.confirm(
+      "XÁC NHẬN LẦN CUỐI: Thao tác này KHÔNG THỂ HOÀN TÁC. Bạn có chắc chắn muốn xóa sạch dữ liệu Kho?"
+    );
+    if (!isDoubleConfirmed) return;
+
+    setClearingWarehouse(true);
+    try {
+      const collectionsToClear = [
+        'equipment',
+        'suppliers',
+        'material_requests',
+        'purchase_proposals',
+        'inventory_transactions'
+      ];
+
+      for (const colName of collectionsToClear) {
+        const snap = await getDocs(collection(db, colName));
+        const batch = writeBatch(db);
+        snap.docs.forEach((doc) => {
+          batch.delete(doc.ref);
+        });
+        await batch.commit();
+      }
+
+      // Clear commercial customers
+      const custSnap = await getDocs(collection(db, 'customers'));
+      const custBatch = writeBatch(db);
+      let deletedCustCount = 0;
+      custSnap.docs.forEach((doc) => {
+        const data = doc.data();
+        if (data.customerType === 'commercial') {
+          custBatch.delete(doc.ref);
+          deletedCustCount++;
+        }
+      });
+      if (deletedCustCount > 0) {
+        await custBatch.commit();
+      }
+
+      // Save a configuration flag so that it does not auto-seed on reload
+      await setDoc(doc(db, 'settings', 'warehouse'), {
+        cleared: true,
+        seeded: false,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      alert("Đã xóa toàn bộ dữ liệu module Quản lý kho thành công!");
+    } catch (err) {
+      console.error("Lỗi khi xóa dữ liệu kho:", err);
+      alert("Xóa dữ liệu thất bại: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setClearingWarehouse(false);
+    }
+  };
+
+  const handleRestoreWarehouseData = async () => {
+    const isConfirmed = window.confirm(
+      "Bạn có chắc chắn muốn nạp lại dữ liệu mẫu cho module Quản lý kho?\n\n" +
+      "Thao tác này sẽ xóa dữ liệu kho hiện tại (nếu có) và khôi phục lại bộ dữ liệu mẫu mặc định ban đầu."
+    );
+    if (!isConfirmed) return;
+
+    setRestoringWarehouse(true);
+    try {
+      // First, clear existing
+      const collectionsToClear = [
+        'equipment',
+        'suppliers',
+        'material_requests',
+        'purchase_proposals',
+        'inventory_transactions'
+      ];
+
+      for (const colName of collectionsToClear) {
+        const snap = await getDocs(collection(db, colName));
+        const batch = writeBatch(db);
+        snap.docs.forEach((doc) => {
+          batch.delete(doc.ref);
+        });
+        await batch.commit();
+      }
+
+      // Clear commercial customers
+      const custSnap = await getDocs(collection(db, 'customers'));
+      const custBatch = writeBatch(db);
+      let deletedCustCount = 0;
+      custSnap.docs.forEach((doc) => {
+        const data = doc.data();
+        if (data.customerType === 'commercial') {
+          custBatch.delete(doc.ref);
+          deletedCustCount++;
+        }
+      });
+      if (deletedCustCount > 0) {
+        await custBatch.commit();
+      }
+
+      // Mark cleared as false, so the app can seed it or we seed it directly here
+      await setDoc(doc(db, 'settings', 'warehouse'), {
+        cleared: false,
+        seeded: true,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      // Import seed function dynamically
+      const { seedWarehouseData } = await import('./warehouse/seedData');
+      await seedWarehouseData(db);
+
+      alert("Đã khôi phục dữ liệu mẫu thành công!");
+    } catch (err) {
+      console.error("Lỗi khi khôi phục dữ liệu kho:", err);
+      alert("Khôi phục thất bại: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setRestoringWarehouse(false);
+    }
   };
 
   if (loading) return <div className="p-8 text-center uppercase font-black text-slate-400 animate-pulse">Đang tải cấu hình hệ thống...</div>;
@@ -685,6 +823,75 @@ export default function SystemSettings({ userId }: SystemSettingsProps) {
             </div>
           </div>
         )}
+
+        {/* Hộp quản trị dữ liệu Module Kho */}
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-6 mt-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+            <div>
+              <div className="flex items-center gap-2 text-rose-600">
+                <Database className="h-5 w-5" />
+                <h3 className="text-base font-black text-slate-800 tracking-tight uppercase">Quản trị dữ liệu Module Kho</h3>
+              </div>
+              <p className="text-slate-400 text-[10px] font-semibold mt-1">
+                Các tính năng quản lý, xóa sạch hoặc khôi phục dữ liệu dùng thử cho Module Quản lý kho
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2.5">
+              <button
+                type="button"
+                disabled={clearingWarehouse || restoringWarehouse}
+                onClick={handleRestoreWarehouseData}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-[10px] uppercase tracking-widest px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                {restoringWarehouse ? "Đang khôi phục..." : "Nạp dữ liệu mẫu"}
+              </button>
+
+              <button
+                type="button"
+                disabled={clearingWarehouse || restoringWarehouse}
+                onClick={handleClearWarehouseData}
+                className="bg-red-500 hover:bg-red-600 text-white font-extrabold text-[10px] uppercase tracking-widest px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center gap-2 shadow-sm shadow-red-200 disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {clearingWarehouse ? "Đang xóa..." : "Xóa toàn bộ dữ liệu Kho"}
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-red-50/50 border border-red-100 rounded-2xl p-5 space-y-3">
+            <h4 className="text-xs font-black text-red-800 uppercase tracking-wider flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+              Lưu ý quan trọng trước khi xóa dữ liệu
+            </h4>
+            <p className="text-slate-600 text-xs leading-relaxed">
+              Hành động này sẽ xóa vĩnh viễn toàn bộ cơ sở dữ liệu liên quan đến Module Quản lý kho trong hệ thống Firestore.
+              Dữ liệu của các phân hệ CRM khác như Lịch hẹn, Khách hàng lắp đặt chính, Chiến dịch và Công trình vẫn được giữ nguyên.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+              <div className="bg-white border border-red-100/60 p-3 rounded-xl flex items-center gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                <span className="text-slate-700 text-xs font-semibold">Mục vật tư & tồn kho (equipment)</span>
+              </div>
+              <div className="bg-white border border-red-100/60 p-3 rounded-xl flex items-center gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                <span className="text-slate-700 text-xs font-semibold">Nhà cung cấp & công nợ (suppliers)</span>
+              </div>
+              <div className="bg-white border border-red-100/60 p-3 rounded-xl flex items-center gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                <span className="text-slate-700 text-xs font-semibold">Giao dịch nhập/xuất (transactions)</span>
+              </div>
+              <div className="bg-white border border-red-100/60 p-3 rounded-xl flex items-center gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                <span className="text-slate-700 text-xs font-semibold">Đề xuất mua hàng & Cấp phát</span>
+              </div>
+              <div className="bg-white border border-red-100/60 p-3 rounded-xl flex items-center gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                <span className="text-slate-700 text-xs font-semibold">Khách hàng thương mại tự tạo</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
