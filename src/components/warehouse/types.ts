@@ -73,6 +73,8 @@ export interface InventoryTransaction {
     unit: string;
   }>;
   totalValue: number;
+  taxPercent?: number;
+  taxAmount?: number;
   paidAmount?: number;
   debtAmount?: number;
   note?: string;

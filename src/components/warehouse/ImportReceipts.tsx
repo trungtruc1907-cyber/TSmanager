@@ -93,6 +93,7 @@ export default function ImportReceipts({
   const [editSupplierId, setEditSupplierId] = useState('');
   const [editNote, setEditNote] = useState('');
   const [editPaidAmount, setEditPaidAmount] = useState(0);
+  const [editTaxPercent, setEditTaxPercent] = useState(0);
   const [editItems, setEditItems] = useState<Array<{ equipmentId: string, quantity: number, unitPrice: number }>>([]);
 
   // Add Receipt Modal (Manual import)
@@ -100,12 +101,14 @@ export default function ImportReceipts({
   const [formSupplierId, setFormSupplierId] = useState('');
   const [formNote, setFormNote] = useState('');
   const [formPaidAmount, setFormPaidAmount] = useState(0);
+  const [formTaxPercent, setFormTaxPercent] = useState(0);
   const [formItems, setFormItems] = useState<Array<{ equipmentId: string, quantity: number, unitPrice: number }>>([]);
 
   // POS Nhập hàng (import_goods) States
   const [posItems, setPosItems] = useState<Array<{ equipmentId: string, quantity: number, unitPrice: number }>>([]);
   const [posSupplierId, setPosSupplierId] = useState('');
   const [posPaidAmount, setPosPaidAmount] = useState(0);
+  const [posTaxPercent, setPosTaxPercent] = useState(0);
   const [posSearchTerm, setPosSearchTerm] = useState('');
   const [posSupplierSearch, setPosSupplierSearch] = useState('');
   const [importStaff, setImportStaff] = useState('Chống Thấm 36');
@@ -327,7 +330,9 @@ export default function ImportReceipts({
       const supName = selectedSup.name;
       
       const receiptId = 'PN' + Math.floor(200000 + Math.random() * 799999);
-      const totalVal = calculateTotalValue();
+      const totalGoodsVal = calculateTotalValue();
+      const taxVal = Math.round((totalGoodsVal * formTaxPercent) / 100);
+      const totalVal = totalGoodsVal + taxVal;
       const debtVal = Math.max(0, totalVal - formPaidAmount);
 
       const payload: InventoryTransaction = {
@@ -338,6 +343,8 @@ export default function ImportReceipts({
         partnerId: formSupplierId,
         partnerName: supName,
         totalValue: totalVal,
+        taxPercent: formTaxPercent,
+        taxAmount: taxVal,
         paidAmount: formPaidAmount,
         debtAmount: debtVal,
         note: formNote.trim() || 'Nhập kho lô vật tư thiết bị solar mới',
@@ -388,6 +395,7 @@ export default function ImportReceipts({
       setFormSupplierId('');
       setFormNote('');
       setFormPaidAmount(0);
+      setFormTaxPercent(0);
       setFormItems([]);
       setFormProposalId('');
       alert(`Đã lập và duyệt thành công Phiếu Nhập Kho #${receiptId}! Số lượng tồn kho đã được đồng bộ tăng.`);
@@ -602,6 +610,7 @@ export default function ImportReceipts({
     setEditSupplierId(tx.partnerId || '');
     setEditNote(tx.note || '');
     setEditPaidAmount(tx.paidAmount || 0);
+    setEditTaxPercent(tx.taxPercent || 0);
     setEditItems(tx.items.map(item => ({
       equipmentId: item.equipmentId,
       quantity: item.quantity,
@@ -672,7 +681,9 @@ export default function ImportReceipts({
         (editSupplierId === 'INITIAL_STOCK' ? { name: 'Hàng tồn kho đầu kỳ' } : { name: 'Kỹ thuật trả vật tư' });
       const supName = selectedSup.name;
 
-      const totalVal = calculateEditTotalValue();
+      const totalGoodsVal = calculateEditTotalValue();
+      const taxVal = Math.round((totalGoodsVal * editTaxPercent) / 100);
+      const totalVal = totalGoodsVal + taxVal;
       const debtVal = Math.max(0, totalVal - editPaidAmount);
 
       // 1. Revert original stock quantities (decrement)
@@ -721,6 +732,8 @@ export default function ImportReceipts({
         partnerId: editSupplierId,
         partnerName: supName,
         totalValue: totalVal,
+        taxPercent: editTaxPercent,
+        taxAmount: taxVal,
         paidAmount: editPaidAmount,
         debtAmount: debtVal,
         note: editNote.trim() || 'Nhập kho lô vật tư thiết bị solar mới (Đã cập nhật)',
@@ -889,8 +902,10 @@ export default function ImportReceipts({
       
       const receiptId = importReceiptId.trim() || ('PN' + Math.floor(200000 + Math.random() * 799999));
       
-      // Calculate total value
-      const totalVal = posItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+      // Calculate total value & tax
+      const totalGoodsVal = posItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+      const taxVal = Math.round((totalGoodsVal * posTaxPercent) / 100);
+      const totalVal = totalGoodsVal + taxVal;
       const paidVal = posPaidAmount;
       const debtVal = Math.max(0, totalVal - paidVal);
 
@@ -902,6 +917,8 @@ export default function ImportReceipts({
         partnerId: posSupplierId,
         partnerName: supName,
         totalValue: totalVal,
+        taxPercent: posTaxPercent,
+        taxAmount: taxVal,
         paidAmount: paidVal,
         debtAmount: debtVal,
         note: importNote.trim() || (isDraft ? 'Phiếu tạm nhập hàng' : 'Nhập hàng hóa từ nhà cung cấp'),
@@ -946,6 +963,7 @@ export default function ImportReceipts({
       setPosItems([]);
       setPosSupplierId('');
       setPosPaidAmount(0);
+      setPosTaxPercent(0);
       setImportReceiptId('');
       setImportOrderCode('');
       setImportInvoiceNo('');
@@ -1687,10 +1705,61 @@ export default function ImportReceipts({
                   <div className="flex justify-between items-center text-xs font-bold text-slate-500">
                     <span className="flex items-center gap-1">
                       Tổng tiền hàng
-                      <Info className="h-3.5 w-3.5 text-slate-400 cursor-help" title="Tổng giá trị hàng nhập kho thực tế" />
+                      <Info className="h-3.5 w-3.5 text-slate-400 cursor-help" title="Tổng giá trị hàng nhập kho thực tế (trước thuế)" />
                     </span>
                     <span className="text-slate-950 font-black text-sm">
                       {formatCurrency(posItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0))}
+                    </span>
+                  </div>
+
+                  {/* Tax Field (Mục Thuế VAT) */}
+                  <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200 space-y-2">
+                    <div className="flex justify-between items-center text-xs font-bold">
+                      <span className="text-slate-600 flex items-center gap-1 font-extrabold">
+                        Mục Thuế (VAT)
+                      </span>
+                      <span className="text-amber-700 font-extrabold text-xs">
+                        + {formatCurrency(Math.round((posItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0) * posTaxPercent) / 100))}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {[0, 5, 8, 10].map(pct => (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => setPosTaxPercent(pct)}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${
+                            posTaxPercent === pct 
+                              ? 'bg-blue-600 text-white shadow-xs' 
+                              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          {pct}%
+                        </button>
+                      ))}
+                      <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1 ml-auto w-20 shadow-xs">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={posTaxPercent}
+                          onChange={(e) => setPosTaxPercent(Math.max(0, Math.min(100, Number(e.target.value))))}
+                          className="w-full text-right font-bold text-xs text-slate-800 bg-transparent focus:outline-none"
+                          placeholder="0"
+                        />
+                        <span className="text-[10px] font-black text-slate-400">%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Total payable (Tổng thanh toán) */}
+                  <div className="flex justify-between items-center text-xs font-bold text-slate-700 border-t border-slate-100 pt-2">
+                    <span>Tổng tiền thanh toán (sau thuế)</span>
+                    <span className="text-blue-700 font-black text-sm">
+                      {formatCurrency(
+                        posItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0) +
+                        Math.round((posItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0) * posTaxPercent) / 100)
+                      )}
                     </span>
                   </div>
 
@@ -1710,8 +1779,15 @@ export default function ImportReceipts({
                   {/* Account liabilities */}
                   <div className="flex justify-between items-center text-xs font-black pt-1">
                     <span className="text-slate-500">Tính vào công nợ</span>
-                    <span className="text-blue-600 text-sm">
-                      {formatCurrency(Math.max(0, posItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0) - posPaidAmount))}
+                    <span className="text-rose-600 text-sm font-extrabold">
+                      {formatCurrency(
+                        Math.max(
+                          0, 
+                          posItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0) +
+                          Math.round((posItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0) * posTaxPercent) / 100) - 
+                          posPaidAmount
+                        )
+                      )}
                     </span>
                   </div>
                 </div>
@@ -2888,16 +2964,47 @@ export default function ImportReceipts({
               {formItems.length > 0 && (
                 <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3 font-sans">
                   <div className="flex justify-between text-xs font-bold text-slate-500">
-                    <span>Tổng giá trị hàng nhập:</span>
+                    <span>Tổng giá trị tiền hàng:</span>
                     <span className="text-slate-950 font-black text-sm">{formatCurrency(calculateTotalValue())}</span>
                   </div>
+
+                  {/* Tax Field */}
+                  <div className="flex justify-between items-center text-xs pt-1 border-t border-slate-200/80">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-600">Mục Thuế (VAT):</span>
+                      <div className="flex items-center gap-1">
+                        {[0, 5, 8, 10].map(pct => (
+                          <button
+                            key={pct}
+                            type="button"
+                            onClick={() => setFormTaxPercent(pct)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-black cursor-pointer ${
+                              formTaxPercent === pct ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'
+                            }`}
+                          >
+                            {pct}%
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <span className="font-black text-amber-700">
+                      + {formatCurrency(Math.round((calculateTotalValue() * formTaxPercent) / 100))}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between text-xs font-bold text-slate-700 pt-1 border-t border-slate-200">
+                    <span>Tổng tiền thanh toán (sau thuế):</span>
+                    <span className="text-blue-700 font-black text-sm">
+                      {formatCurrency(calculateTotalValue() + Math.round((calculateTotalValue() * formTaxPercent) / 100))}
+                    </span>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
                     <div>
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Đã thanh toán (VND)</label>
                       <input 
                         type="number"
                         min={0}
-                        max={calculateTotalValue()}
                         value={formPaidAmount}
                         onChange={(e) => setFormPaidAmount(Number(e.target.value))}
                         className="w-full px-4 py-2 rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs"
@@ -2906,7 +3013,7 @@ export default function ImportReceipts({
                     <div>
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Ghi nợ NCC (Công nợ)</label>
                       <div className="px-4 py-2.5 rounded-xl bg-slate-100 border border-slate-200 font-extrabold text-xs text-rose-600">
-                        {formatCurrency(Math.max(0, calculateTotalValue() - formPaidAmount))}
+                        {formatCurrency(Math.max(0, (calculateTotalValue() + Math.round((calculateTotalValue() * formTaxPercent) / 100)) - formPaidAmount))}
                       </div>
                     </div>
                   </div>
@@ -3002,8 +3109,20 @@ export default function ImportReceipts({
 
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2 font-sans text-xs">
                 <div className="flex justify-between font-bold text-slate-500">
-                  <span>Tổng giá trị đơn hàng:</span>
-                  <span className="text-slate-900 font-black">{formatCurrency(selectedTxForView.totalValue)}</span>
+                  <span>Cộng tiền hàng (trước thuế):</span>
+                  <span className="text-slate-900 font-black">
+                    {formatCurrency(selectedTxForView.totalValue - (selectedTxForView.taxAmount || 0))}
+                  </span>
+                </div>
+                {(selectedTxForView.taxAmount || 0) > 0 && (
+                  <div className="flex justify-between font-bold text-amber-700">
+                    <span>Thuế VAT ({selectedTxForView.taxPercent || 0}%):</span>
+                    <span>+ {formatCurrency(selectedTxForView.taxAmount || 0)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-slate-800 border-t border-slate-200 pt-1.5">
+                  <span>Tổng tiền thanh toán:</span>
+                  <span className="text-blue-700 font-black text-sm">{formatCurrency(selectedTxForView.totalValue)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-emerald-600">
                   <span>Đã thanh toán:</span>
@@ -3115,7 +3234,19 @@ export default function ImportReceipts({
               <div className="w-1/2 ml-auto space-y-2 text-xs border border-slate-200 rounded-xl p-4 bg-slate-50/50 mb-8 font-sans">
                 <div className="flex justify-between text-slate-500 font-bold">
                   <span>Cộng tiền hàng:</span>
-                  <span className="text-slate-900 font-black">{formatCurrency(selectedTxForPrint.totalValue)}</span>
+                  <span className="text-slate-900 font-black">
+                    {formatCurrency(selectedTxForPrint.totalValue - (selectedTxForPrint.taxAmount || 0))}
+                  </span>
+                </div>
+                {(selectedTxForPrint.taxAmount || 0) > 0 && (
+                  <div className="flex justify-between text-amber-700 font-bold">
+                    <span>Thuế VAT ({selectedTxForPrint.taxPercent || 0}%):</span>
+                    <span className="font-black">+ {formatCurrency(selectedTxForPrint.taxAmount || 0)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-slate-900 font-extrabold border-t border-slate-200 pt-1.5">
+                  <span>Tổng tiền thanh toán:</span>
+                  <span className="font-black text-sm">{formatCurrency(selectedTxForPrint.totalValue)}</span>
                 </div>
                 <div className="flex justify-between text-emerald-600 font-bold">
                   <span>Đã thanh toán:</span>
@@ -3302,16 +3433,47 @@ export default function ImportReceipts({
               {editItems.length > 0 && (
                 <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3 font-sans">
                   <div className="flex justify-between text-xs font-bold text-slate-500">
-                    <span>Tổng trị giá nhập kho:</span>
+                    <span>Tổng trị giá tiền hàng:</span>
                     <span className="text-slate-950 font-black">{formatCurrency(calculateEditTotalValue())}</span>
                   </div>
+
+                  {/* Tax Field */}
+                  <div className="flex justify-between items-center text-xs pt-1 border-t border-slate-200/80">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-600">Mục Thuế (VAT):</span>
+                      <div className="flex items-center gap-1">
+                        {[0, 5, 8, 10].map(pct => (
+                          <button
+                            key={pct}
+                            type="button"
+                            onClick={() => setEditTaxPercent(pct)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-black cursor-pointer ${
+                              editTaxPercent === pct ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'
+                            }`}
+                          >
+                            {pct}%
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <span className="font-black text-amber-700">
+                      + {formatCurrency(Math.round((calculateEditTotalValue() * editTaxPercent) / 100))}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between text-xs font-bold text-slate-700 pt-1 border-t border-slate-200">
+                    <span>Tổng tiền thanh toán (sau thuế):</span>
+                    <span className="text-blue-700 font-black text-sm">
+                      {formatCurrency(calculateEditTotalValue() + Math.round((calculateEditTotalValue() * editTaxPercent) / 100))}
+                    </span>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
                     <div>
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Đã thanh toán (VND)</label>
                       <input 
                         type="number"
                         min={0}
-                        max={calculateEditTotalValue()}
                         value={editPaidAmount}
                         onChange={(e) => setEditPaidAmount(Number(e.target.value))}
                         className="w-full px-4 py-2 rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs"
@@ -3320,7 +3482,7 @@ export default function ImportReceipts({
                     <div>
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Ghi nợ nhà cung cấp</label>
                       <div className="px-4 py-2.5 rounded-xl bg-slate-100 border border-slate-200 font-extrabold text-xs text-rose-600">
-                        {formatCurrency(Math.max(0, calculateEditTotalValue() - editPaidAmount))}
+                        {formatCurrency(Math.max(0, (calculateEditTotalValue() + Math.round((calculateEditTotalValue() * editTaxPercent) / 100)) - editPaidAmount))}
                       </div>
                     </div>
                   </div>

@@ -262,8 +262,18 @@ export default function DocumentDetailTab({
 
             <div className="w-full sm:w-72 bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2 text-xs">
               <div className="flex justify-between items-center text-slate-500 font-bold">
-                <span>Tổng giá trị hàng nhập:</span>
-                <span className="text-slate-900 font-black">{formatCurrency(docItem.totalValue)}</span>
+                <span>Cộng tiền hàng:</span>
+                <span className="text-slate-900 font-black">{formatCurrency(docItem.totalValue - (docItem.taxAmount || 0))}</span>
+              </div>
+              {(docItem.taxAmount || 0) > 0 && (
+                <div className="flex justify-between items-center text-amber-700 font-bold">
+                  <span>Thuế VAT ({docItem.taxPercent || 0}%):</span>
+                  <span className="font-black">+ {formatCurrency(docItem.taxAmount || 0)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center text-slate-900 font-black border-t border-slate-200 pt-1">
+                <span>Tổng giá trị thanh toán:</span>
+                <span className="text-blue-700">{formatCurrency(docItem.totalValue)}</span>
               </div>
               <div className="flex justify-between items-center text-emerald-600 font-black pt-1.5 border-t border-slate-100">
                 <span>Đã trả nhà cung cấp:</span>
