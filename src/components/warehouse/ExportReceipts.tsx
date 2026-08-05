@@ -93,6 +93,7 @@ export default function ExportReceipts({
   const [constProjectId, setConstProjectId] = useState('');
   const [constProjectSearch, setConstProjectSearch] = useState('');
   const [isConstProjectDropdownOpen, setIsConstProjectDropdownOpen] = useState(false);
+  const [constStatusFilter, setConstStatusFilter] = useState<'all' | 'contract' | 'installation'>('all');
   const [constSearchTerm, setConstSearchTerm] = useState('');
   const [constStaff, setConstStaff] = useState('');
   const [constNote, setConstNote] = useState('');
@@ -251,27 +252,126 @@ export default function ExportReceipts({
     }
   };
 
-  // Autocomplete Projects for Construction
+  // Helper to check if project/customer status is "Chốt hợp đồng"
+  const isContractSigned = (status?: string) => {
+    if (!status) return false;
+    const st = status.toLowerCase();
+    return (
+      st === 'contract' ||
+      st === 'won' ||
+      st === 'installation' ||
+      st.includes('chốt') ||
+      st.includes('hợp đồng') ||
+      st.includes('chot') ||
+      st.includes('hop dong') ||
+      st.includes('ký') ||
+      st.includes('ky')
+    );
+  };
+
+  const getStatusBadge = (status?: string) => {
+    const st = (status || '').toLowerCase();
+    if (st === 'contract' || st === 'won' || st.includes('chốt') || st.includes('hợp đồng') || st.includes('chot') || st.includes('hop dong')) {
+      return { label: '🎯 Chốt hợp đồng', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+    }
+    if (st === 'installation' || st.includes('thi công')) {
+      return { label: '⚙️ Đang thi công', bg: 'bg-blue-50 text-blue-700 border-blue-200' };
+    }
+    if (st === 'completed' || st.includes('hoàn thành')) {
+      return { label: '✅ Hoàn thành', bg: 'bg-slate-50 text-slate-600 border-slate-200' };
+    }
+    if (st === 'survey' || st === 'proposal' || st.includes('khảo sát') || st.includes('báo giá')) {
+      return { label: '📋 Khảo sát / Báo giá', bg: 'bg-amber-50 text-amber-700 border-amber-200' };
+    }
+    return { label: status || 'Khách hàng', bg: 'bg-slate-50 text-slate-500 border-slate-200' };
+  };
+
+  // Candidate items for Construction Export (combines Projects and Customers)
+  const constructionCandidates = useMemo(() => {
+    const list: Array<{
+      id: string;
+      isProject: boolean;
+      customerName: string;
+      phone: string;
+      address: string;
+      systemSizeKWp?: number;
+      status: string;
+      rawObj: any;
+    }> = [];
+
+    const existingProjectCustIds = new Set<string>();
+
+    // 1. Add all projects
+    projects.forEach(p => {
+      const customerObj = customers.find(c => c.id === p.customerId);
+      if (p.customerId) existingProjectCustIds.add(p.customerId);
+      const name = p.customerName || (customerObj ? (customerObj.fullName || customerObj.name) : 'KH Solar');
+      const phone = p.customerPhone || p.phone || (customerObj ? customerObj.phone : '');
+      const addr = p.address || (customerObj ? customerObj.address : '');
+      const status = p.status || (customerObj ? customerObj.status : 'contract');
+
+      list.push({
+        id: p.id,
+        isProject: true,
+        customerName: name,
+        phone: phone,
+        address: addr,
+        systemSizeKWp: p.systemSizeKWp || 5,
+        status: status,
+        rawObj: p
+      });
+    });
+
+    // 2. Add customers who don't have a project yet or are in won/contract status
+    customers.forEach(c => {
+      if (!existingProjectCustIds.has(c.id) || c.status === 'won' || c.status === 'contract') {
+        if (!list.some(item => item.id === c.id)) {
+          list.push({
+            id: c.id,
+            isProject: false,
+            customerName: c.fullName || c.name || 'Khách hàng',
+            phone: c.phone || '',
+            address: c.address || '',
+            systemSizeKWp: c.systemSizeKWp || 5,
+            status: c.status || 'contract',
+            rawObj: c
+          });
+        }
+      }
+    });
+
+    return list;
+  }, [projects, customers]);
+
+  const contractCount = useMemo(() => {
+    return constructionCandidates.filter(c => isContractSigned(c.status)).length;
+  }, [constructionCandidates]);
+
+  // Autocomplete Projects/Customers for Construction
   const selectedProjectObj = useMemo(() => {
-    return projects.find(p => p.id === constProjectId);
-  }, [constProjectId, projects]);
+    return constructionCandidates.find(c => c.id === constProjectId) || null;
+  }, [constProjectId, constructionCandidates]);
 
   const filteredProjects = useMemo(() => {
+    let result = constructionCandidates;
+
+    if (constStatusFilter === 'contract') {
+      result = result.filter(c => isContractSigned(c.status));
+    } else if (constStatusFilter === 'installation') {
+      result = result.filter(c => (c.status || '').toLowerCase() === 'installation' || (c.status || '').toLowerCase().includes('thi công'));
+    }
+
     const q = constProjectSearch.toLowerCase().trim();
-    if (!q) return projects;
-    return projects.filter(p => {
-      const customerObj = customers.find(c => c.id === p.customerId);
-      const customerPhone = customerObj ? (customerObj.phone || '') : '';
-      return (
-        (p.customerName || '').toLowerCase().includes(q) ||
-        (p.projectName || '').toLowerCase().includes(q) ||
-        (p.id || '').toLowerCase().includes(q) ||
-        (p.customerPhone || '').toLowerCase().includes(q) ||
-        (p.phone || '').toLowerCase().includes(q) ||
-        customerPhone.toLowerCase().includes(q)
-      );
+    if (!q) return result;
+
+    const isSearchingContractTerm = q.includes('chốt') || q.includes('chot') || q.includes('hợp đồng') || q.includes('hop dong') || q.includes('contract') || q.includes('won');
+
+    return result.filter(c => {
+      if (isSearchingContractTerm && isContractSigned(c.status)) return true;
+      const searchableText = `${c.customerName} ${c.phone} ${c.address} ${c.id} ${c.status} ${c.systemSizeKWp}kwp`.toLowerCase();
+      return searchableText.includes(q);
     });
-  }, [constProjectSearch, projects, customers]);
+  }, [constructionCandidates, constStatusFilter, constProjectSearch]);
 
   // Autocomplete Customers for Commercial
   const selectedCustomerObj = useMemo(() => {
@@ -1190,13 +1290,67 @@ export default function ExportReceipts({
 
                 {/* Searchable Autocomplete Project Selection */}
                 <div className="space-y-1.5 relative">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Chọn công trình thi công <span className="text-red-500">*</span></label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Chọn công trình / KH <span className="text-red-500">*</span></label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConstStatusFilter(prev => prev === 'contract' ? 'all' : 'contract');
+                        setIsConstProjectDropdownOpen(true);
+                      }}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all cursor-pointer flex items-center gap-1 ${
+                        constStatusFilter === 'contract'
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                      }`}
+                      title="Chỉ hiển thị các khách hàng / công trình đã Chốt hợp đồng"
+                    >
+                      <span>🎯 Chốt HD ({contractCount})</span>
+                    </button>
+                  </div>
+
+                  {/* Filter Pills */}
+                  <div className="flex items-center gap-1.5 pb-1">
+                    <button
+                      type="button"
+                      onClick={() => setConstStatusFilter('all')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold cursor-pointer transition-all ${
+                        constStatusFilter === 'all'
+                          ? 'bg-slate-800 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      }`}
+                    >
+                      Tất cả ({constructionCandidates.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConstStatusFilter('contract')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold cursor-pointer transition-all flex items-center gap-1 ${
+                        constStatusFilter === 'contract'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60'
+                      }`}
+                    >
+                      <span>🎯 Chốt hợp đồng ({contractCount})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConstStatusFilter('installation')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold cursor-pointer transition-all ${
+                        constStatusFilter === 'installation'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                      }`}
+                    >
+                      ⚙️ Đang thi công
+                    </button>
+                  </div>
                   
                   <div className="relative flex items-center">
                     <input
                       type="text"
-                      placeholder="🔍 Tìm nhanh tên công trình / KH..."
-                      value={isConstProjectDropdownOpen ? constProjectSearch : (selectedProjectObj ? `${selectedProjectObj.customerName || 'KH Solar'} (${selectedProjectObj.systemSizeKWp || 5}kWp)` : '')}
+                      placeholder={constStatusFilter === 'contract' ? "🔍 Tìm nhanh KH Chốt hợp đồng..." : "🔍 Tìm tên KH, SĐT, 'chốt hợp đồng'..."}
+                      value={isConstProjectDropdownOpen ? constProjectSearch : (selectedProjectObj ? `${selectedProjectObj.customerName} (${selectedProjectObj.systemSizeKWp || 5}kWp)` : '')}
                       onChange={(e) => {
                         setConstProjectSearch(e.target.value);
                         setIsConstProjectDropdownOpen(true);
@@ -1228,13 +1382,17 @@ export default function ExportReceipts({
                   </div>
 
                   {isConstProjectDropdownOpen && (
-                    <div className="absolute z-50 left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg">
+                    <div className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl divide-y divide-slate-50">
                       {filteredProjects.length === 0 ? (
-                        <div className="px-3 py-2 text-slate-400 text-xs italic">Không tìm thấy công trình nào</div>
+                        <div className="px-3 py-3 text-slate-400 text-xs italic text-center space-y-1">
+                          <p className="font-bold">Không tìm thấy khách hàng nào</p>
+                          {constStatusFilter === 'contract' && (
+                            <p className="text-[10px] text-slate-400">Bấm "Tất cả" để xem danh sách chưa chốt</p>
+                          )}
+                        </div>
                       ) : (
                         filteredProjects.map(p => {
-                          const customerObj = customers.find(c => c.id === p.customerId);
-                          const customerPhone = p.customerPhone || p.phone || (customerObj ? customerObj.phone : '');
+                          const badge = getStatusBadge(p.status);
                           return (
                             <button
                               key={p.id}
@@ -1244,16 +1402,23 @@ export default function ExportReceipts({
                                 setConstProjectSearch(`${p.customerName} (Hòa lưới ${p.systemSizeKWp || 5}kWp)`);
                                 setIsConstProjectDropdownOpen(false);
                               }}
-                              className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors flex flex-col gap-0.5 border-b border-slate-50 last:border-b-0 cursor-pointer ${
+                              className={`w-full px-3 py-2.5 text-left hover:bg-blue-50 transition-colors flex flex-col gap-1 cursor-pointer ${
                                 constProjectId === p.id ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
                               }`}
                             >
-                              <span className="font-bold text-xs">{p.customerName || 'KH Solar'}</span>
-                              <span className="text-[10px] text-slate-500">
-                                Quy mô: Hòa lưới {p.systemSizeKWp || 5}kWp
-                                {customerPhone && ` | SĐT: ${customerPhone}`}
-                                {p.address && ` | Địa chỉ: ${p.address}`}
-                              </span>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                                  {p.customerName || 'KH Solar'}
+                                </span>
+                                <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border ${badge.bg}`}>
+                                  {badge.label}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <span className="font-semibold text-slate-600">Quy mô: {p.systemSizeKWp || 5} kWp</span>
+                                {p.phone && <span>• SĐT: {p.phone}</span>}
+                                {p.address && <span className="truncate max-w-[180px]">• ĐC: {p.address}</span>}
+                              </div>
                             </button>
                           );
                         })
