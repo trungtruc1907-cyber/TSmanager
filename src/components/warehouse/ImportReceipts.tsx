@@ -44,6 +44,16 @@ interface ImportReceiptsProps {
   onOpenFormTab?: (sourceType: 'import_goods' | 'supplier_return' | 'tech_return' | 'initial_stock') => void;
 }
 
+const getLocalDateTimeString = (dateInput?: string) => {
+  const d = dateInput ? new Date(dateInput) : new Date();
+  if (isNaN(d.getTime())) {
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  }
+  const tzOffset = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+};
+
 export default function ImportReceipts({ 
   transactions, 
   equipment, 
@@ -92,6 +102,7 @@ export default function ImportReceipts({
   const [editingTxId, setEditingTxId] = useState('');
   const [editSupplierId, setEditSupplierId] = useState('');
   const [editNote, setEditNote] = useState('');
+  const [editDate, setEditDate] = useState('');
   const [editPaidAmount, setEditPaidAmount] = useState(0);
   const [editTaxPercent, setEditTaxPercent] = useState(0);
   const [editItems, setEditItems] = useState<Array<{ equipmentId: string, quantity: number, unitPrice: number }>>([]);
@@ -100,6 +111,7 @@ export default function ImportReceipts({
   const [showAddModal, setShowAddModal] = useState(false);
   const [formSupplierId, setFormSupplierId] = useState('');
   const [formNote, setFormNote] = useState('');
+  const [formDate, setFormDate] = useState(() => getLocalDateTimeString());
   const [formPaidAmount, setFormPaidAmount] = useState(0);
   const [formTaxPercent, setFormTaxPercent] = useState(0);
   const [formItems, setFormItems] = useState<Array<{ equipmentId: string, quantity: number, unitPrice: number }>>([]);
@@ -109,6 +121,7 @@ export default function ImportReceipts({
   const [posSupplierId, setPosSupplierId] = useState('');
   const [posPaidAmount, setPosPaidAmount] = useState(0);
   const [posTaxPercent, setPosTaxPercent] = useState(0);
+  const [posImportDate, setPosImportDate] = useState(() => getLocalDateTimeString());
   const [posSearchTerm, setPosSearchTerm] = useState('');
   const [posSupplierSearch, setPosSupplierSearch] = useState('');
   const [importStaff, setImportStaff] = useState('Chống Thấm 36');
@@ -335,11 +348,15 @@ export default function ImportReceipts({
       const totalVal = totalGoodsVal + taxVal;
       const debtVal = Math.max(0, totalVal - formPaidAmount);
 
+      const customDate = formDate ? new Date(formDate) : new Date();
+      const dateStr = formDate ? formDate.split('T')[0] : customDate.toISOString().split('T')[0];
+      const createdAtStr = customDate.toISOString();
+
       const payload: InventoryTransaction = {
         id: receiptId,
         type: 'import',
-        date: new Date().toISOString().split('T')[0],
-        createdAt: new Date().toISOString(),
+        date: dateStr,
+        createdAt: createdAtStr,
         partnerId: formSupplierId,
         partnerName: supName,
         totalValue: totalVal,
@@ -394,6 +411,7 @@ export default function ImportReceipts({
       setShowAddModal(false);
       setFormSupplierId('');
       setFormNote('');
+      setFormDate(getLocalDateTimeString());
       setFormPaidAmount(0);
       setFormTaxPercent(0);
       setFormItems([]);
@@ -609,6 +627,7 @@ export default function ImportReceipts({
     setEditingTxId(tx.id);
     setEditSupplierId(tx.partnerId || '');
     setEditNote(tx.note || '');
+    setEditDate(getLocalDateTimeString(tx.createdAt || tx.date));
     setEditPaidAmount(tx.paidAmount || 0);
     setEditTaxPercent(tx.taxPercent || 0);
     setEditItems(tx.items.map(item => ({
@@ -727,8 +746,14 @@ export default function ImportReceipts({
       }
 
       // 5. Update receipt in Firestore
+      const customDate = editDate ? new Date(editDate) : new Date();
+      const dateStr = editDate ? editDate.split('T')[0] : (originalTx.date || customDate.toISOString().split('T')[0]);
+      const createdAtStr = customDate.toISOString();
+
       const payload: InventoryTransaction = {
         ...originalTx,
+        date: dateStr,
+        createdAt: createdAtStr,
         partnerId: editSupplierId,
         partnerName: supName,
         totalValue: totalVal,
@@ -909,11 +934,15 @@ export default function ImportReceipts({
       const paidVal = posPaidAmount;
       const debtVal = Math.max(0, totalVal - paidVal);
 
+      const customDate = posImportDate ? new Date(posImportDate) : new Date();
+      const dateStr = posImportDate ? posImportDate.split('T')[0] : customDate.toISOString().split('T')[0];
+      const createdAtStr = customDate.toISOString();
+
       const payload: InventoryTransaction = {
         id: receiptId,
         type: 'import',
-        date: new Date().toISOString().split('T')[0],
-        createdAt: new Date().toISOString(),
+        date: dateStr,
+        createdAt: createdAtStr,
         partnerId: posSupplierId,
         partnerName: supName,
         totalValue: totalVal,
@@ -964,6 +993,7 @@ export default function ImportReceipts({
       setPosSupplierId('');
       setPosPaidAmount(0);
       setPosTaxPercent(0);
+      setPosImportDate(getLocalDateTimeString());
       setImportReceiptId('');
       setImportOrderCode('');
       setImportInvoiceNo('');
@@ -1551,14 +1581,17 @@ export default function ImportReceipts({
                 </div>
 
                 {/* Date Row */}
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-2 text-slate-500 font-semibold">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3 gap-2">
+                  <div className="flex items-center gap-2 text-slate-500 font-semibold shrink-0">
                     <Calendar className="h-4 w-4 text-slate-400" />
                     <span>Thời gian</span>
                   </div>
-                  <span className="font-bold text-slate-800">
-                    {new Date().toLocaleDateString('vi-VN')} {new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
+                  <input
+                    type="datetime-local"
+                    value={posImportDate}
+                    onChange={(e) => setPosImportDate(e.target.value)}
+                    className="font-bold text-xs text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 focus:outline-none focus:border-blue-500 cursor-pointer shadow-2xs hover:bg-white transition-all text-right"
+                  />
                 </div>
 
                 {/* Supplier search & select */}
@@ -2840,7 +2873,7 @@ export default function ImportReceipts({
             {/* Modal Form Body */}
             <form onSubmit={handleSubmitReceipt} className="p-8 space-y-5 overflow-y-auto flex-1 text-xs">
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 
                 {/* Supplier Selection */}
                 <div>
@@ -2858,6 +2891,17 @@ export default function ImportReceipts({
                     <option value="INITIAL_STOCK">Nhập tồn đầu kỳ</option>
                     <option value="TECH_RETURN">Kỹ thuật trả vật tư</option>
                   </select>
+                </div>
+
+                {/* Import Date */}
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Thời gian nhập kho</label>
+                  <input
+                    type="datetime-local"
+                    value={formDate}
+                    onChange={(e) => setFormDate(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs text-slate-800 cursor-pointer"
+                  />
                 </div>
 
                 {/* Notes */}
@@ -3316,7 +3360,7 @@ export default function ImportReceipts({
 
             <form onSubmit={handleUpdateReceiptSubmit} className="p-8 space-y-5 overflow-y-auto flex-1 text-xs">
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Đối tác / Nhà cung cấp *</label>
                   <select
@@ -3332,6 +3376,16 @@ export default function ImportReceipts({
                     <option value="INITIAL_STOCK">Hàng tồn kho đầu kỳ</option>
                     <option value="TECH_RETURN">Kỹ thuật trả vật tư</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Thời gian nhập kho</label>
+                  <input
+                    type="datetime-local"
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs text-slate-800 cursor-pointer"
+                  />
                 </div>
 
                 <div>
