@@ -18,7 +18,7 @@ import {
 import { db } from '../../lib/firebase';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { Equipment, InventoryTransaction, MaterialRequest, PurchaseProposal, WarehouseSupplier } from './types';
-import { numberToVietnameseWords, openExportReceiptPrintWindow } from './printUtils';
+import { numberToVietnameseWords, openExportReceiptPrintWindow, openImportReceiptPrintWindow } from './printUtils';
 
 const getSafeISOString = (dateVal: any): string => {
   if (!dateVal) return '';
@@ -157,11 +157,21 @@ export default function DocumentDetailTab({
             </div>
           </div>
           <button 
-            onClick={handlePrint}
-            className="bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95 cursor-pointer"
+            onClick={() => openImportReceiptPrintWindow({
+              receipt: docItem,
+              equipment,
+              suppliers,
+              purchaseProposals: proposals,
+              generalSettings: settings,
+              showUnitPrice: true,
+              pageSize: 'A4',
+              showBarcode: true,
+              autoPrint: true
+            })}
+            className="bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95 cursor-pointer shadow-xs"
           >
-            <Printer className="h-4 w-4" />
-            In phiếu nhập kho
+            <Printer className="h-4 w-4 text-sky-600" />
+            In phiếu nhập kho (Cửa sổ mới)
           </button>
         </div>
 

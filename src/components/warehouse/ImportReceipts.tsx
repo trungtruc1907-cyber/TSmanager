@@ -31,6 +31,7 @@ import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { doc, setDoc, updateDoc, increment, deleteDoc, collection, onSnapshot } from 'firebase/firestore';
 import { InventoryTransaction, Equipment, WarehouseSupplier } from './types';
 import { AppUser } from '../../types';
+import { openImportReceiptPrintWindow } from './printUtils';
 
 interface ImportReceiptsProps {
   transactions: InventoryTransaction[];
@@ -175,14 +176,48 @@ export default function ImportReceipts({
   const [initialPriceToAdd, setInitialPriceToAdd] = useState(0);
   const [initialItems, setInitialItems] = useState<Array<{ equipmentId: string, quantity: number, unitPrice: number }>>([]);
 
+  const [generalSettings, setGeneralSettings] = useState<any>(null);
+
   React.useEffect(() => {
     const unsubUsers = onSnapshot(collection(db, 'users'), (s) => {
       setUsers(s.docs.map(d => ({ id: d.id, ...d.data() } as AppUser)));
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'users');
     });
-    return () => unsubUsers();
+
+    const unsubSettings = onSnapshot(doc(db, 'settings', 'general'), (docSnap) => {
+      if (docSnap.exists()) {
+        setGeneralSettings(docSnap.data());
+      }
+    }, (error) => {
+      console.warn('Error fetching general settings for print:', error);
+    });
+
+    return () => {
+      unsubUsers();
+      unsubSettings();
+    };
   }, []);
+
+  // Trigger dedicated print window
+  const handleOpenPrintReceipt = (tx: InventoryTransaction) => {
+    const win = openImportReceiptPrintWindow({
+      receipt: tx,
+      equipment,
+      suppliers,
+      purchaseProposals,
+      generalSettings,
+      showUnitPrice: true,
+      pageSize: 'A4',
+      showBarcode: true,
+      autoPrint: true
+    });
+
+    // If pop-up is blocked, fallback to in-app modal preview
+    if (!win) {
+      setSelectedTxForPrint(tx);
+    }
+  };
 
   const importStaffList = React.useMemo(() => {
     const filtered = users.filter(u => u.role === 'admin' || u.role === 'operator' || u.role === 'accountant');
@@ -2761,9 +2796,9 @@ export default function ImportReceipts({
 
                           {/* Action: In phiếu */}
                           <button
-                            onClick={() => setSelectedTxForPrint(tx)}
+                            onClick={() => handleOpenPrintReceipt(tx)}
                             className="p-2 bg-sky-50 hover:bg-sky-100 text-sky-600 border border-sky-100 rounded-xl transition-all cursor-pointer shadow-xs hover:text-sky-800"
-                            title="In phiếu"
+                            title="In phiếu nhập kho (Mở cửa sổ in)"
                           >
                             <Printer className="h-4 w-4" />
                           </button>
@@ -3181,7 +3216,15 @@ export default function ImportReceipts({
               </div>
             </div>
 
-            <div className="pt-6 border-t border-slate-100 flex justify-end">
+            <div className="pt-6 border-t border-slate-100 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => handleOpenPrintReceipt(selectedTxForView)}
+                className="bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 shadow-xs"
+              >
+                <Printer className="h-4 w-4 text-sky-600" />
+                In phiếu (Cửa sổ mới)
+              </button>
               <button
                 onClick={() => setSelectedTxForView(null)}
                 className="bg-[#0054a6] hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
@@ -3203,11 +3246,11 @@ export default function ImportReceipts({
               <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Xem bản in phiếu nhập</span>
               <div className="flex items-center gap-2">
                 <button 
-                  onClick={() => window.print()}
+                  onClick={() => handleOpenPrintReceipt(selectedTxForPrint)}
                   className="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                 >
                   <Printer className="h-4 w-4" />
-                  In ngay
+                  Mở in ở cửa sổ mới
                 </button>
                 <button 
                   onClick={() => setSelectedTxForPrint(null)}
