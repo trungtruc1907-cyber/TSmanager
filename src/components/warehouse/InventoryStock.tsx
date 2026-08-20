@@ -27,7 +27,13 @@ import {
   ChevronDown,
   ShoppingBag,
   Clock,
-  ArrowRight
+  ArrowRight,
+  CheckCircle2,
+  PackageCheck,
+  Truck,
+  ExternalLink,
+  Copy,
+  Check
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, doc, setDoc, deleteDoc } from 'firebase/firestore';
@@ -268,6 +274,14 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
   // Selected item for Detail Sidebar (defaults to VT001 to mimic the image)
   const [selectedItem, setSelectedItem] = useState<any>(allItems[0]);
   const [detailTab, setDetailTab] = useState<'info' | 'history' | 'import' | 'export' | 'supplier' | 'docs'>('info');
+
+  // Comprehensive Item Detail & History Modal state
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [detailModalItem, setDetailModalItem] = useState<any>(null);
+  const [modalActiveTab, setModalActiveTab] = useState<'history' | 'info' | 'stats'>('history');
+  const [modalHistoryFilter, setModalHistoryFilter] = useState<'all' | 'import' | 'export'>('all');
+  const [modalHistorySearch, setModalHistorySearch] = useState('');
+  const [showPrintStockCardModal, setShowPrintStockCardModal] = useState(false);
 
   // Modals & UI states
   const [showQrScanner, setShowQrScanner] = useState(false);
@@ -741,8 +755,8 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
   };
 
   // Generate Recharts Area chart data based on active item
-  const getChartData = () => {
-    const base = selectedItem?.stock || 100;
+  const getChartData = (targetItem = selectedItem) => {
+    const base = targetItem?.stock || 100;
     return [
       { name: '01/02', 'Tồn kho': Math.max(0, Math.round(base * 0.85)) },
       { name: '01/03', 'Tồn kho': Math.max(0, Math.round(base * 1.1)) },
@@ -753,35 +767,155 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
     ];
   };
 
-  // Helper to filter and map recent transaction history for selected item
-  const getSelectedHistory = () => {
-    if (!selectedItem) return [];
+  // Comprehensive helper to filter and map all import/export transaction history for any item
+  const getItemTransactions = (item: any) => {
+    if (!item) return [];
     
-    // Filter real transactions
+    // Filter real transactions matching by item ID or Model/Name
     const realHistory = transactions
-      .filter(tx => tx.items?.some(i => i.equipmentId === selectedItem.id))
+      .filter(tx => tx.items?.some(i => 
+        i.equipmentId === item.id || 
+        (i.model && item.model && i.model.trim().toLowerCase() === item.model.trim().toLowerCase()) ||
+        (item.name && i.model && `${i.brand || ''} ${i.model || ''}`.trim().toLowerCase() === item.name.trim().toLowerCase())
+      ))
       .map(tx => {
-        const match = tx.items.find(i => i.equipmentId === selectedItem.id);
+        const match = tx.items.find(i => 
+          i.equipmentId === item.id || 
+          (i.model && item.model && i.model.trim().toLowerCase() === item.model.trim().toLowerCase()) ||
+          (item.name && i.model && `${i.brand || ''} ${i.model || ''}`.trim().toLowerCase() === item.name.trim().toLowerCase())
+        );
+        const isImport = tx.type === 'import';
+        let subType = isImport ? 'Nhập kho mua hàng' : 'Xuất kho giao hàng';
+        if (isImport) {
+          if (tx.id.startsWith('PN-TH') || tx.note?.toLowerCase().includes('trả')) subType = 'Nhập trả hàng';
+          else subType = 'Nhập kho từ NCC';
+        } else {
+          if (tx.id.startsWith('PX-TM')) subType = 'Xuất bán thương mại';
+          else if (tx.id.startsWith('PX-TC')) subType = 'Xuất thi công dự án';
+          else if (tx.id.startsWith('PX-CK')) subType = 'Xuất điều chuyển kho';
+          else subType = 'Xuất kho giao khách';
+        }
+
         return {
           id: tx.id,
           type: tx.type === 'import' ? 'Nhập kho' : 'Xuất kho',
-          isImport: tx.type === 'import',
-          partner: tx.partnerName,
+          subType,
+          isImport,
+          partner: tx.partnerName || (isImport ? 'Nhà cung cấp đối tác' : 'Khách hàng / Dự án'),
+          partnerId: tx.partnerId,
           qty: match?.quantity || 0,
-          date: tx.date,
-          user: tx.createdByName
+          unitPrice: match?.unitPrice || (isImport ? item.unitPrice : item.sellingPrice) || 0,
+          totalPrice: (match?.quantity || 0) * (match?.unitPrice || (isImport ? item.unitPrice : item.sellingPrice) || 0),
+          unit: match?.unit || item.unit || 'Cái',
+          date: tx.date || new Date().toISOString().split('T')[0],
+          user: tx.createdByName || 'Thủ kho Solar',
+          note: tx.note || 'Phiếu nhập xuất đã phê duyệt'
         };
       });
 
-    // Add some realistic mockup transactions if history is empty
+    // Provide rich initial logs if real history from Firestore is empty for mockup items
     if (realHistory.length === 0) {
       return [
-        { id: 'PN000235', type: 'Nhập kho', isImport: true, partner: 'Hãng sản xuất chính', qty: 50, date: '2026-07-05', user: 'Trần Thị Thu' },
-        { id: 'PX000124', type: 'Xuất kho', isImport: false, partner: 'Công trình biệt thự A', qty: 15, date: '2026-07-06', user: 'Lê Văn Tám' },
-        { id: 'PN000212', type: 'Nhập kho', isImport: true, partner: 'Hãng sản xuất chính', qty: 100, date: '2026-06-28', user: 'Trần Thị Thu' }
+        { 
+          id: 'PN000235', 
+          type: 'Nhập kho', 
+          subType: 'Nhập kho từ NCC',
+          isImport: true, 
+          partner: item.supplier || 'Công ty TNHH Thiết Bị Solar Việt Nam', 
+          qty: Math.max(50, Math.round(item.stock * 0.6) || 50), 
+          unitPrice: item.unitPrice || 4500000, 
+          totalPrice: (Math.max(50, Math.round(item.stock * 0.6) || 50)) * (item.unitPrice || 4500000),
+          unit: item.unit || 'Cái', 
+          date: '2026-08-10', 
+          user: 'Trần Thị Thu (Thủ kho)', 
+          note: 'Nhập kho định kỳ theo HĐ cung cấp số 45/2026' 
+        },
+        { 
+          id: 'PX000124', 
+          type: 'Xuất kho', 
+          subType: 'Xuất thi công dự án',
+          isImport: false, 
+          partner: 'Dự án Điện MT Áp Mái 50kWp - KCN Sóng Thần', 
+          qty: Math.max(10, Math.round(item.stock * 0.2) || 15), 
+          unitPrice: item.sellingPrice || (item.unitPrice ? item.unitPrice * 1.25 : 5500000), 
+          totalPrice: (Math.max(10, Math.round(item.stock * 0.2) || 15)) * (item.sellingPrice || (item.unitPrice ? item.unitPrice * 1.25 : 5500000)),
+          unit: item.unit || 'Cái', 
+          date: '2026-08-14', 
+          user: 'Lê Văn Tám (Kỹ thuật trưởng)', 
+          note: 'Bàn giao vật tư cho đội thi công đợt 1' 
+        },
+        { 
+          id: 'PN000212', 
+          type: 'Nhập kho', 
+          subType: 'Nhập kho từ NCC',
+          isImport: true, 
+          partner: item.supplier || 'Tổng kho Phân Phối Thiết Bị Solar', 
+          qty: Math.max(80, Math.round(item.stock * 0.8) || 100), 
+          unitPrice: item.unitPrice || 4500000, 
+          totalPrice: (Math.max(80, Math.round(item.stock * 0.8) || 100)) * (item.unitPrice || 4500000),
+          unit: item.unit || 'Cái', 
+          date: '2026-07-28', 
+          user: 'Trần Thị Thu (Thủ kho)', 
+          note: 'Nhập lô hàng bổ sung chuẩn bị triển khai các dự án mới' 
+        },
+        { 
+          id: 'PX000118', 
+          type: 'Xuất kho', 
+          subType: 'Xuất bán thương mại',
+          isImport: false, 
+          partner: 'Công ty Cổ phần Năng Lượng Xanh Miền Nam', 
+          qty: Math.max(5, Math.round(item.stock * 0.1) || 10), 
+          unitPrice: item.sellingPrice || (item.unitPrice ? item.unitPrice * 1.25 : 5500000), 
+          totalPrice: (Math.max(5, Math.round(item.stock * 0.1) || 10)) * (item.sellingPrice || (item.unitPrice ? item.unitPrice * 1.25 : 5500000)),
+          unit: item.unit || 'Cái', 
+          date: '2026-07-15', 
+          user: 'Nguyễn Văn Hùng (Kinh doanh)', 
+          note: 'Xuất bán thương mại kèm biên bản bàn giao' 
+        }
       ];
     }
-    return realHistory;
+    return realHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  };
+
+  // Helper to filter and map recent transaction history for selected item (used by side panel)
+  const getSelectedHistory = () => {
+    return getItemTransactions(selectedItem);
+  };
+
+  // Open the comprehensive item detail & import-export history modal
+  const handleOpenDetailModal = (item: any, initialTab: 'history' | 'info' | 'stats' = 'history', e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedItem(item);
+    setDetailModalItem(item);
+    setModalActiveTab(initialTab);
+    setModalHistoryFilter('all');
+    setModalHistorySearch('');
+    setShowDetailModal(true);
+  };
+
+  // Export item transaction history to Excel
+  const handleExportItemHistoryToExcel = (item: any) => {
+    if (!item) return;
+    const historyList = getItemTransactions(item);
+    const data = historyList.map((h, idx) => ({
+      'STT': idx + 1,
+      'Mã chứng từ': h.id,
+      'Ngày thực hiện': h.date,
+      'Loại phiếu': h.type,
+      'Phân loại': h.subType,
+      'Đối tác (Khách hàng/NCC/Dự án)': h.partner,
+      'Số lượng': h.qty,
+      'Đơn vị tính': h.unit,
+      'Đơn giá (VND)': h.unitPrice,
+      'Thành tiền (VND)': h.totalPrice,
+      'Người thực hiện': h.user,
+      'Ghi chú': h.note
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'LichSuNhapXuat');
+    XLSX.writeFile(wb, `LichSuNhapXuat_${item.id}_${item.model?.replace(/[/\\?%*:|"<>]/g, '-')}.xlsx`);
   };
 
   return (
@@ -1034,9 +1168,19 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
                           {/* Tên vật tư + Barcode */}
                           <td className="px-5 py-3.5">
                             <div>
-                              <p className="text-xs font-black text-slate-800 leading-normal">{item.model}</p>
+                              <button
+                                type="button"
+                                onClick={(e) => handleOpenDetailModal(item, 'history', e)}
+                                className="text-left font-black text-xs text-slate-800 hover:text-blue-600 hover:underline transition-colors flex items-center gap-1.5 group cursor-pointer"
+                                title="Nhấn vào tên để xem chi tiết và lịch sử nhập xuất của hàng hoá"
+                              >
+                                <span className="group-hover:text-blue-600">{item.model}</span>
+                                <ExternalLink className="h-3 w-3 text-slate-400 group-hover:text-blue-600 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </button>
                               <div className="flex items-center gap-1.5 text-slate-400 font-medium text-[9px] mt-0.5">
-                                <span className="tracking-tighter">||||| {item.barcode}</span>
+                                <span className="tracking-tighter font-mono">||||| {item.barcode}</span>
+                                <span className="text-slate-300">•</span>
+                                <span>{item.brand}</span>
                               </div>
                             </div>
                           </td>
@@ -1105,9 +1249,9 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
                           <td className="px-5 py-3.5">
                             <div className="flex items-center justify-center gap-2">
                               <button 
-                                onClick={(e) => { e.stopPropagation(); setSelectedItem(item); }}
-                                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-all cursor-pointer"
-                                title="Xem chi tiết"
+                                onClick={(e) => handleOpenDetailModal(item, 'history', e)}
+                                className="p-1.5 hover:bg-blue-50 rounded-lg text-slate-400 hover:text-blue-600 transition-all cursor-pointer"
+                                title="Xem chi tiết & lịch sử nhập xuất"
                               >
                                 <Eye className="h-3.5 w-3.5" />
                               </button>
@@ -2054,6 +2198,716 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
           </div>
         </div>
       )}
+
+      {/* 6. MODAL: Comprehensive Product Detail & Import/Export History */}
+      {showDetailModal && detailModalItem && (() => {
+        const itemHistory = getItemTransactions(detailModalItem);
+        const totalImports = itemHistory.filter(h => h.isImport);
+        const totalExports = itemHistory.filter(h => !h.isImport);
+        const totalImportQty = totalImports.reduce((sum, h) => sum + h.qty, 0);
+        const totalExportQty = totalExports.reduce((sum, h) => sum + h.qty, 0);
+        
+        // Filter history by tab/search
+        const filteredHistory = itemHistory.filter(h => {
+          if (modalHistoryFilter === 'import' && !h.isImport) return false;
+          if (modalHistoryFilter === 'export' && h.isImport) return false;
+          if (modalHistorySearch.trim()) {
+            const q = modalHistorySearch.toLowerCase();
+            return (
+              h.id.toLowerCase().includes(q) ||
+              h.partner.toLowerCase().includes(q) ||
+              h.user.toLowerCase().includes(q) ||
+              h.subType.toLowerCase().includes(q) ||
+              (h.note && h.note.toLowerCase().includes(q))
+            );
+          }
+          return true;
+        });
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-5 animate-fade-in backdrop-blur-xs font-sans">
+            <div className="bg-white w-full max-w-6xl rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+              
+              {/* Modal Top Header */}
+              <div className="px-6 sm:px-8 py-5 border-b border-slate-100 bg-slate-50/70 flex flex-wrap justify-between items-center gap-4 shrink-0">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="w-13 h-13 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex items-center justify-center text-2xl shrink-0">
+                    {detailModalItem.type === 'panel' ? '☀️' : detailModalItem.type === 'inverter' ? '⚡' : detailModalItem.type === 'battery' ? '🔋' : '📦'}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-[10px] font-black uppercase tracking-wider bg-slate-900 text-white px-2 py-0.5 rounded-md">
+                        #{detailModalItem.id}
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        {detailModalItem.brand}
+                      </span>
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border ${
+                        detailModalItem.status === 'Bình thường' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                        detailModalItem.status === 'Thiếu hàng' ? 'bg-rose-50 border-rose-200 text-rose-600' :
+                        detailModalItem.status === 'Cảnh báo' ? 'bg-amber-50 border-amber-200 text-amber-600' :
+                        'bg-slate-100 border-slate-200 text-slate-600'
+                      }`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                        {detailModalItem.status}
+                      </span>
+                    </div>
+                    <h2 className="text-base sm:text-lg font-black text-slate-900 leading-snug truncate mt-0.5" title={detailModalItem.model}>
+                      {detailModalItem.model}
+                    </h2>
+                  </div>
+                </div>
+
+                {/* Header Action Tools */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleExportItemHistoryToExcel(detailModalItem)}
+                    className="inline-flex items-center gap-1.5 bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 border border-slate-200 hover:border-emerald-300 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                    title="Xuất file Excel lịch sử nhập xuất của hàng hoá này"
+                  >
+                    <Download className="h-4 w-4 text-emerald-600" />
+                    <span className="hidden sm:inline">Xuất Excel</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPrintStockCardModal(true)}
+                    className="inline-flex items-center gap-1.5 bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-300 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                    title="In thẻ kho / sổ theo dõi chi tiết vật tư"
+                  >
+                    <Printer className="h-4 w-4 text-blue-600" />
+                    <span className="hidden sm:inline">In thẻ kho</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      setShowDetailModal(false);
+                      handleOpenEditModal(detailModalItem, e);
+                    }}
+                    className="inline-flex items-center gap-1.5 bg-white hover:bg-amber-50 text-slate-700 hover:text-amber-700 border border-slate-200 hover:border-amber-300 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                    title="Chỉnh sửa thông số vật tư"
+                  >
+                    <Edit className="h-4 w-4 text-amber-600" />
+                    <span className="hidden sm:inline">Sửa</span>
+                  </button>
+
+                  <button 
+                    onClick={() => setShowDetailModal(false)}
+                    className="w-9 h-9 rounded-full bg-white hover:bg-rose-50 hover:text-rose-600 border border-slate-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
+                    title="Đóng cửa sổ"
+                  >
+                    <X className="h-4 w-4 text-slate-500" />
+                  </button>
+                </div>
+              </div>
+
+              {/* KPI Summary Banner */}
+              <div className="px-6 sm:px-8 py-4 bg-slate-50/40 border-b border-slate-100 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 shrink-0">
+                <div className="bg-white p-3 rounded-2xl border border-slate-100/90 shadow-2xs">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Tồn thực tế</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-lg font-black text-slate-900">{detailModalItem.stock}</span>
+                    <span className="text-[10px] font-bold text-slate-400">{detailModalItem.unit}</span>
+                  </div>
+                </div>
+
+                <div className="bg-emerald-50/40 p-3 rounded-2xl border border-emerald-100 shadow-2xs">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 block mb-0.5">Tồn khả dụng</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-lg font-black text-emerald-700">{detailModalItem.available}</span>
+                    <span className="text-[10px] font-bold text-emerald-600">{detailModalItem.unit}</span>
+                  </div>
+                </div>
+
+                <div className="bg-amber-50/40 p-3 rounded-2xl border border-amber-100 shadow-2xs">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-amber-600 block mb-0.5">Đang giữ / Treo</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-lg font-black text-amber-700">{detailModalItem.holding}</span>
+                    <span className="text-[10px] font-bold text-amber-600">{detailModalItem.unit}</span>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50/40 p-3 rounded-2xl border border-blue-100 shadow-2xs">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-blue-600 block mb-0.5">Đang mua / Về</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-lg font-black text-blue-700">{detailModalItem.buying}</span>
+                    <span className="text-[10px] font-bold text-blue-600">{detailModalItem.unit}</span>
+                  </div>
+                </div>
+
+                <div className="bg-white p-3 rounded-2xl border border-slate-100/90 shadow-2xs">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 block mb-0.5">Tổng nhập ({totalImports.length} lần)</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-lg font-black text-emerald-600">+{totalImportQty}</span>
+                    <span className="text-[10px] font-bold text-slate-400">{detailModalItem.unit}</span>
+                  </div>
+                </div>
+
+                <div className="bg-white p-3 rounded-2xl border border-slate-100/90 shadow-2xs">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-rose-500 block mb-0.5">Tổng xuất ({totalExports.length} lần)</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-lg font-black text-rose-600">-{totalExportQty}</span>
+                    <span className="text-[10px] font-bold text-slate-400">{detailModalItem.unit}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Navigation Tabs */}
+              <div className="px-6 sm:px-8 pt-3 border-b border-slate-100 bg-white flex items-center gap-6 text-xs font-black uppercase tracking-wider shrink-0 overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setModalActiveTab('history')}
+                  className={`pb-3 border-b-2 flex items-center gap-2 cursor-pointer transition-all ${
+                    modalActiveTab === 'history'
+                      ? 'border-[#0054a6] text-[#0054a6]'
+                      : 'border-transparent text-slate-400 hover:text-slate-700'
+                  }`}
+                >
+                  <History className="h-4 w-4" />
+                  <span>Lịch sử nhập xuất ({itemHistory.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setModalActiveTab('info')}
+                  className={`pb-3 border-b-2 flex items-center gap-2 cursor-pointer transition-all ${
+                    modalActiveTab === 'info'
+                      ? 'border-[#0054a6] text-[#0054a6]'
+                      : 'border-transparent text-slate-400 hover:text-slate-700'
+                  }`}
+                >
+                  <Info className="h-4 w-4" />
+                  <span>Thông số chi tiết & Định mức</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setModalActiveTab('stats')}
+                  className={`pb-3 border-b-2 flex items-center gap-2 cursor-pointer transition-all ${
+                    modalActiveTab === 'stats'
+                      ? 'border-[#0054a6] text-[#0054a6]'
+                      : 'border-transparent text-slate-400 hover:text-slate-700'
+                  }`}
+                >
+                  <TrendingUp className="h-4 w-4" />
+                  <span>Biểu đồ biến động 6 tháng</span>
+                </button>
+              </div>
+
+              {/* Modal Body Content Container */}
+              <div className="flex-1 overflow-y-auto p-6 sm:p-8 bg-slate-50/30 min-h-0">
+                
+                {/* TAB 1: Lịch sử nhập xuất của hàng hoá */}
+                {modalActiveTab === 'history' && (
+                  <div className="space-y-4">
+                    
+                    {/* Filter & Search Bar */}
+                    <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-100 shadow-2xs">
+                      
+                      {/* Filter Pills */}
+                      <div className="flex items-center gap-1.5 p-1 bg-slate-100/70 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => setModalHistoryFilter('all')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                            modalHistoryFilter === 'all'
+                              ? 'bg-white text-slate-900 shadow-2xs'
+                              : 'text-slate-500 hover:text-slate-900'
+                          }`}
+                        >
+                          Tất cả ({itemHistory.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setModalHistoryFilter('import')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer ${
+                            modalHistoryFilter === 'import'
+                              ? 'bg-emerald-600 text-white shadow-2xs'
+                              : 'text-emerald-700 hover:bg-emerald-50'
+                          }`}
+                        >
+                          <ArrowUpRight className="h-3.5 w-3.5" />
+                          Nhập ({totalImports.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setModalHistoryFilter('export')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer ${
+                            modalHistoryFilter === 'export'
+                              ? 'bg-rose-600 text-white shadow-2xs'
+                              : 'text-rose-600 hover:bg-rose-50'
+                          }`}
+                        >
+                          <ArrowDownLeft className="h-3.5 w-3.5" />
+                          Xuất ({totalExports.length})
+                        </button>
+                      </div>
+
+                      {/* Search in history */}
+                      <div className="relative min-w-[220px]">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Tìm mã phiếu, đối tác, người tạo..."
+                          value={modalHistorySearch}
+                          onChange={(e) => setModalHistorySearch(e.target.value)}
+                          className="w-full pl-9 pr-8 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-medium"
+                        />
+                        {modalHistorySearch && (
+                          <button
+                            type="button"
+                            onClick={() => setModalHistorySearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Transactions Table */}
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-2xs overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="bg-slate-50/80 border-b border-slate-100 text-slate-400">
+                              <th className="px-4 py-3 text-[9px] font-black uppercase tracking-wider">Ngày GD</th>
+                              <th className="px-4 py-3 text-[9px] font-black uppercase tracking-wider">Mã chứng từ</th>
+                              <th className="px-4 py-3 text-[9px] font-black uppercase tracking-wider">Loại giao dịch</th>
+                              <th className="px-4 py-3 text-[9px] font-black uppercase tracking-wider">Đối tác / Dự án / Khách hàng</th>
+                              <th className="px-4 py-3 text-[9px] font-black uppercase tracking-wider text-right">Số lượng</th>
+                              <th className="px-4 py-3 text-[9px] font-black uppercase tracking-wider text-right">Đơn giá GD</th>
+                              <th className="px-4 py-3 text-[9px] font-black uppercase tracking-wider text-right">Thành tiền</th>
+                              <th className="px-4 py-3 text-[9px] font-black uppercase tracking-wider">Người thực hiện</th>
+                              <th className="px-4 py-3 text-[9px] font-black uppercase tracking-wider">Ghi chú</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50 text-slate-700">
+                            {filteredHistory.length === 0 ? (
+                              <tr>
+                                <td colSpan={9} className="py-12 text-center text-slate-400 italic text-xs">
+                                  Không tìm thấy giao dịch nhập xuất nào phù hợp.
+                                </td>
+                              </tr>
+                            ) : (
+                              filteredHistory.map((h, idx) => (
+                                <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                                  <td className="px-4 py-3 text-slate-600 font-medium whitespace-nowrap">
+                                    {h.date}
+                                  </td>
+                                  <td className="px-4 py-3 font-mono font-black whitespace-nowrap">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] ${
+                                      h.isImport 
+                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                                        : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                    }`}>
+                                      #{h.id}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 whitespace-nowrap">
+                                    <span className="font-bold text-slate-800 block">{h.type}</span>
+                                    <span className="text-[10px] text-slate-400 font-medium block">{h.subType}</span>
+                                  </td>
+                                  <td className="px-4 py-3 max-w-[200px]">
+                                    <span className="font-bold text-slate-800 block truncate" title={h.partner}>
+                                      {h.partner}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-right whitespace-nowrap font-black">
+                                    <span className={`inline-flex items-center gap-0.5 text-xs font-black ${
+                                      h.isImport ? 'text-emerald-600' : 'text-rose-600'
+                                    }`}>
+                                      {h.isImport ? '+' : '-'}{h.qty} {h.unit}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-right whitespace-nowrap font-bold text-slate-600">
+                                    {formatCurrency(h.unitPrice)}
+                                  </td>
+                                  <td className="px-4 py-3 text-right whitespace-nowrap font-black text-slate-900">
+                                    {formatCurrency(h.totalPrice)}
+                                  </td>
+                                  <td className="px-4 py-3 whitespace-nowrap text-slate-600 font-medium">
+                                    {h.user}
+                                  </td>
+                                  <td className="px-4 py-3 text-slate-500 max-w-[180px] truncate" title={h.note}>
+                                    {h.note || '—'}
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                      
+                      {/* Table summary bar */}
+                      <div className="px-6 py-3 bg-slate-50/70 border-t border-slate-100 flex flex-wrap justify-between items-center text-xs font-bold text-slate-500 gap-2">
+                        <span>Hiển thị <strong>{filteredHistory.length}</strong> / {itemHistory.length} giao dịch</span>
+                        <div className="flex items-center gap-4 text-[11px]">
+                          <span>Tổng lượng nhập: <strong className="text-emerald-600">+{totalImportQty} {detailModalItem.unit}</strong></span>
+                          <span>Tổng lượng xuất: <strong className="text-rose-600">-{totalExportQty} {detailModalItem.unit}</strong></span>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+
+                {/* TAB 2: Thông số kỹ thuật & Định mức */}
+                {modalActiveTab === 'info' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      
+                      {/* Card 1: Thông tin định danh & Phân loại */}
+                      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-2xs space-y-4">
+                        <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+                          <PackageCheck className="h-4 w-4 text-blue-600" />
+                          Thông tin định danh & Phân loại
+                        </h4>
+
+                        <div className="grid grid-cols-2 gap-4 text-xs">
+                          <div>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Mã vật tư (SKU)</span>
+                            <span className="font-mono font-black text-slate-900 text-sm">#{detailModalItem.id}</span>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Mã vạch Barcode</span>
+                            <span className="font-mono font-bold text-slate-700 text-xs">||||| {detailModalItem.barcode}</span>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Thương hiệu</span>
+                            <span className="font-black text-slate-800">{detailModalItem.brand}</span>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Nhóm phân loại</span>
+                            <span className="font-black text-slate-800">{detailModalItem.group}</span>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Đơn vị tính (ĐVT)</span>
+                            <span className="font-black text-blue-600">{detailModalItem.unit}</span>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Trạng thái</span>
+                            <span className="font-bold text-emerald-600">{detailModalItem.status}</span>
+                          </div>
+
+                          <div className="col-span-2 pt-2 border-t border-slate-100">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">Mô tả quy cách kỹ thuật</span>
+                            <p className="text-slate-700 font-medium text-xs leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">
+                              {detailModalItem.details || 'Chưa cập nhật chi tiết quy cách thông số.'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Card 2: Vị trí kho & Định mức tồn kho */}
+                      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-2xs space-y-4">
+                        <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+                          <MapPin className="h-4 w-4 text-emerald-600" />
+                          Vị trí lưu kho & Định mức tồn
+                        </h4>
+
+                        <div className="grid grid-cols-2 gap-4 text-xs">
+                          <div>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Kho lưu trữ</span>
+                            <span className="font-black text-slate-900">{detailModalItem.kho}</span>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Vị trí kệ</span>
+                            <span className="font-black text-slate-700 bg-slate-100 px-2 py-1 rounded-md inline-block">
+                              {detailModalItem.location || 'Chưa phân kệ'}
+                            </span>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Mức tồn tối thiểu (Min)</span>
+                            <span className="font-black text-rose-600">{detailModalItem.minStock} {detailModalItem.unit}</span>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Mức tồn tối đa (Max)</span>
+                            <span className="font-black text-slate-800">{detailModalItem.maxStock} {detailModalItem.unit}</span>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Giá nhập vốn gần nhất</span>
+                            <span className="font-black text-slate-900 text-sm">{formatCurrency(detailModalItem.unitPrice)}</span>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Giá bán đề xuất</span>
+                            <span className="font-black text-emerald-700 text-sm">{formatCurrency(detailModalItem.sellingPrice || detailModalItem.unitPrice * 1.25)}</span>
+                          </div>
+
+                          <div className="col-span-2 pt-2 border-t border-slate-100">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">Nhà cung cấp phân phối chính</span>
+                            <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
+                              <span className="font-black text-slate-800">{detailModalItem.supplier || 'Chưa liên kết nhà cung cấp'}</span>
+                              <Truck className="h-4 w-4 text-slate-400" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 3: Biến động tồn kho & Thống kê */}
+                {modalActiveTab === 'stats' && (
+                  <div className="space-y-6">
+                    
+                    {/* Area Chart 6 Months */}
+                    <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-2xs space-y-3">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">Biểu đồ biến động số lượng tồn kho (6 tháng)</h4>
+                          <p className="text-[10px] text-slate-400 font-medium mt-0.5">Dữ liệu ghi nhận từ các chu kỳ kiểm kê và giao dịch nhập/xuất</p>
+                        </div>
+                        <span className="text-xs font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-xl">
+                          Hiện tại: {detailModalItem.stock} {detailModalItem.unit}
+                        </span>
+                      </div>
+
+                      <div className="h-[220px] w-full pt-4 text-xs font-bold">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={getChartData(detailModalItem)} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id="colorStockModal" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#0054a6" stopOpacity={0.3}/>
+                                <stop offset="95%" stopColor="#0054a6" stopOpacity={0.0}/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                            <YAxis tickLine={false} axisLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                            <Tooltip 
+                              contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', border: 'none', color: '#fff', fontSize: '11px' }}
+                            />
+                            <Area type="monotone" dataKey="Tồn kho" stroke="#0054a6" strokeWidth={3} fillOpacity={1} fill="url(#colorStockModal)" />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    {/* Breakdown distribution cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="bg-emerald-50/50 p-5 rounded-2xl border border-emerald-100 text-center">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 block mb-1">Tỷ lệ khả dụng</span>
+                        <span className="text-2xl font-black text-emerald-700">
+                          {detailModalItem.stock > 0 ? Math.round((detailModalItem.available / detailModalItem.stock) * 100) : 0}%
+                        </span>
+                        <p className="text-[10px] text-emerald-600 mt-1 font-medium">{detailModalItem.available} / {detailModalItem.stock} {detailModalItem.unit}</p>
+                      </div>
+
+                      <div className="bg-amber-50/50 p-5 rounded-2xl border border-amber-100 text-center">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-amber-600 block mb-1">Tỷ lệ đang giữ</span>
+                        <span className="text-2xl font-black text-amber-700">
+                          {detailModalItem.stock > 0 ? Math.round((detailModalItem.holding / detailModalItem.stock) * 100) : 0}%
+                        </span>
+                        <p className="text-[10px] text-amber-600 mt-1 font-medium">{detailModalItem.holding} {detailModalItem.unit} dành cho dự án</p>
+                      </div>
+
+                      <div className="bg-blue-50/50 p-5 rounded-2xl border border-blue-100 text-center">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 block mb-1">Ước tính giá trị</span>
+                        <span className="text-lg font-black text-blue-800">
+                          {formatCurrency(detailModalItem.stock * detailModalItem.unitPrice)}
+                        </span>
+                        <p className="text-[10px] text-blue-600 mt-1 font-medium">Theo đơn giá nhập vốn</p>
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+
+              </div>
+
+              {/* Modal Bottom Footer */}
+              <div className="px-6 sm:px-8 py-4 border-t border-slate-100 bg-slate-50/60 flex justify-between items-center shrink-0">
+                <span className="text-[11px] font-bold text-slate-400 hidden sm:inline">
+                  Mã SKU: <strong className="text-slate-700 font-mono">#{detailModalItem.id}</strong> — Vị trí: <strong className="text-slate-700">{detailModalItem.location || 'Kho Solar'}</strong>
+                </span>
+
+                <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowDetailModal(false)}
+                    className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+                  >
+                    Đóng
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleExportItemHistoryToExcel(detailModalItem)}
+                    className="bg-[#0054a6] hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-xs active:scale-95 flex items-center gap-2 cursor-pointer"
+                  >
+                    <Download className="h-4 w-4" />
+                    Tải lịch sử Excel
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 7. MODAL: Printable Stock Card (Thẻ kho chi tiết) */}
+      {showPrintStockCardModal && detailModalItem && (() => {
+        const itemHistory = getItemTransactions(detailModalItem);
+        return (
+          <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans print:p-0 print:bg-white print:static print:inset-auto">
+            <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden print:shadow-none print:border-none print:h-auto print:max-w-full print:w-full print:bg-white">
+              
+              {/* Modal Top Header (Hidden on print) */}
+              <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 print:hidden shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                    <Printer className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-900">Bản in Thẻ Kho / Sổ Theo Dõi Vật Tư</h3>
+                    <p className="text-[10px] text-slate-400 font-bold mt-0.5">Chuẩn mẫu biểu kế toán quản trị kho vật tư thiết bị Solar</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => window.print()}
+                    className="bg-[#0054a6] hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
+                  >
+                    <Printer className="h-4 w-4" />
+                    In Thẻ Kho
+                  </button>
+                  <button 
+                    onClick={() => setShowPrintStockCardModal(false)}
+                    className="p-2 hover:bg-slate-100 rounded-xl transition-all cursor-pointer text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Printable Body Content */}
+              <div className="flex-1 p-8 sm:p-12 overflow-y-auto print:p-0 print:overflow-visible">
+                
+                {/* Official Header */}
+                <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">CÔNG TY TNHH KỸ THUẬT NĂNG LƯỢNG TRƯỜNG SƠN</h4>
+                    <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Kho hàng: {detailModalItem.kho || 'KHO VẬT TƯ CHÍNH'}</p>
+                    <p className="text-[10px] text-slate-500 font-semibold">Địa chỉ: KCN Sóng Thần, Dĩ An, Bình Dương</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-mono text-xs font-black text-slate-900 block">Mẫu số: 06-VT</span>
+                    <span className="text-[9px] text-slate-400 italic block">(Ban hành theo TT số 200/2014/TT-BTC)</span>
+                  </div>
+                </div>
+
+                {/* Title */}
+                <div className="text-center my-6 space-y-1">
+                  <h2 className="text-xl font-black text-slate-900 uppercase tracking-wide">THẺ KHO (SỔ KHO)</h2>
+                  <p className="text-xs text-slate-500 italic">Ngày lập thẻ: {new Date().toLocaleDateString('vi-VN')}</p>
+                </div>
+
+                {/* Item Details Block */}
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-2 gap-3 text-xs mb-6">
+                  <div>
+                    <span className="text-slate-500">Tên, quy cách vật tư:</span> <strong className="text-slate-900">{detailModalItem.model}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Mã số vật tư:</span> <strong className="text-slate-900 font-mono">#{detailModalItem.id}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Đơn vị tính:</span> <strong className="text-slate-900">{detailModalItem.unit}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Vị trí lưu kho:</span> <strong className="text-slate-900">{detailModalItem.location || 'Chưa xác định'}</strong>
+                  </div>
+                </div>
+
+                {/* Table of Stock Card Movements */}
+                <table className="w-full border-collapse border border-slate-300 text-xs mb-8">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-800 text-[10px] font-black uppercase">
+                      <th className="border border-slate-300 p-2 text-center" rowSpan={2}>STT</th>
+                      <th className="border border-slate-300 p-2 text-center" rowSpan={2}>Ngày tháng</th>
+                      <th className="border border-slate-300 p-2 text-center" colSpan={2}>Số hiệu chứng từ</th>
+                      <th className="border border-slate-300 p-2 text-left" rowSpan={2}>Diễn giải giao dịch</th>
+                      <th className="border border-slate-300 p-2 text-right" colSpan={3}>Số lượng ({detailModalItem.unit})</th>
+                      <th className="border border-slate-300 p-2 text-center" rowSpan={2}>Ký xác nhận</th>
+                    </tr>
+                    <tr className="bg-slate-100 text-slate-800 text-[9px] font-black uppercase">
+                      <th className="border border-slate-300 p-1.5 text-center">Thu</th>
+                      <th className="border border-slate-300 p-1.5 text-center">Chi</th>
+                      <th className="border border-slate-300 p-1.5 text-right">Nhập</th>
+                      <th className="border border-slate-300 p-1.5 text-right">Xuất</th>
+                      <th className="border border-slate-300 p-1.5 text-right">Tồn</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {itemHistory.map((h, i) => (
+                      <tr key={i} className="text-slate-800">
+                        <td className="border border-slate-300 p-2 text-center font-medium">{i + 1}</td>
+                        <td className="border border-slate-300 p-2 text-center font-medium">{h.date}</td>
+                        <td className="border border-slate-300 p-2 text-center font-mono font-bold">{h.isImport ? h.id : '—'}</td>
+                        <td className="border border-slate-300 p-2 text-center font-mono font-bold">{!h.isImport ? h.id : '—'}</td>
+                        <td className="border border-slate-300 p-2 font-medium">{h.subType} - {h.partner}</td>
+                        <td className="border border-slate-300 p-2 text-right font-black text-emerald-700">{h.isImport ? h.qty : '—'}</td>
+                        <td className="border border-slate-300 p-2 text-right font-black text-rose-700">{!h.isImport ? h.qty : '—'}</td>
+                        <td className="border border-slate-300 p-2 text-right font-black text-slate-900">{detailModalItem.stock}</td>
+                        <td className="border border-slate-300 p-2 text-center text-slate-400 italic font-mono text-[9px]">{h.user}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {/* Signature Blocks */}
+                <div className="grid grid-cols-3 gap-6 text-center text-xs mt-12 pt-6">
+                  <div>
+                    <span className="font-black text-slate-900 uppercase block">Người lập thẻ</span>
+                    <span className="text-[10px] text-slate-400 italic block mt-0.5">(Ký, họ tên)</span>
+                    <div className="h-20" />
+                    <span className="font-bold text-slate-800">Trần Thị Thu</span>
+                  </div>
+                  <div>
+                    <span className="font-black text-slate-900 uppercase block">Thủ kho</span>
+                    <span className="text-[10px] text-slate-400 italic block mt-0.5">(Ký, họ tên)</span>
+                    <div className="h-20" />
+                    <span className="font-bold text-slate-800">Lê Văn Tám</span>
+                  </div>
+                  <div>
+                    <span className="font-black text-slate-900 uppercase block">Kế toán trưởng</span>
+                    <span className="text-[10px] text-slate-400 italic block mt-0.5">(Ký, họ tên)</span>
+                    <div className="h-20" />
+                    <span className="font-bold text-slate-800">Nguyễn Quốc Bảo</span>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Modal Footer (Hidden on print) */}
+              <div className="px-8 py-4 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50 print:hidden shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowPrintStockCardModal(false)}
+                  className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer"
+                >
+                  Đóng lại
+                </button>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

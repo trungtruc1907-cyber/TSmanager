@@ -18,6 +18,7 @@ import {
 import { db } from '../../lib/firebase';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { Equipment, InventoryTransaction, MaterialRequest, PurchaseProposal, WarehouseSupplier } from './types';
+import { numberToVietnameseWords, openExportReceiptPrintWindow } from './printUtils';
 
 const getSafeISOString = (dateVal: any): string => {
   if (!dateVal) return '';
@@ -353,11 +354,25 @@ export default function DocumentDetailTab({
             </div>
           </div>
           <button 
-            onClick={handlePrint}
-            className="bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95 cursor-pointer"
+            onClick={() => {
+              const win = openExportReceiptPrintWindow({
+                receipt: docItem,
+                equipment,
+                generalSettings: settings,
+                showUnitPrice: true,
+                pageSize: 'A4',
+                showBarcode: true,
+                autoPrint: true
+              });
+              if (!win) {
+                handlePrint();
+              }
+            }}
+            className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95 cursor-pointer shadow-xs"
+            title="Mở bản in ở cửa sổ / tab mới của trình duyệt"
           >
-            <Printer className="h-4 w-4" />
-            In phiếu xuất kho
+            <Printer className="h-4 w-4 text-blue-600" />
+            In phiếu xuất kho (Cửa sổ mới)
           </button>
         </div>
 
@@ -365,7 +380,7 @@ export default function DocumentDetailTab({
         <div className="space-y-6">
           
           {/* Header section with brand identity */}
-          <div className="flex justify-between items-start gap-4">
+          <div className="flex justify-between items-start gap-4 border-b-2 border-slate-900 pb-4 print:border-b-2">
             <div className="flex-1">
               {settings?.printHeaderUrl ? (
                 <div className="w-full max-h-24 overflow-hidden mb-2">
@@ -379,115 +394,198 @@ export default function DocumentDetailTab({
               ) : (
                 <>
                   <span className="text-sm font-black text-[#0054a6] uppercase tracking-widest block">
-                    {settings?.companyName || 'VINASOLAR TECHNOLOGY CO., LTD'}
+                    {settings?.companyName || 'CÔNG TY TNHH KỸ THUẬT NĂNG LƯỢNG TRƯỜNG SƠN'}
                   </span>
-                  <p className="text-[10px] text-slate-400 font-bold mt-1">
-                    {settings?.companyTagline || 'Hệ Thống Quản Lý Kho & Vật Tư Cơ Điện Mặt Trời'}
+                  <p className="text-[10px] text-slate-500 font-bold mt-1">
+                    {settings?.address || 'KCN Sóng Thần, TP. Dĩ An, Tỉnh Bình Dương - CN TP.HCM'}
                   </p>
-                  <p className="text-[10px] text-slate-400 font-bold">
-                    Số điện thoại: {settings?.phone || '028.6277.8849'} | Website: {settings?.website || 'vinasolar.com'}
+                  <p className="text-[10px] text-slate-500 font-bold">
+                    Số điện thoại: {settings?.phone || '0988.123.456'} | Website: {settings?.website || 'truongsonenergy.vn'}
                   </p>
                 </>
               )}
             </div>
-            <div className="text-right shrink-0">
-              <span className="text-xs font-black uppercase text-slate-400 block tracking-widest">PHIẾU XUẤT KHO VẬT TƯ</span>
-              <span className="text-sm font-black text-slate-900 font-mono mt-1 block">SỐ: #{docItem.id}</span>
-              <span className="text-[10px] text-slate-400 font-bold mt-1 block">Ngày xuất: {docItem.date}</span>
-            </div>
-          </div>
-
-          <div className="h-px bg-dashed bg-slate-200" />
-
-          {/* Supplier details / Creator */}
-          <div className="grid grid-cols-2 gap-6 text-xs text-slate-700">
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Công trình thi công nhận cấp phát</p>
-              {docItem.partnerId && docItem.partnerId !== 'PRJ_TEMP' && docItem.partnerId !== 'PROJ_DEFAULT' && onOpenProject ? (
-                <button
-                  onClick={() => onOpenProject(docItem.partnerId)}
-                  className="font-extrabold text-blue-600 hover:underline flex items-center gap-1.5 cursor-pointer text-left focus:outline-none"
-                  title="Click để xem chi tiết công trình"
-                >
-                  <Briefcase className="h-4 w-4 text-blue-500 shrink-0" />
-                  <span className="underline decoration-dotted">{docItem.partnerName}</span>
-                </button>
-              ) : (
-                <p className="font-extrabold text-slate-900 flex items-center gap-1">
-                  <Briefcase className="h-4 w-4 text-slate-400" />
-                  {docItem.partnerName}
-                </p>
-              )}
-              <p className="font-semibold text-slate-500">Mã liên kết công trình: {docItem.partnerId || 'PROJ_DEFAULT'}</p>
-              <p className="font-medium text-slate-500 italic">Mô tả: {docItem.note}</p>
-            </div>
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Bên xuất hàng / Thủ kho</p>
-              <p className="font-extrabold text-slate-900 flex items-center gap-1">
-                <User className="h-4 w-4 text-slate-400" />
-                {docItem.createdByName || 'Thủ kho Solar'}
-              </p>
-              <p className="font-semibold text-slate-500">Địa điểm xuất hàng: Kho tổng miền Nam</p>
-              <p className="font-semibold text-slate-500">Giờ ghi sổ: {getSafeISOString(docItem.createdAt).substring(11, 16) || '11:20'}</p>
-            </div>
-          </div>
-
-          {/* Line Items Table */}
-          <table className="w-full text-left border-collapse mt-4 text-xs">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="px-4 py-3 font-black uppercase text-slate-400">STT</th>
-                <th className="px-4 py-3 font-black uppercase text-slate-400">Thiết bị / Model vật tư</th>
-                <th className="px-4 py-3 font-black uppercase text-slate-400 text-center">ĐVT</th>
-                <th className="px-4 py-3 font-black uppercase text-slate-400 text-right">Số lượng xuất</th>
-                <th className="px-4 py-3 font-black uppercase text-slate-400 text-right">Đơn giá vốn phân bổ</th>
-                <th className="px-4 py-3 font-black uppercase text-slate-400 text-right">Giá trị xuất</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-bold text-slate-800">
-              {docItem.items?.map((item, idx) => (
-                <tr key={idx}>
-                  <td className="px-4 py-3.5 font-mono text-slate-400">{idx + 1}</td>
-                  <td className="px-4 py-3.5">
-                    <span className="text-[9px] font-black text-blue-600 block leading-none">{item.brand}</span>
-                    <span className="text-xs font-black text-slate-800">{item.model}</span>
-                    <span className="text-[9px] font-bold text-slate-400 block mt-0.5">Mã thiết bị: #{item.equipmentId}</span>
-                  </td>
-                  <td className="px-4 py-3.5 text-center text-slate-500">{item.unit || 'Cái'}</td>
-                  <td className="px-4 py-3.5 text-right font-black text-slate-900">{item.quantity}</td>
-                  <td className="px-4 py-3.5 text-right">{formatCurrency(item.unitPrice || 0)}</td>
-                  <td className="px-4 py-3.5 text-right text-slate-950 font-black">{formatCurrency((item.quantity || 1) * (item.unitPrice || 0))}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {/* Money totals and signature lines */}
-          <div className="flex flex-col sm:flex-row justify-between items-start gap-6 pt-4 border-t border-slate-100">
-            <div className="text-slate-400 italic text-[11px] font-semibold max-w-sm">
-              * Quy định quản lý: Kỹ thuật thi công có trách nhiệm kiểm tra đúng chủng loại, quy cách đóng gói và chữ ký của đại diện kho vận trước khi vận chuyển thiết bị ra khỏi khu vực kho bãi.
-            </div>
-
-            <div className="w-full sm:w-72 bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2 text-xs">
-              <div className="flex justify-between items-center text-slate-900 font-black">
-                <span>Tổng giá trị hàng xuất kho:</span>
-                <span className="text-rose-600 font-black">{formatCurrency(docItem.totalValue)}</span>
+            <div className="text-right shrink-0 space-y-1">
+              <div className="border border-slate-900 px-3 py-1 text-center inline-block rounded-xs bg-slate-50 print:bg-transparent">
+                <span className="font-bold text-[10px] uppercase block tracking-wider text-slate-800">Mẫu số: 02 - VT</span>
+                <span className="text-[8px] text-slate-500 block italic leading-tight">(Ban hành theo TT số 200/2014/TT-BTC)</span>
+              </div>
+              <div>
+                <span className="text-xs font-black text-slate-900 font-mono block">SỐ: #{docItem.id}</span>
+                <span className="text-[10px] text-slate-500 font-bold block">Ngày xuất: {docItem.date}</span>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4 text-center text-xs pt-10">
-            <div className="space-y-16">
-              <p className="font-black text-slate-800 uppercase tracking-wider">Thủ kho lập phiếu</p>
-              <p className="font-black text-slate-800">Thủ kho Vinasolar</p>
+          {/* Title and Barcode */}
+          <div className="text-center my-4 space-y-1">
+            <h1 className="text-xl font-black text-slate-950 uppercase tracking-wider">
+              PHIẾU XUẤT KHO VẬT TƯ
+            </h1>
+            <p className="text-[11px] font-bold text-slate-600 uppercase tracking-widest">
+              ({docItem.id.startsWith('PX-TC') ? 'XUẤT CẤP PHÁT THI CÔNG DỰ ÁN' : docItem.id.startsWith('PX-TM') ? 'XUẤT BÁN HÀNG THƯƠNG MẠI' : 'XUẤT THANH LÝ / HỦY KHO'})
+            </p>
+            <div className="flex flex-col items-center justify-center pt-1 print:flex">
+              <div className="font-mono tracking-widest text-[9px] text-slate-400 select-none scale-y-125">
+                ||| | |||| || | ||||| || ||| |||| | ||||| | ||
+              </div>
+              <span className="font-mono text-[8px] font-bold text-slate-500">*{docItem.id}*</span>
             </div>
-            <div className="space-y-16">
-              <p className="font-black text-slate-800 uppercase tracking-wider">Người nhận hàng (Kỹ thuật)</p>
-              <p className="font-extrabold text-slate-400 italic">(Ký, ghi rõ họ tên)</p>
+          </div>
+
+          {/* Supplier details / Creator */}
+          <div className="border border-slate-900 rounded-sm p-4 text-xs text-slate-900 bg-slate-50/50 print:bg-transparent space-y-2">
+            <div className="grid grid-cols-12 gap-2">
+              <div className="col-span-12 sm:col-span-8 flex items-baseline">
+                <span className="font-bold shrink-0 w-44">Đơn vị / Công trình nhận:</span>
+                {docItem.partnerId && docItem.partnerId !== 'PRJ_TEMP' && docItem.partnerId !== 'PROJ_DEFAULT' && onOpenProject ? (
+                  <button
+                    onClick={() => onOpenProject(docItem.partnerId)}
+                    className="font-black text-blue-600 hover:underline border-b border-dotted border-slate-400 flex-1 pb-0.5 text-left cursor-pointer focus:outline-none"
+                    title="Click để xem chi tiết công trình"
+                  >
+                    {docItem.partnerName}
+                  </button>
+                ) : (
+                  <span className="font-black text-slate-950 border-b border-dotted border-slate-400 flex-1 pb-0.5">
+                    {docItem.partnerName}
+                  </span>
+                )}
+              </div>
+              <div className="col-span-12 sm:col-span-4 flex items-baseline">
+                <span className="font-bold shrink-0 w-24">Mã liên kết:</span>
+                <span className="font-mono font-bold text-slate-950 border-b border-dotted border-slate-400 flex-1 pb-0.5">
+                  {docItem.partnerId || 'PROJ_DEFAULT'}
+                </span>
+              </div>
             </div>
-            <div className="space-y-16">
-              <p className="font-black text-slate-800 uppercase tracking-wider">Đơn vị vận chuyển</p>
-              <p className="font-extrabold text-slate-400 italic">(Ký, ghi rõ họ tên)</p>
+
+            <div className="flex items-baseline">
+              <span className="font-bold shrink-0 w-44">Lý do / Mục đích xuất kho:</span>
+              <span className="font-medium text-slate-900 border-b border-dotted border-slate-400 flex-1 pb-0.5 italic">
+                {docItem.note || 'Xuất kho cấp phát vật tư thiết bị phục vụ công trình năng lượng mặt trời'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-12 gap-2">
+              <div className="col-span-12 sm:col-span-8 flex items-baseline">
+                <span className="font-bold shrink-0 w-44">Xuất tại kho:</span>
+                <span className="font-semibold text-slate-950 border-b border-dotted border-slate-400 flex-1 pb-0.5">
+                  Kho Tổng Vật Tư Năng Lượng Mặt Trời (Trường Sơn Solar)
+                </span>
+              </div>
+              <div className="col-span-12 sm:col-span-4 flex items-baseline">
+                <span className="font-bold shrink-0 w-24">Thủ kho:</span>
+                <span className="font-bold text-slate-950 border-b border-dotted border-slate-400 flex-1 pb-0.5">
+                  {docItem.createdByName || 'Thủ kho Solar'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Line Items Table */}
+          <table className="w-full text-left border-collapse mt-4 text-xs border border-slate-900">
+            <thead>
+              <tr className="border-b border-slate-900 bg-slate-100 print:bg-slate-100 text-center font-black">
+                <th className="border border-slate-900 px-3 py-2 w-10">STT</th>
+                <th className="border border-slate-900 px-4 py-2 text-left">Tên, nhãn hiệu, quy cách phẩm chất vật tư</th>
+                <th className="border border-slate-900 px-2 py-2 text-center w-16">ĐVT</th>
+                <th className="border border-slate-900 px-3 py-2 text-right w-20">SL Xuất</th>
+                <th className="border border-slate-900 px-3 py-2 text-right w-28">Đơn giá</th>
+                <th className="border border-slate-900 px-4 py-2 text-right w-32">Thành tiền</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 font-bold text-slate-800">
+              {docItem.items?.map((item, idx) => (
+                <tr key={idx} className="border-b border-slate-900 hover:bg-slate-50/50">
+                  <td className="border border-slate-900 px-3 py-3 font-mono text-center text-slate-500">{idx + 1}</td>
+                  <td className="border border-slate-900 px-4 py-3">
+                    <span className="text-[9px] font-black text-rose-600 block leading-none">{item.brand}</span>
+                    <span className="text-xs font-black text-slate-900">{item.model}</span>
+                    <span className="text-[9px] font-bold text-slate-400 block mt-0.5 font-mono">Mã SKU: #{item.equipmentId}</span>
+                  </td>
+                  <td className="border border-slate-900 px-2 py-3 text-center text-slate-700">{item.unit || 'Cái'}</td>
+                  <td className="border border-slate-900 px-3 py-3 text-right font-black text-slate-950">{item.quantity}</td>
+                  <td className="border border-slate-900 px-3 py-3 text-right text-slate-700">{formatCurrency(item.unitPrice || 0)}</td>
+                  <td className="border border-slate-900 px-4 py-3 text-right text-slate-950 font-black">{formatCurrency((item.quantity || 1) * (item.unitPrice || 0))}</td>
+                </tr>
+              ))}
+              <tr className="font-black bg-slate-100 print:bg-slate-100 border-t-2 border-slate-900">
+                <td colSpan={3} className="border border-slate-900 px-4 py-2.5 text-right uppercase tracking-wider">
+                  Tổng Cộng:
+                </td>
+                <td className="border border-slate-900 px-3 py-2.5 text-right font-black text-slate-950">
+                  {docItem.items?.reduce((s, i) => s + (i.quantity || 0), 0)}
+                </td>
+                <td className="border border-slate-900 px-3 py-2.5 text-center text-slate-400">x</td>
+                <td className="border border-slate-900 px-4 py-2.5 text-right text-rose-700 font-black">
+                  {formatCurrency(docItem.totalValue)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Money totals and in words */}
+          <div className="space-y-1.5 pt-2 text-xs text-slate-900">
+            <p className="font-medium">
+              - Tổng số tiền hàng xuất kho (viết bằng chữ):{' '}
+              <strong className="font-black text-slate-950 italic">
+                {numberToVietnameseWords(docItem.totalValue)}
+              </strong>
+            </p>
+            <p className="text-[11px] text-slate-500 italic">
+              * Quy định quản lý: Kỹ thuật thi công có trách nhiệm kiểm tra đúng chủng loại, quy cách đóng gói và chữ ký của đại diện kho vận trước khi vận chuyển thiết bị ra khỏi khu vực kho bãi.
+            </p>
+          </div>
+
+          {/* 5 Signature Blocks */}
+          <div className="pt-6">
+            <div className="text-right text-xs italic text-slate-700 mb-2 font-serif">
+              Ngày xuất: {docItem.date}
+            </div>
+
+            <div className="grid grid-cols-5 gap-2 text-center text-[11px]">
+              <div className="flex flex-col justify-between h-28">
+                <div>
+                  <p className="font-black uppercase tracking-wider text-slate-900">Người lập phiếu</p>
+                  <p className="text-[10px] text-slate-500 italic">(Ký, họ tên)</p>
+                </div>
+                <p className="font-bold text-slate-900">{docItem.createdByName || 'Thủ kho Solar'}</p>
+              </div>
+
+              <div className="flex flex-col justify-between h-28">
+                <div>
+                  <p className="font-black uppercase tracking-wider text-slate-900">Người nhận hàng</p>
+                  <p className="text-[10px] text-slate-500 italic">(Ký, họ tên)</p>
+                </div>
+                <p className="font-bold text-slate-900 truncate px-1" title={docItem.partnerName}>
+                  {docItem.partnerName}
+                </p>
+              </div>
+
+              <div className="flex flex-col justify-between h-28">
+                <div>
+                  <p className="font-black uppercase tracking-wider text-slate-900">Thủ kho xuất</p>
+                  <p className="text-[10px] text-slate-500 italic">(Ký, họ tên)</p>
+                </div>
+                <p className="font-bold text-slate-900">Thủ kho Vinasolar</p>
+              </div>
+
+              <div className="flex flex-col justify-between h-28">
+                <div>
+                  <p className="font-black uppercase tracking-wider text-slate-900">Kế toán kho</p>
+                  <p className="text-[10px] text-slate-500 italic">(Ký, họ tên)</p>
+                </div>
+                <p className="font-bold text-slate-400 italic">..........................</p>
+              </div>
+
+              <div className="flex flex-col justify-between h-28">
+                <div>
+                  <p className="font-black uppercase tracking-wider text-slate-900">Giám đốc duyệt</p>
+                  <p className="text-[10px] text-slate-500 italic">(Ký, đóng dấu)</p>
+                </div>
+                <p className="font-bold text-slate-400 italic">..........................</p>
+              </div>
             </div>
           </div>
 

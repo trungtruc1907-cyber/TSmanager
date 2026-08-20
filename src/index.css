@@ -51,13 +51,51 @@
   nav, 
   aside, 
   header, 
-  button, 
-  form, 
+  button:not(.print-include), 
+  form:not(.print-include), 
   .sticky,
-  .no-print *,
-  [role="dialog"],
-  [role="presentation"] {
+  .no-print * {
     display: none !important;
+  }
+
+  /* Specific support for Export Receipt & Warehouse Print Templates */
+  #print-export-modal {
+    position: static !important;
+    display: block !important;
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    width: 100% !important;
+    z-index: auto !important;
+  }
+
+  #printable-export-slip, .printable-document-card {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: static !important;
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: white !important;
+    page-break-inside: avoid;
+  }
+
+  #printable-export-slip table, .printable-document-card table {
+    display: table !important;
+    width: 100% !important;
+  }
+  #printable-export-slip thead, .printable-document-card thead { display: table-header-group !important; }
+  #printable-export-slip tbody, .printable-document-card tbody { display: table-row-group !important; }
+  #printable-export-slip tr, .printable-document-card tr { display: table-row !important; page-break-inside: avoid; }
+  #printable-export-slip th, #printable-export-slip td,
+  .printable-document-card th, .printable-document-card td { 
+    display: table-cell !important; 
   }
 
   /* Structural fixes for print - avoid hiding parents */

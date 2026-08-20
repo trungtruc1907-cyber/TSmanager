@@ -25,12 +25,15 @@ import {
   Trash,
   Info,
   AlertTriangle,
-  FileText
+  FileText,
+  Edit3
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, doc, setDoc, updateDoc, increment, deleteDoc, onSnapshot, getDocs } from 'firebase/firestore';
 import { InventoryTransaction, Equipment, WarehouseSupplier } from './types';
 import { AppUser } from '../../types';
+import PrintExportReceiptModal from './PrintExportReceiptModal';
+import { numberToVietnameseWords, formatCurrencyVND, openExportReceiptPrintWindow } from './printUtils';
 
 interface ExportReceiptsProps {
   transactions: InventoryTransaction[];
@@ -87,6 +90,25 @@ export default function ExportReceipts({
   // View & Print Modals
   const [selectedTxForView, setSelectedTxForView] = useState<InventoryTransaction | null>(null);
   const [selectedTxForPrint, setSelectedTxForPrint] = useState<InventoryTransaction | null>(null);
+
+  // Edit Export Receipt Modal States
+  const [editingTx, setEditingTx] = useState<InventoryTransaction | null>(null);
+  const [editDate, setEditDate] = useState('');
+  const [editPartnerName, setEditPartnerName] = useState('');
+  const [editPartnerId, setEditPartnerId] = useState('');
+  const [editCreatedByName, setEditCreatedByName] = useState('');
+  const [editNote, setEditNote] = useState('');
+  const [editPaidAmount, setEditPaidAmount] = useState<number>(0);
+  const [editItems, setEditItems] = useState<Array<{
+    equipmentId: string;
+    brand: string;
+    model: string;
+    type?: string;
+    unit: string;
+    quantity: number;
+    unitPrice: number;
+  }>>([]);
+  const [editAddItemSearch, setEditAddItemSearch] = useState('');
 
   // POS 1: Xuất kho thi công States
   const [constItems, setConstItems] = useState<Array<{ equipmentId: string, quantity: number }>>([]);
@@ -159,13 +181,44 @@ export default function ExportReceipts({
       console.error('Error fetching suppliers:', error);
     });
 
+    const unsubSettings = onSnapshot(doc(db, 'settings', 'general'), (s) => {
+      if (s.exists()) {
+        setGeneralSettings(s.data());
+      }
+    }, (error) => {
+      console.error('Error fetching settings:', error);
+    });
+
     return () => {
       unsubUsers();
       unsubProjects();
       unsubCustomers();
       unsubSuppliers();
+      unsubSettings();
     };
   }, []);
+
+  const [generalSettings, setGeneralSettings] = useState<any>(null);
+
+  // Trigger print in new window with fallback to modal
+  const handleOpenPrintReceipt = (tx: InventoryTransaction) => {
+    const win = openExportReceiptPrintWindow({
+      receipt: tx,
+      equipment,
+      projects,
+      customers,
+      generalSettings,
+      showUnitPrice: true,
+      pageSize: 'A4',
+      showBarcode: true,
+      autoPrint: true
+    });
+
+    // If pop-up is blocked by browser or preview in-app is needed
+    if (!win) {
+      setSelectedTxForPrint(tx);
+    }
+  };
 
   // Filter list of eligible employees: admin, operator (kỹ thuật), accountant (kế toán)
   const staffList = useMemo(() => {
@@ -736,6 +789,129 @@ export default function ExportReceipts({
     }
   };
 
+  // Open edit modal for export transaction
+  const handleOpenEditTx = (tx: InventoryTransaction) => {
+    setEditingTx(tx);
+    setEditDate(tx.date || new Date().toISOString().split('T')[0]);
+    setEditPartnerName(tx.partnerName || '');
+    setEditPartnerId(tx.partnerId || '');
+    setEditCreatedByName(tx.createdByName || (staffList[0]?.displayName || 'Thủ kho Solar'));
+    setEditNote(tx.note || '');
+    setEditPaidAmount(tx.paidAmount || 0);
+    setEditItems(
+      (tx.items || []).map(item => ({
+        equipmentId: item.equipmentId,
+        brand: item.brand,
+        model: item.model,
+        type: item.type || 'other',
+        unit: item.unit || 'Cái',
+        quantity: item.quantity,
+        unitPrice: item.unitPrice || 0
+      }))
+    );
+    setEditAddItemSearch('');
+  };
+
+  // Submit edit transaction update
+  const handleUpdateTransactionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTx) return;
+
+    if (editItems.length === 0) {
+      alert('Phiếu xuất phải có ít nhất 1 mặt hàng vật tư!');
+      return;
+    }
+
+    // Check stock limits for each item in editItems
+    for (const item of editItems) {
+      const eq = equipment.find(e => e.id === item.equipmentId);
+      const oldItem = editingTx.items?.find(i => i.equipmentId === item.equipmentId);
+      const oldQty = oldItem ? oldItem.quantity : 0;
+      const currentStock = eq?.stock || 0;
+      const maxAvailable = currentStock + oldQty;
+
+      if (item.quantity > maxAvailable) {
+        alert(`Sản phẩm ${item.brand} ${item.model} chỉ có sẵn tối đa ${maxAvailable} ${item.unit} trong kho (tồn kho hiện tại: ${currentStock} + ${oldQty} từ phiếu xuất này).`);
+        return;
+      }
+    }
+
+    try {
+      const totalValue = editItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+      const isCommercial = editingTx.id.startsWith('PX-TM');
+      const newPaid = isCommercial ? editPaidAmount : 0;
+      const newDebt = isCommercial ? Math.max(0, totalValue - newPaid) : 0;
+
+      const updatedTxPayload: any = {
+        date: editDate,
+        partnerName: editPartnerName.trim() || 'Khách hàng / Dự án',
+        partnerId: editPartnerId || editingTx.partnerId || '',
+        createdByName: editCreatedByName.trim() || 'Thủ kho Solar',
+        note: editNote.trim(),
+        totalValue: totalValue,
+        items: editItems.map(item => ({
+          equipmentId: item.equipmentId,
+          brand: item.brand,
+          model: item.model,
+          type: item.type || 'other',
+          unit: item.unit,
+          quantity: Number(item.quantity) || 1,
+          unitPrice: Number(item.unitPrice) || 0
+        }))
+      };
+
+      if (isCommercial) {
+        updatedTxPayload.paidAmount = newPaid;
+        updatedTxPayload.debtAmount = newDebt;
+      }
+
+      // Stock adjustment calculation
+      const oldItemsMap = new Map<string, number>();
+      (editingTx.items || []).forEach(item => {
+        oldItemsMap.set(item.equipmentId, item.quantity);
+      });
+
+      const newItemsMap = new Map<string, number>();
+      editItems.forEach(item => {
+        newItemsMap.set(item.equipmentId, item.quantity);
+      });
+
+      const allEquipIds = new Set([...oldItemsMap.keys(), ...newItemsMap.keys()]);
+
+      for (const eqId of allEquipIds) {
+        const oldQty = oldItemsMap.get(eqId) || 0;
+        const newQty = newItemsMap.get(eqId) || 0;
+        const deltaQty = oldQty - newQty; // positive means returning items to stock
+
+        if (deltaQty !== 0) {
+          const eqRef = doc(db, 'equipment', eqId);
+          await updateDoc(eqRef, {
+            stock: increment(deltaQty)
+          });
+        }
+      }
+
+      // Customer debt adjustment if commercial
+      if (isCommercial && editingTx.partnerId && editingTx.partnerId !== 'GUEST') {
+        const oldDebt = editingTx.debtAmount || 0;
+        const debtDelta = newDebt - oldDebt;
+        if (debtDelta !== 0) {
+          const custRef = doc(db, 'customers', editingTx.partnerId);
+          await updateDoc(custRef, {
+            debt: increment(debtDelta)
+          });
+        }
+      }
+
+      await updateDoc(doc(db, 'inventory_transactions', editingTx.id), updatedTxPayload);
+
+      alert(`Cập nhật thành công phiếu xuất #${editingTx.id}!`);
+      setEditingTx(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'inventory_transactions');
+    }
+  };
+
   // Export to Excel / CSV
   const handleExportCSV = () => {
     if (exportTxList.length === 0) {
@@ -978,9 +1154,16 @@ export default function ExportReceipts({
                                 <Eye className="h-4 w-4" />
                               </button>
                               <button
-                                onClick={() => setSelectedTxForPrint(tx)}
-                                className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg transition-all cursor-pointer"
-                                title="In phiếu xuất"
+                                onClick={() => handleOpenEditTx(tx)}
+                                className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg transition-all cursor-pointer"
+                                title="Sửa phiếu xuất"
+                              >
+                                <Edit3 className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleOpenPrintReceipt(tx)}
+                                className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg transition-all cursor-pointer"
+                                title="In phiếu xuất kho (Mở cửa sổ in)"
                               >
                                 <Printer className="h-4 w-4" />
                               </button>
@@ -2135,99 +2318,521 @@ export default function ExportReceipts({
 
 
       {/* ----------------------------------------------------------- */}
-      {/* MODAL: VIEW DETAILED RECEIPT */}
+      {/* MODAL: VIEW DETAILED RECEIPT (CHI TIẾT PHIẾU XUẤT KHO) */}
       {/* ----------------------------------------------------------- */}
       {selectedTxForView && (
-        <div id="view-tx-modal" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-xl rounded-[2.5rem] border border-slate-100 shadow-2xl p-8 flex flex-col justify-between max-h-[90vh]">
+        <div id="view-tx-modal" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-2xl rounded-[2.5rem] border border-slate-100 shadow-2xl p-6 sm:p-8 flex flex-col justify-between max-h-[90vh] overflow-hidden">
             
-            <div className="flex justify-between items-center border-b border-slate-100 pb-4 mb-6">
-              <div>
-                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-rose-500" />
-                  Chi tiết phiếu xuất kho
-                </h3>
-                <p className="text-[11px] text-slate-400 font-black mt-1">SỐ PHIẾU: {selectedTxForView.id}</p>
+            {/* Modal Header */}
+            <div className="flex justify-between items-start border-b border-slate-100 pb-4 mb-5">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <h3 className="text-base font-black text-slate-900 uppercase tracking-wide">
+                    Chi tiết phiếu xuất kho
+                  </h3>
+                  <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
+                    selectedTxForView.id.startsWith('PX-TC') 
+                      ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                      : selectedTxForView.id.startsWith('PX-TM')
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-rose-50 text-rose-700 border-rose-200'
+                  }`}>
+                    {selectedTxForView.id.startsWith('PX-TC') ? 'Thi công dự án' : selectedTxForView.id.startsWith('PX-TM') ? 'Bán thương mại' : 'Thanh lý / Hủy'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 font-mono font-bold">
+                  MÃ CHỨNG TỪ: <span className="text-slate-800 font-black">#{selectedTxForView.id}</span>
+                </p>
               </div>
-              <button 
-                onClick={() => setSelectedTxForView(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-rose-100 hover:text-rose-600 flex items-center justify-center transition-all cursor-pointer border border-slate-200"
-              >
-                <X className="h-4 w-4" />
-              </button>
+
+              <div className="flex items-center gap-2">
+                {/* Print button in header */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedTxForView) {
+                      handleOpenPrintReceipt(selectedTxForView);
+                    }
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-black text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 border border-blue-100"
+                  title="In phiếu xuất kho (Mở cửa sổ in riêng)"
+                >
+                  <Printer className="h-4 w-4 text-blue-600" />
+                  <span className="hidden sm:inline">In Phiếu Xuất</span>
+                </button>
+
+                <button 
+                  onClick={() => setSelectedTxForView(null)}
+                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-rose-100 hover:text-rose-600 flex items-center justify-center transition-all cursor-pointer border border-slate-200"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
-            <div className="space-y-4 overflow-y-auto flex-1 text-xs pr-1">
-              <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100 font-sans">
-                <div>
-                  <span className="text-[10px] text-slate-400 uppercase font-black block">Đối tượng tiếp nhận</span>
-                  <span className="font-bold text-slate-900 text-sm block mt-0.5">{selectedTxForView.partnerName}</span>
+            {/* Modal Body */}
+            <div className="space-y-5 overflow-y-auto flex-1 text-xs pr-1 font-sans">
+              
+              {/* Partner & Dispatcher Info Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 font-sans">
+                <div className="space-y-1">
+                  <span className="text-[10px] text-slate-400 uppercase font-black tracking-wider block">
+                    {selectedTxForView.id.startsWith('PX-TC') ? 'Dự án / Công trình tiếp nhận' : 'Đối tượng tiếp nhận'}
+                  </span>
+                  <span className="font-black text-slate-900 text-sm block">
+                    {selectedTxForView.partnerName}
+                  </span>
+                  {selectedTxForView.partnerId && (
+                    <span className="text-[10px] text-slate-500 font-bold block">
+                      Mã liên kết: {selectedTxForView.partnerId}
+                    </span>
+                  )}
                 </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 uppercase font-black block">Ngày xuất kho</span>
-                  <span className="font-bold text-slate-900 text-sm block mt-0.5">{selectedTxForView.date}</span>
+
+                <div className="space-y-1">
+                  <span className="text-[10px] text-slate-400 uppercase font-black tracking-wider block">Ngày xuất & Thủ kho</span>
+                  <span className="font-bold text-slate-800 text-xs block">
+                    Ngày: <strong className="text-slate-950 font-black">{selectedTxForView.date}</strong>
+                  </span>
+                  <span className="text-[11px] text-slate-600 font-semibold block">
+                    Thủ kho bàn giao: <strong>{selectedTxForView.createdByName || 'Thủ kho Solar'}</strong>
+                  </span>
                 </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 uppercase font-black block">Thủ kho bàn giao</span>
-                  <span className="font-bold text-slate-900 block mt-0.5">{selectedTxForView.createdByName || 'Thủ kho Solar'}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 uppercase font-black block">Ghi chú phiếu</span>
-                  <span className="font-bold text-slate-700 block mt-0.5">{selectedTxForView.note || 'Không có'}</span>
+
+                <div className="col-span-1 sm:col-span-2 pt-2 border-t border-slate-200/60 flex items-start gap-2">
+                  <span className="text-[10px] text-slate-400 uppercase font-black tracking-wider shrink-0 mt-0.5">Lý do xuất:</span>
+                  <span className="font-medium text-slate-700 italic">
+                    {selectedTxForView.note || 'Xuất kho phục vụ công trình / đơn hàng solar'}
+                  </span>
                 </div>
               </div>
 
+              {/* Items List Table */}
               <div>
-                <span className="text-[10px] text-slate-400 uppercase font-black tracking-wider block mb-2">Danh sách vật tư bàn giao</span>
-                <div className="border border-slate-100 rounded-xl overflow-hidden divide-y divide-slate-100">
-                  {selectedTxForView.items.map((item, index) => (
-                    <div key={index} className="p-3 flex justify-between items-center bg-white hover:bg-slate-50/50">
-                      <div>
-                        <span className="text-[9px] text-rose-600 uppercase font-extrabold block leading-none">{item.brand}</span>
-                        <span className="font-bold text-slate-900 text-xs block mt-1">{item.model}</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-black text-slate-800 text-xs block">x{item.quantity} {item.unit}</span>
-                        <span className="text-[10px] text-slate-400 block mt-0.5">Đơn giá xuất: {formatCurrency(item.unitPrice)}</span>
-                      </div>
-                    </div>
-                  ))}
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[10px] text-slate-400 uppercase font-black tracking-wider">
+                    Danh sách vật tư & thiết bị xuất kho ({selectedTxForView.items?.length || 0} mặt hàng)
+                  </span>
+                  <span className="text-[11px] font-bold text-slate-500">
+                    Tổng số lượng: <strong className="text-slate-900 font-black">{selectedTxForView.items?.reduce((s, i) => s + (i.quantity || 0), 0)}</strong>
+                  </span>
+                </div>
+
+                <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-100/80 text-[10px] font-black text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                      <tr>
+                        <th className="py-2.5 px-3 text-center w-8">#</th>
+                        <th className="py-2.5 px-3">Tên thiết bị / Model</th>
+                        <th className="py-2.5 px-2 text-center w-14">ĐVT</th>
+                        <th className="py-2.5 px-3 text-right w-16">SL</th>
+                        <th className="py-2.5 px-3 text-right w-24">Đơn giá</th>
+                        <th className="py-2.5 px-3 text-right w-28">Thành tiền</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-sans">
+                      {selectedTxForView.items.map((item, index) => {
+                        const lineTotal = (item.quantity || 0) * (item.unitPrice || 0);
+                        return (
+                          <tr key={index} className="bg-white hover:bg-slate-50/70 transition-colors">
+                            <td className="py-3 px-3 text-center font-mono text-slate-400 font-bold">
+                              {index + 1}
+                            </td>
+                            <td className="py-3 px-3">
+                              <span className="text-[9px] text-rose-600 uppercase font-extrabold block leading-none">
+                                {item.brand}
+                              </span>
+                              <span className="font-bold text-slate-900 text-xs block mt-0.5">
+                                {item.model}
+                              </span>
+                              <span className="text-[9px] text-slate-400 font-mono block">
+                                SKU: #{item.equipmentId}
+                              </span>
+                            </td>
+                            <td className="py-3 px-2 text-center font-bold text-slate-600">
+                              {item.unit || 'Cái'}
+                            </td>
+                            <td className="py-3 px-3 text-right font-black text-slate-950">
+                              {item.quantity}
+                            </td>
+                            <td className="py-3 px-3 text-right font-semibold text-slate-600">
+                              {formatCurrency(item.unitPrice)}
+                            </td>
+                            <td className="py-3 px-3 text-right font-black text-slate-900">
+                              {formatCurrency(lineTotal)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2 font-sans text-xs">
-                <div className="flex justify-between font-bold text-slate-500">
-                  <span>Tổng giá trị xuất kho:</span>
-                  <span className="text-slate-900 font-black">{formatCurrency(selectedTxForView.totalValue)}</span>
+              {/* Financial & In-Words Summary */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2.5 font-sans text-xs">
+                <div className="flex justify-between items-center font-bold text-slate-600">
+                  <span className="text-xs uppercase tracking-wider font-extrabold text-slate-500">Tổng giá trị xuất kho:</span>
+                  <span className="text-slate-950 font-black text-base">{formatCurrency(selectedTxForView.totalValue)}</span>
                 </div>
-                {selectedTxForView.paidAmount !== undefined && (
-                  <div className="flex justify-between font-bold text-emerald-600">
-                    <span>Số tiền thu về (nếu có):</span>
-                    <span>{formatCurrency(selectedTxForView.paidAmount)}</span>
+
+                <div className="pt-2 border-t border-slate-200/70 text-[11px] text-slate-600 font-medium">
+                  <span>Bằng chữ: </span>
+                  <strong className="text-slate-900 italic font-black">
+                    {numberToVietnameseWords(selectedTxForView.totalValue)}
+                  </strong>
+                </div>
+
+                {selectedTxForView.paidAmount !== undefined && selectedTxForView.id.startsWith('PX-TM') && (
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/70 font-semibold">
+                    <div className="flex justify-between text-emerald-700">
+                      <span>Đã thu tiền:</span>
+                      <span className="font-black">{formatCurrency(selectedTxForView.paidAmount)}</span>
+                    </div>
+                    <div className="flex justify-between text-rose-600">
+                      <span>Còn nợ lại:</span>
+                      <span className="font-black">{formatCurrency(selectedTxForView.debtAmount || 0)}</span>
+                    </div>
                   </div>
                 )}
-                {selectedTxForView.debtAmount !== undefined && selectedTxForView.debtAmount > 0 ? (
-                  <div className="flex justify-between font-bold text-rose-600">
-                    <span>Ghi nhận nợ mới của KH:</span>
-                    <span>{formatCurrency(selectedTxForView.debtAmount)}</span>
-                  </div>
-                ) : null}
               </div>
+
             </div>
 
-            <div className="pt-6 border-t border-slate-100 flex justify-end">
+            {/* Modal Footer */}
+            <div className="pt-5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
               <button
-                onClick={() => setSelectedTxForView(null)}
-                className="bg-[#0054a6] hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+                type="button"
+                onClick={() => {
+                  const tx = selectedTxForView;
+                  setSelectedTxForView(null);
+                  handleOpenEditTx(tx);
+                }}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5"
               >
-                Đóng
+                <Edit3 className="h-4 w-4 text-slate-500" />
+                Chỉnh sửa phiếu
               </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTxForView(null)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  Đóng
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedTxForView) {
+                      setSelectedTxForPrint(selectedTxForView);
+                    }
+                  }}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5"
+                  title="Xem trước bản in trong trang"
+                >
+                  <Eye className="h-4 w-4 text-slate-500" />
+                  Xem mẫu in
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedTxForView) {
+                      handleOpenPrintReceipt(selectedTxForView);
+                    }
+                  }}
+                  className="bg-[#0054a6] hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-md flex items-center gap-2 active:scale-95"
+                  title="Mở bản in ở cửa sổ / tab mới và chuẩn bị in"
+                >
+                  <Printer className="h-4 w-4" />
+                  In Phiếu Xuất (Cửa sổ mới)
+                </button>
+              </div>
             </div>
 
           </div>
         </div>
       )}
 
+      {/* ----------------------------------------------------------- */}
+      {/* MODAL: PRINT EXPORT RECEIPT PREVIEW (MẪU IN CHUẨN KẾ TOÁN) */}
+      {/* ----------------------------------------------------------- */}
+      {selectedTxForPrint && (
+        <PrintExportReceiptModal
+          receipt={selectedTxForPrint}
+          onClose={() => setSelectedTxForPrint(null)}
+          equipment={equipment}
+          projects={projects}
+          customers={customers}
+        />
+      )}
+
+
+      {/* ----------------------------------------------------------- */}
+      {/* MODAL: EDIT EXPORT RECEIPT */}
+      {/* ----------------------------------------------------------- */}
+      {editingTx && (
+        <div id="edit-export-modal" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white w-full max-w-3xl rounded-[2.5rem] border border-slate-100 shadow-2xl p-8 flex flex-col justify-between my-8 animate-in zoom-in-95 duration-200 max-h-[90vh]">
+            
+            <div className="flex justify-between items-center border-b border-slate-100 pb-4 mb-4">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                  <Edit3 className="h-5 w-5 text-blue-600" />
+                  Chỉnh sửa phiếu xuất kho
+                </h3>
+                <p className="text-[11px] text-slate-400 font-bold mt-1">MÃ PHIẾU: #{editingTx.id}</p>
+              </div>
+              <button 
+                onClick={() => setEditingTx(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-rose-100 hover:text-rose-600 flex items-center justify-center transition-all cursor-pointer border border-slate-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateTransactionSubmit} className="space-y-5 overflow-y-auto flex-1 text-xs pr-1 font-sans">
+              
+              {/* Basic Fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Ngày xuất kho</label>
+                  <input
+                    type="date"
+                    required
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs text-slate-800 cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Đối tượng tiếp nhận *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editPartnerName}
+                    onChange={(e) => setEditPartnerName(e.target.value)}
+                    placeholder="Tên KH / Dự án / Hội đồng"
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs text-slate-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Thủ kho bàn giao</label>
+                  <select
+                    value={editCreatedByName}
+                    onChange={(e) => setEditCreatedByName(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs text-slate-800 cursor-pointer"
+                  >
+                    {staffList.map(u => {
+                      const name = u.displayName || u.username || 'Nhân viên';
+                      return (
+                        <option key={u.id} value={name}>
+                          {name}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Ghi chú phiếu xuất</label>
+                <input 
+                  type="text"
+                  value={editNote}
+                  onChange={(e) => setEditNote(e.target.value)}
+                  placeholder="Ghi chú thêm..."
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 font-bold text-xs text-slate-800"
+                />
+              </div>
+
+              {/* Commercial Payment Fields if PX-TM */}
+              {editingTx.id.startsWith('PX-TM') && (
+                <div className="p-4 bg-emerald-50/60 border border-emerald-100 rounded-2xl grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black text-emerald-700 uppercase tracking-wider block mb-1.5">Số tiền đã thanh toán (VND)</label>
+                    <input 
+                      type="number"
+                      min={0}
+                      value={editPaidAmount}
+                      onChange={(e) => setEditPaidAmount(Number(e.target.value))}
+                      className="w-full px-4 py-2.5 rounded-xl bg-white border border-emerald-200 focus:outline-none focus:border-emerald-500 font-extrabold text-xs text-emerald-800"
+                    />
+                  </div>
+                  <div className="flex flex-col justify-center">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Ghi nhận nợ mới</span>
+                    <span className="text-sm font-black text-rose-600 mt-1">
+                      {formatCurrency(Math.max(0, editItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0) - editPaidAmount))}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Items Table */}
+              <div className="space-y-3 pt-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Danh sách vật tư bàn giao ({editItems.length})</label>
+                  <span className="text-xs font-black text-blue-600">
+                    Tổng xuất: {formatCurrency(editItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0))}
+                  </span>
+                </div>
+
+                {/* Search Add Equipment into editItems */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="➕ Thêm thiết bị khác vào phiếu xuất kho này..."
+                    value={editAddItemSearch}
+                    onChange={(e) => setEditAddItemSearch(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500"
+                  />
+                  {editAddItemSearch.trim() !== '' && (
+                    <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto divide-y divide-slate-50">
+                      {equipment
+                        .filter(eq => {
+                          const q = editAddItemSearch.toLowerCase();
+                          return `${eq.brand} ${eq.model} ${eq.id}`.toLowerCase().includes(q);
+                        })
+                        .map(eq => (
+                          <div
+                            key={eq.id}
+                            onClick={() => {
+                              const exists = editItems.find(i => i.equipmentId === eq.id);
+                              if (exists) {
+                                setEditItems(editItems.map(i => i.equipmentId === eq.id ? { ...i, quantity: i.quantity + 1 } : i));
+                              } else {
+                                setEditItems([...editItems, {
+                                  equipmentId: eq.id,
+                                  brand: eq.brand,
+                                  model: eq.model,
+                                  type: eq.type || 'other',
+                                  unit: eq.unit || 'Cái',
+                                  quantity: 1,
+                                  unitPrice: eq.sellingPrice || eq.unitPrice || 0
+                                }]);
+                              }
+                              setEditAddItemSearch('');
+                            }}
+                            className="p-2.5 hover:bg-blue-50 cursor-pointer flex justify-between items-center text-xs"
+                          >
+                            <div>
+                              <span className="font-extrabold text-slate-800 block">{eq.brand} {eq.model}</span>
+                              <span className="text-[10px] text-slate-400">Tồn kho: {eq.stock || 0} {eq.unit}</span>
+                            </div>
+                            <span className="font-bold text-blue-600">{formatCurrency(eq.sellingPrice || eq.unitPrice || 0)}</span>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100">
+                  {editItems.length === 0 ? (
+                    <div className="p-4 text-center text-slate-400 italic">Chưa có vật tư nào trong phiếu.</div>
+                  ) : (
+                    editItems.map((item, idx) => {
+                      const eq = equipment.find(e => e.id === item.equipmentId);
+                      const oldItem = editingTx.items?.find(i => i.equipmentId === item.equipmentId);
+                      const oldQty = oldItem ? oldItem.quantity : 0;
+                      const currentStock = eq?.stock || 0;
+                      const maxAvailable = currentStock + oldQty;
+
+                      return (
+                        <div key={item.equipmentId} className="p-3 bg-white hover:bg-slate-50/50 flex items-center justify-between gap-3 text-xs">
+                          <div className="flex-1">
+                            <span className="text-[9px] font-black text-blue-600 block leading-none">{item.brand}</span>
+                            <span className="font-extrabold text-slate-800 text-xs block mt-0.5">{item.model}</span>
+                            <span className="text-[10px] text-slate-400 block">Khả dụng: <span className="font-bold text-emerald-600">{maxAvailable} {item.unit}</span></span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] text-slate-400 font-bold">SL:</span>
+                              <input
+                                type="number"
+                                min={1}
+                                max={maxAvailable}
+                                value={item.quantity}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  if (val < 1) return;
+                                  if (val > maxAvailable) {
+                                    alert(`Tối đa khả dụng là ${maxAvailable} ${item.unit}.`);
+                                    return;
+                                  }
+                                  const newItems = [...editItems];
+                                  newItems[idx].quantity = val;
+                                  setEditItems(newItems);
+                                }}
+                                className="w-14 py-1 px-1 bg-slate-50 border border-slate-200 rounded-lg text-center font-extrabold text-xs text-slate-800"
+                              />
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] text-slate-400 font-bold">Giá:</span>
+                              <input
+                                type="number"
+                                min={0}
+                                value={item.unitPrice}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  const newItems = [...editItems];
+                                  newItems[idx].unitPrice = val;
+                                  setEditItems(newItems);
+                                }}
+                                className="w-24 py-1 px-2 bg-slate-50 border border-slate-200 rounded-lg text-right font-extrabold text-xs text-slate-800"
+                              />
+                            </div>
+
+                            <span className="w-24 text-right font-black text-slate-900">
+                              {formatCurrency(item.quantity * item.unitPrice)}
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() => setEditItems(editItems.filter(i => i.equipmentId !== item.equipmentId))}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="Xóa khỏi phiếu"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingTx(null)}
+                  className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-md active:scale-95"
+                >
+                  Lưu thay đổi
+                </button>
+              </div>
+
+            </form>
+
+          </div>
+        </div>
+      )}
 
       {/* ----------------------------------------------------------- */}
       {/* MODAL: PRINT PREVIEW SLIP */}
