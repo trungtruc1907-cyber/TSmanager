@@ -84,206 +84,53 @@ interface InventoryStockProps {
 }
 
 export default function InventoryStock({ equipment, transactions, userRole, suppliers = [] }: InventoryStockProps) {
-  // Predefined high-fidelity mockup items representing the screenshot
-  const mockupItems = [
-    {
-      id: 'VT001',
-      brand: 'Ống nhựa',
-      model: 'Ống PVC D25',
-      name: 'Ống PVC D25',
-      barcode: '8936100000012',
-      kho: 'Kho chính',
-      unit: 'm',
-      stock: 235,
-      holding: 20,
-      buying: 80,
-      available: 215,
-      minStock: 100,
-      maxStock: 500,
-      unitPrice: 35000,
-      sellingPrice: 45000,
-      status: 'Bình thường' as const,
-      group: 'Ống nhựa',
-      location: 'Kệ A1-A3',
-      supplier: 'Công ty TNHH ABC',
-      details: 'D25mm - Dày 2.0mm',
-      type: 'other'
-    },
-    {
-      id: 'VT002',
-      brand: 'Xi măng',
-      model: 'Xi măng PCB40',
-      name: 'Xi măng PCB40',
-      barcode: '8936100000029',
-      kho: 'Kho chính',
-      unit: 'bao',
-      stock: 20,
-      holding: 15,
-      buying: 100,
-      available: 5,
-      minStock: 50,
-      maxStock: 300,
-      unitPrice: 95000,
-      sellingPrice: 120000,
-      status: 'Thiếu hàng' as const,
-      group: 'Vật liệu xây dựng',
-      location: 'Kệ D1',
-      supplier: 'Vật liệu xây dựng Trường Sơn',
-      details: 'Bao 50kg',
-      type: 'other'
-    },
-    {
-      id: 'VT003',
-      brand: 'Keo dán',
-      model: 'Keo PU',
-      name: 'Keo PU',
-      barcode: '8936100000036',
-      kho: 'Kho phụ',
-      unit: 'chai',
-      stock: 12,
-      holding: 2,
-      buying: 0,
-      available: 10,
-      minStock: 10,
-      maxStock: 50,
-      unitPrice: 45000,
-      sellingPrice: 55000,
-      status: 'Cảnh báo' as const,
-      group: 'Keo dán',
-      location: 'Kệ B2',
-      supplier: 'Keo dán silicone Apollo',
-      details: 'Chai 300ml',
-      type: 'other'
-    },
-    {
-      id: 'VT004',
-      brand: 'Thiết bị điện',
-      model: 'Dây điện Cadivi 2.5',
-      name: 'Dây điện Cadivi 2.5',
-      barcode: '8936100000043',
-      kho: 'Kho chính',
-      unit: 'm',
-      stock: 350,
-      holding: 30,
-      buying: 0,
-      available: 320,
-      minStock: 100,
-      maxStock: 1000,
-      unitPrice: 8500,
-      sellingPrice: 11000,
-      status: 'Bình thường' as const,
-      group: 'Thiết bị điện',
-      location: 'Kệ C1',
-      supplier: 'Cáp điện Cadivi Việt Nam',
-      details: 'Cu/PVC 1x2.5',
-      type: 'other'
-    },
-    {
-      id: 'VT005',
-      brand: 'Sơn nước',
-      model: 'Sơn chống thấm KOVA',
-      name: 'Sơn chống thấm KOVA',
-      barcode: '8936100000050',
-      kho: 'Kho phụ',
-      unit: 'kg',
-      stock: 0,
-      holding: 0,
-      buying: 50,
-      available: 0,
-      minStock: 10,
-      maxStock: 100,
-      unitPrice: 120000,
-      sellingPrice: 150000,
-      status: 'Hết hàng' as const,
-      group: 'Sơn chống thấm',
-      location: 'Kệ B1',
-      supplier: 'Sơn KOVA miền Bắc',
-      details: 'Thùng 20kg',
-      type: 'other'
-    },
-    {
-      id: 'CADIVI-CXV-2X10',
-      brand: 'Cadivi',
-      model: 'Cáp CXV-2X10 (x16)',
-      name: 'Cadivi Cáp CXV-2X10 (x16)',
-      barcode: '8936100000074',
-      kho: 'Kho chính',
-      unit: 'm',
-      stock: 450,
-      holding: 50,
-      buying: 0,
-      available: 400,
-      minStock: 100,
-      maxStock: 1000,
-      unitPrice: 85000,
-      sellingPrice: 110000,
-      status: 'Bình thường' as const,
-      group: 'Thiết bị điện',
-      location: 'Kệ Cuộn Cáp C2',
-      supplier: 'Cáp điện Cadivi Việt Nam',
-      details: 'Cáp điện lực hạ thế Cu/XLPE/PVC 0.6/1kV 2x10mm² kèm dây đồng tiếp địa trần x16mm²',
-      type: 'other'
-    }
-  ];
+  // Map real database items directly from Firestore equipment collection
+  const allItems = equipment.map((eq, index) => {
+    const numId = eq.id.replace(/\D/g, '') || String(index + 1);
+    const barcode = eq.barcode || `89361000000${numId.padStart(2, '0')}`;
+    const stock = Number(eq.stock) || 0;
+    const minStock = Number(eq.minStock) || 5;
+    const holding = Math.round(stock * 0.1);
+    const buying = stock < minStock ? 50 : 0;
+    const available = Math.max(0, stock - holding);
+    
+    let status: 'Bình thường' | 'Thiếu hàng' | 'Cảnh báo' | 'Hết hàng' = 'Bình thường';
+    if (stock === 0) status = 'Hết hàng';
+    else if (stock <= minStock) status = 'Thiếu hàng';
+    else if (stock <= minStock * 1.5) status = 'Cảnh báo';
 
-  // Merge database items into the list (avoiding duplicate IDs if any exist)
-  const dbItemsMapped = equipment
-    .filter(eq => !mockupItems.some(m => m.id === eq.id))
-    .map((eq, index) => {
-      const numId = eq.id.replace(/\D/g, '') || String(index + 6);
-      const barcode = `89361000000${numId.padStart(2, '0')}`;
-      const stock = eq.stock || 0;
-      const minStock = eq.minStock || 5;
-      const holding = Math.round(stock * 0.1);
-      const buying = stock < minStock ? 50 : 0;
-      const available = Math.max(0, stock - holding);
-      
-      let status: 'Bình thường' | 'Thiếu hàng' | 'Cảnh báo' | 'Hết hàng' = 'Bình thường';
-      if (stock === 0) status = 'Hết hàng';
-      else if (stock <= minStock) status = 'Thiếu hàng';
-      else if (stock <= minStock * 1.5) status = 'Cảnh báo';
+    let group = 'Phụ kiện';
+    if (eq.type === 'panel') group = 'Tấm pin Solar';
+    else if (eq.type === 'inverter') group = 'Biến tần';
+    else if (eq.type === 'battery') group = 'Pin lưu trữ';
+    else if (eq.type === 'mounting') group = 'Ray nhôm';
+    else if (eq.type === 'accessory') group = 'Phụ kiện';
+    else if (eq.group) group = eq.group;
 
-      let group = 'Phụ kiện';
-      if (eq.type === 'panel') group = 'Tấm pin Solar';
-      else if (eq.type === 'inverter') group = 'Biến tần';
-      else if (eq.type === 'battery') group = 'Pin lưu trữ';
-      else if (eq.type === 'mounting') group = 'Ray nhôm';
-
-      return {
-        id: eq.id,
-        brand: eq.brand || '',
-        model: eq.model || '',
-        name: `${eq.brand || ''} ${eq.model || ''}`.trim() || 'Vật tư chưa rõ tên',
-        barcode,
-        kho: (eq.location || '').toLowerCase().includes('phụ') ? 'Kho phụ' : 'Kho chính',
-        unit: eq.unit || 'Cái',
-        stock,
-        holding,
-        buying,
-        available,
-        minStock,
-        maxStock: minStock * 5,
-        unitPrice: eq.unitPrice,
-        sellingPrice: eq.sellingPrice || eq.unitPrice * 1.3,
-        status,
-        group,
-        location: eq.location || 'Kệ A1-A3',
-        supplier: eq.supplier || 'Chưa liên kết',
-        details: eq.details || '',
-        type: eq.type
-      };
-    });
-
-  // Local state to keep track of items deleted in the current UI session or saved to localStorage
-  const [deletedIds, setDeletedIds] = useState<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('warehouse_deleted_item_ids') || '[]');
-    } catch {
-      return [];
-    }
+    return {
+      id: eq.id,
+      brand: eq.brand || '',
+      model: eq.model || '',
+      name: `${eq.brand || ''} ${eq.model || ''}`.trim() || eq.id,
+      barcode,
+      kho: eq.kho || ((eq.location || '').toLowerCase().includes('phụ') ? 'Kho phụ' : 'Kho chính'),
+      unit: eq.unit || 'Cái',
+      stock,
+      holding,
+      buying,
+      available,
+      minStock,
+      maxStock: eq.maxStock || minStock * 5,
+      unitPrice: Number(eq.unitPrice) || 0,
+      sellingPrice: Number(eq.sellingPrice) || (Number(eq.unitPrice) ? Number(eq.unitPrice) * 1.3 : 0),
+      status,
+      group,
+      location: eq.location || 'Kệ kho',
+      supplier: eq.supplier || 'Chưa liên kết',
+      details: eq.details || '',
+      type: eq.type || 'other'
+    };
   });
-
-  const allItems = [...mockupItems, ...dbItemsMapped].filter(item => !deletedIds.includes(item.id));
 
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
@@ -295,9 +142,27 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
 
-  // Selected item for Detail Sidebar (defaults to VT001 to mimic the image)
-  const [selectedItem, setSelectedItem] = useState<any>(allItems[0]);
+  // Selected item for Detail Sidebar
+  const [selectedItem, setSelectedItem] = useState<any>(allItems[0] || null);
   const [detailTab, setDetailTab] = useState<'info' | 'history' | 'import' | 'export' | 'supplier' | 'docs'>('info');
+
+  // Synchronize selected item when allItems changes
+  useEffect(() => {
+    if (allItems.length > 0) {
+      if (!selectedItem) {
+        setSelectedItem(allItems[0]);
+      } else {
+        const matched = allItems.find(i => i.id === selectedItem.id);
+        if (matched) {
+          setSelectedItem(matched);
+        } else {
+          setSelectedItem(allItems[0]);
+        }
+      }
+    } else {
+      setSelectedItem(null);
+    }
+  }, [equipment]);
 
   // Comprehensive Item Detail & History Modal state
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -337,6 +202,8 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
   const [formSupplier, setFormSupplier] = useState('');
   const [formDetails, setFormDetails] = useState('');
 
+  const [scannedResult, setScannedResult] = useState<string>('');
+
   // Handle barcode simulation scan
   const handleBarcodeScan = () => {
     setShowQrScanner(true);
@@ -345,14 +212,14 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
       setScannerStatus('success');
       setTimeout(() => {
         setShowQrScanner(false);
-        // Find and select VT001
-        const target = allItems.find(i => i.id === 'VT001');
-        if (target) {
-          setSelectedItem(target);
+        // Find and select first item in real catalog if available
+        if (allItems.length > 0) {
+          setSelectedItem(allItems[0]);
+          setScannedResult(allItems[0].id);
         }
         setScannerStatus('idle');
       }, 800);
-    }, 1500);
+    }, 1200);
   };
 
   // Unique lists for filtering dropdowns
@@ -605,18 +472,10 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
           details: row.details
         };
         await setDoc(doc(db, 'equipment', row.id), payload);
-        
-        // If this item was previously hidden/deleted, restore it
-        if (deletedIds.includes(row.id)) {
-          const updatedDeletedIds = deletedIds.filter(id => id !== row.id);
-          setDeletedIds(updatedDeletedIds);
-          localStorage.setItem('warehouse_deleted_item_ids', JSON.stringify(updatedDeletedIds));
-        }
-        
         importedCount++;
       }
       
-      alert(`Đã nhập thành công ${importedCount} vật tư vào kho!`);
+      alert(`Đã nhập thành công ${importedCount} vật tư vào cơ sở dữ liệu!`);
       // Reset and close
       setShowImportModal(false);
       setImportFile(null);
@@ -715,24 +574,7 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
         details: formDetails.trim()
       };
       await setDoc(doc(db, 'equipment', formId), payload);
-      
-      // If this item was previously hidden/deleted, restore it
-      if (deletedIds.includes(formId)) {
-        const updatedDeletedIds = deletedIds.filter(id => id !== formId);
-        setDeletedIds(updatedDeletedIds);
-        localStorage.setItem('warehouse_deleted_item_ids', JSON.stringify(updatedDeletedIds));
-      }
-
       setShowAddModal(false);
-      
-      // Update selected item dynamically if we edited it
-      if (selectedItem?.id === formId) {
-        setSelectedItem({
-          ...selectedItem,
-          ...payload,
-          name: `${formBrand.trim()} ${formModel.trim()}`
-        });
-      }
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'equipment');
     }
@@ -742,42 +584,29 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
     e.stopPropagation();
     
     const targetItem = allItems.find(i => i.id === id);
-    const itemName = targetItem ? `${targetItem.id} - ${targetItem.model}` : id;
+    const itemName = targetItem ? `${targetItem.id} - ${targetItem.model || targetItem.name}` : id;
 
-    if (!confirm(`Bạn có chắc chắn muốn xóa vật tư "${itemName}" khỏi hệ thống?`)) {
+    if (!confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn vật tư "${itemName}" khỏi cơ sở dữ liệu?`)) {
       return;
     }
 
     try {
-      // 1. Check if it's a real database item
-      const isDbItem = equipment.some(eq => eq.id === id);
+      await deleteDoc(doc(db, 'equipment', id));
       
-      if (isDbItem) {
-        if (userRole !== 'admin') {
-          alert(`Tài khoản của bạn không có quyền Admin (quyền hiện tại: "${userRole}"). Để thuận tiện cho việc kiểm thử, hệ thống sẽ ẩn tạm thời mặt hàng này khỏi giao diện của bạn.`);
-        } else {
-          await deleteDoc(doc(db, 'equipment', id));
-        }
-      }
-
-      // 2. Add to local deleted IDs list to instantly update UI (works for both mockup and DB items)
-      const newDeletedIds = [...deletedIds, id];
-      setDeletedIds(newDeletedIds);
-      localStorage.setItem('warehouse_deleted_item_ids', JSON.stringify(newDeletedIds));
-
-      // 3. Update active selection if the deleted item was selected
+      // Update active selection if the deleted item was selected
       if (selectedItem?.id === id) {
         const remainingItems = allItems.filter(i => i.id !== id);
         setSelectedItem(remainingItems[0] || null);
       }
     } catch (err) {
+      console.error('Error deleting equipment:', err);
       handleFirestoreError(err, OperationType.DELETE, 'equipment');
     }
   };
 
   // Generate Recharts Area chart data based on active item
   const getChartData = (targetItem = selectedItem) => {
-    const base = targetItem?.stock || 100;
+    const base = targetItem?.stock || 0;
     return [
       { name: '01/02', 'Tồn kho': Math.max(0, Math.round(base * 0.85)) },
       { name: '01/03', 'Tồn kho': Math.max(0, Math.round(base * 1.1)) },
@@ -834,67 +663,6 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
         };
       });
 
-    // Provide rich initial logs if real history from Firestore is empty for mockup items
-    if (realHistory.length === 0) {
-      return [
-        { 
-          id: 'PN000235', 
-          type: 'Nhập kho', 
-          subType: 'Nhập kho từ NCC',
-          isImport: true, 
-          partner: item.supplier || 'Công ty TNHH Thiết Bị Solar Việt Nam', 
-          qty: Math.max(50, Math.round(item.stock * 0.6) || 50), 
-          unitPrice: item.unitPrice || 4500000, 
-          totalPrice: (Math.max(50, Math.round(item.stock * 0.6) || 50)) * (item.unitPrice || 4500000),
-          unit: item.unit || 'Cái', 
-          date: '2026-08-10', 
-          user: 'Trần Thị Thu (Thủ kho)', 
-          note: 'Nhập kho định kỳ theo HĐ cung cấp số 45/2026' 
-        },
-        { 
-          id: 'PX000124', 
-          type: 'Xuất kho', 
-          subType: 'Xuất thi công dự án',
-          isImport: false, 
-          partner: 'Dự án Điện MT Áp Mái 50kWp - KCN Sóng Thần', 
-          qty: Math.max(10, Math.round(item.stock * 0.2) || 15), 
-          unitPrice: item.sellingPrice || (item.unitPrice ? item.unitPrice * 1.25 : 5500000), 
-          totalPrice: (Math.max(10, Math.round(item.stock * 0.2) || 15)) * (item.sellingPrice || (item.unitPrice ? item.unitPrice * 1.25 : 5500000)),
-          unit: item.unit || 'Cái', 
-          date: '2026-08-14', 
-          user: 'Lê Văn Tám (Kỹ thuật trưởng)', 
-          note: 'Bàn giao vật tư cho đội thi công đợt 1' 
-        },
-        { 
-          id: 'PN000212', 
-          type: 'Nhập kho', 
-          subType: 'Nhập kho từ NCC',
-          isImport: true, 
-          partner: item.supplier || 'Tổng kho Phân Phối Thiết Bị Solar', 
-          qty: Math.max(80, Math.round(item.stock * 0.8) || 100), 
-          unitPrice: item.unitPrice || 4500000, 
-          totalPrice: (Math.max(80, Math.round(item.stock * 0.8) || 100)) * (item.unitPrice || 4500000),
-          unit: item.unit || 'Cái', 
-          date: '2026-07-28', 
-          user: 'Trần Thị Thu (Thủ kho)', 
-          note: 'Nhập lô hàng bổ sung chuẩn bị triển khai các dự án mới' 
-        },
-        { 
-          id: 'PX000118', 
-          type: 'Xuất kho', 
-          subType: 'Xuất bán thương mại',
-          isImport: false, 
-          partner: 'Công ty Cổ phần Năng Lượng Xanh Miền Nam', 
-          qty: Math.max(5, Math.round(item.stock * 0.1) || 10), 
-          unitPrice: item.sellingPrice || (item.unitPrice ? item.unitPrice * 1.25 : 5500000), 
-          totalPrice: (Math.max(5, Math.round(item.stock * 0.1) || 10)) * (item.sellingPrice || (item.unitPrice ? item.unitPrice * 1.25 : 5500000)),
-          unit: item.unit || 'Cái', 
-          date: '2026-07-15', 
-          user: 'Nguyễn Văn Hùng (Kinh doanh)', 
-          note: 'Xuất bán thương mại kèm biên bản bàn giao' 
-        }
-      ];
-    }
     return realHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   };
 
@@ -1719,8 +1487,10 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
               )}
               {scannerStatus === 'success' && (
                 <div className="text-center">
-                  <span className="text-3xl">✓</span>
-                  <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mt-2 animate-bounce">ĐÃ NHẬN DIỆN VT001</p>
+                  <span className="text-3xl text-emerald-400">✓</span>
+                  <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mt-2 animate-bounce">
+                    {scannedResult ? `ĐÃ NHẬN DIỆN ${scannedResult}` : 'ĐÃ NHẬN DIỆN VẬT TƯ'}
+                  </p>
                 </div>
               )}
             </div>

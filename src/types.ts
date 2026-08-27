@@ -62,9 +62,13 @@ export interface Equipment {
   isThreePhase?: boolean;
   stock?: number;
   minStock?: number;
+  maxStock?: number;
   location?: string;
   unit?: string;
   supplier?: string;
+  barcode?: string;
+  group?: string;
+  kho?: string;
   history?: Array<{
     id: string;
     type: 'import' | 'export';
