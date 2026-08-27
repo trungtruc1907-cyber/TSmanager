@@ -13,10 +13,14 @@ import {
   AlertTriangle,
   XCircle,
   HelpCircle,
-  ArrowLeft
+  ArrowLeft,
+  Trash2,
+  ShieldAlert,
+  Loader2,
+  X
 } from 'lucide-react';
 import { db } from '../../lib/firebase';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, deleteDoc, increment } from 'firebase/firestore';
 import { Equipment, InventoryTransaction, MaterialRequest, PurchaseProposal, WarehouseSupplier } from './types';
 import { numberToVietnameseWords, openExportReceiptPrintWindow, openImportReceiptPrintWindow } from './printUtils';
 
@@ -80,6 +84,9 @@ export default function DocumentDetailTab({
 }: DocumentDetailTabProps) {
 
   const [settings, setSettings] = useState<any>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [confirmDeleteChecked, setConfirmDeleteChecked] = useState(false);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'settings', 'general'), (docSnap) => {
@@ -98,6 +105,51 @@ export default function DocumentDetailTab({
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDeleteImportReceipt = async (tx: InventoryTransaction) => {
+    setIsDeleting(true);
+    try {
+      // 1. Revert stock
+      if (Array.isArray(tx.items)) {
+        for (const item of tx.items) {
+          if (item?.equipmentId) {
+            try {
+              const eqRef = doc(db, 'equipment', item.equipmentId);
+              await updateDoc(eqRef, {
+                stock: increment(-item.quantity)
+              });
+            } catch (err) {
+              console.warn(`Could not revert stock for item ${item.equipmentId}:`, err);
+            }
+          }
+        }
+      }
+
+      // 2. Revert supplier debt
+      if (tx.debtAmount && tx.debtAmount > 0 && tx.partnerId && tx.partnerId !== 'INITIAL_STOCK' && tx.partnerId !== 'TECH_RETURN') {
+        try {
+          const supRef = doc(db, 'suppliers', tx.partnerId);
+          await updateDoc(supRef, {
+            debt: increment(-tx.debtAmount)
+          });
+        } catch (err) {
+          console.warn('Error reverting supplier debt:', err);
+        }
+      }
+
+      // 3. Delete document from Firestore
+      await deleteDoc(doc(db, 'inventory_transactions', tx.id));
+
+      setShowDeleteModal(false);
+      alert(`Đã xóa vĩnh viễn phiếu nhập #${tx.id}! Tồn kho và công nợ đã được hoàn tác.`);
+      if (onClose) onClose();
+    } catch (err) {
+      console.error('Error deleting receipt in DocumentDetailTab:', err);
+      alert(`Lỗi khi xóa phiếu: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleUpdateProposalSupplier = async (newSupplierId: string) => {
@@ -156,23 +208,35 @@ export default function DocumentDetailTab({
               <span className="text-xs font-black uppercase tracking-wider text-emerald-600">Đã kiểm duyệt & lưu trữ kho thành công</span>
             </div>
           </div>
-          <button 
-            onClick={() => openImportReceiptPrintWindow({
-              receipt: docItem,
-              equipment,
-              suppliers,
-              purchaseProposals: proposals,
-              generalSettings: settings,
-              showUnitPrice: true,
-              pageSize: 'A4',
-              showBarcode: true,
-              autoPrint: true
-            })}
-            className="bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95 cursor-pointer shadow-xs"
-          >
-            <Printer className="h-4 w-4 text-sky-600" />
-            In phiếu nhập kho (Cửa sổ mới)
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => {
+                setConfirmDeleteChecked(false);
+                setShowDeleteModal(true);
+              }}
+              className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95 cursor-pointer shadow-xs"
+            >
+              <Trash2 className="h-4 w-4 text-rose-600" />
+              Hủy / Xóa phiếu
+            </button>
+            <button 
+              onClick={() => openImportReceiptPrintWindow({
+                receipt: docItem,
+                equipment,
+                suppliers,
+                purchaseProposals: proposals,
+                generalSettings: settings,
+                showUnitPrice: true,
+                pageSize: 'A4',
+                showBarcode: true,
+                autoPrint: true
+              })}
+              className="bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95 cursor-pointer shadow-xs"
+            >
+              <Printer className="h-4 w-4 text-sky-600" />
+              In phiếu nhập kho
+            </button>
+          </div>
         </div>
 
         {/* Invoice / Slip Print Structure */}
@@ -315,6 +379,90 @@ export default function DocumentDetailTab({
           </div>
 
         </div>
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200 print:hidden">
+            <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-slate-100 space-y-6 animate-in zoom-in-95 duration-200">
+              <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100 shadow-xs">
+                    <ShieldAlert className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">
+                      Xác nhận hủy & xóa phiếu nhập
+                    </h3>
+                    <p className="text-xs font-bold text-slate-400">
+                      Mã phiếu: <span className="font-mono text-rose-600 font-extrabold">#{docItem.id}</span>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="bg-rose-50/70 border border-rose-200/80 rounded-2xl p-4 space-y-2 text-xs">
+                <p className="font-black text-rose-900 flex items-center gap-1.5">
+                  <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" />
+                  Hành động này sẽ thực hiện các thay đổi sau:
+                </p>
+                <ul className="list-disc list-inside text-rose-700 font-bold space-y-1 pl-1">
+                  <li>Giảm số lượng tồn kho của các mặt hàng trong phiếu.</li>
+                  {docItem.debtAmount && docItem.debtAmount > 0 ? (
+                    <li>Hoàn tác giảm công nợ nhà cung cấp: <span className="font-black text-rose-900">{formatCurrency(docItem.debtAmount)}</span></li>
+                  ) : null}
+                  <li>Xóa vĩnh viễn chứng từ #{docItem.id} khỏi cơ sở dữ liệu.</li>
+                </ul>
+              </div>
+
+              <label className="flex items-start gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 cursor-pointer hover:bg-slate-100/80 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={confirmDeleteChecked}
+                  onChange={(e) => setConfirmDeleteChecked(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded text-rose-600 focus:ring-rose-500 border-slate-300 cursor-pointer"
+                />
+                <span className="text-xs font-bold text-slate-700 leading-snug">
+                  Tôi hiểu rằng thao tác xóa sẽ thay đổi số liệu tồn kho và công nợ.
+                </span>
+              </label>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={isDeleting}
+                  className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Đóng / Quay lại
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteImportReceipt(docItem)}
+                  disabled={!confirmDeleteChecked || isDeleting}
+                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-rose-600/20 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Đang xử lý xóa...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4" />
+                      Xác nhận xóa vĩnh viễn
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     );

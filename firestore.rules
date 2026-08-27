@@ -95,10 +95,11 @@ service cloud.firestore {
     function isValidEquipment(data) {
       return data.brand is string && data.brand.size() > 0
           && data.model is string && data.model.size() > 0
-          && data.type in ['panel', 'inverter', 'battery', 'mounting', 'accessory', 'other']
-          && data.unitPrice is number && data.unitPrice >= 0
+          && (!('type' in data) || data.type is string)
+          && (!('unitPrice' in data) || (data.unitPrice is number && data.unitPrice >= 0))
           && (!('capacity' in data) || data.capacity is number)
           && (!('isThreePhase' in data) || data.isThreePhase is bool)
+          && (!('stock' in data) || data.stock is number)
           && (!('id' in data) || data.id is string);
     }
 
@@ -329,7 +330,11 @@ service cloud.firestore {
     match /inventory_transactions/{txId} {
       allow read: if hActive(database, request.auth);
       allow create, update: if hActive(database, request.auth) && isValidInventoryTransaction(incoming());
-      allow delete: if hActive(database, request.auth) && hAdmin(database, request.auth);
+      allow delete: if hActive(database, request.auth) && (
+        hAdmin(database, request.auth) || 
+        hAccountant(database, request.auth) || 
+        hOperator(database, request.auth)
+      );
     }
 
     match /projects/{projectId} {

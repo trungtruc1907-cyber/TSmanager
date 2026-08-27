@@ -854,17 +854,23 @@ export default function ImportReceipts({
     setIsDeletingReceipt(true);
 
     try {
-      // 1. Revert stock for all items
-      for (const item of deletingTx.items) {
-        if (item.equipmentId) {
-          const eqRef = doc(db, 'equipment', item.equipmentId);
-          await updateDoc(eqRef, {
-            stock: increment(-item.quantity)
-          });
+      // 1. Revert stock for all items safely
+      if (Array.isArray(deletingTx.items)) {
+        for (const item of deletingTx.items) {
+          if (item?.equipmentId) {
+            try {
+              const eqRef = doc(db, 'equipment', item.equipmentId);
+              await updateDoc(eqRef, {
+                stock: increment(-item.quantity)
+              });
+            } catch (itemErr) {
+              console.warn(`Could not revert stock for item ${item.equipmentId}:`, itemErr);
+            }
+          }
         }
       }
 
-      // 2. Revert supplier debt
+      // 2. Revert supplier debt safely
       if (deletingTx.debtAmount && deletingTx.debtAmount > 0 && deletingTx.partnerId && deletingTx.partnerId !== 'INITIAL_STOCK' && deletingTx.partnerId !== 'TECH_RETURN') {
         try {
           const supRef = doc(db, 'suppliers', deletingTx.partnerId);
@@ -872,7 +878,7 @@ export default function ImportReceipts({
             debt: increment(-deletingTx.debtAmount)
           });
         } catch (supErr) {
-          console.error('Error reverting supplier debt:', supErr);
+          console.warn('Error reverting supplier debt:', supErr);
         }
       }
 
@@ -887,13 +893,14 @@ export default function ImportReceipts({
       setDeletingTx(null);
       setToastNotification({
         type: 'success',
-        message: `Đã xóa vĩnh viễn phiếu nhập kho #${deletedId}. Tồn kho và công nợ đã được hoàn tác chính xác!`
+        message: `Đã xóa thành công phiếu nhập kho #${deletedId}. Tồn kho và công nợ đã được hoàn tác chính xác!`
       });
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, 'inventory_transactions');
+      console.error('Error deleting inventory transaction:', err);
+      const errMsg = err instanceof Error ? err.message : String(err);
       setToastNotification({
         type: 'error',
-        message: 'Lỗi khi xóa phiếu nhập kho. Vui lòng thử lại sau.'
+        message: `Không thể xóa phiếu: ${errMsg}`
       });
     } finally {
       setIsDeletingReceipt(false);
