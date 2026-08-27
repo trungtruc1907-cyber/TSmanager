@@ -34,6 +34,7 @@ import { InventoryTransaction, Equipment, WarehouseSupplier } from './types';
 import { AppUser } from '../../types';
 import PrintExportReceiptModal from './PrintExportReceiptModal';
 import { numberToVietnameseWords, formatCurrencyVND, openExportReceiptPrintWindow } from './printUtils';
+import { matchEquipment } from './searchUtils';
 
 interface ExportReceiptsProps {
   transactions: InventoryTransaction[];
@@ -1266,11 +1267,7 @@ export default function ExportReceipts({
                   {constSearchTerm.trim() !== '' && (
                     <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl z-55 max-h-52 overflow-y-auto divide-y divide-slate-50">
                       {equipment
-                        .filter(eq => {
-                          const keywords = constSearchTerm.toLowerCase().split(/\s+/).filter(Boolean);
-                          const searchableText = `${eq.brand || ''} ${eq.model || ''} ${eq.id || ''} ${eq.type || ''} ${eq.details || ''} ${eq.location || ''} ${eq.unit || ''} ${(eq as any).description || ''} ${eq.supplier || ''}`.toLowerCase();
-                          return keywords.every(kw => searchableText.includes(kw));
-                        })
+                        .filter(eq => matchEquipment(eq, constSearchTerm))
                         .map(eq => {
                           const isOutOfStock = (eq.stock || 0) <= 0;
                           return (
@@ -1697,11 +1694,7 @@ export default function ExportReceipts({
                   {commSearchTerm.trim() !== '' && (
                     <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl z-55 max-h-52 overflow-y-auto divide-y divide-slate-50">
                       {equipment
-                        .filter(eq => {
-                          const keywords = commSearchTerm.toLowerCase().split(/\s+/).filter(Boolean);
-                          const searchableText = `${eq.brand || ''} ${eq.model || ''} ${eq.id || ''} ${eq.type || ''} ${eq.details || ''} ${eq.location || ''} ${eq.unit || ''} ${(eq as any).description || ''} ${eq.supplier || ''}`.toLowerCase();
-                          return keywords.every(kw => searchableText.includes(kw));
-                        })
+                        .filter(eq => matchEquipment(eq, commSearchTerm))
                         .map(eq => {
                           const isOutOfStock = (eq.stock || 0) <= 0;
                           return (
@@ -2072,11 +2065,7 @@ export default function ExportReceipts({
                   {dispSearchTerm.trim() !== '' && (
                     <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl z-55 max-h-52 overflow-y-auto divide-y divide-slate-50">
                       {equipment
-                        .filter(eq => {
-                          const keywords = dispSearchTerm.toLowerCase().split(/\s+/).filter(Boolean);
-                          const searchableText = `${eq.brand || ''} ${eq.model || ''} ${eq.id || ''} ${eq.type || ''} ${eq.details || ''} ${eq.location || ''} ${eq.unit || ''} ${(eq as any).description || ''} ${eq.supplier || ''}`.toLowerCase();
-                          return keywords.every(kw => searchableText.includes(kw));
-                        })
+                        .filter(eq => matchEquipment(eq, dispSearchTerm))
                         .map(eq => {
                           const isOutOfStock = (eq.stock || 0) <= 0;
                           return (
@@ -2697,10 +2686,7 @@ export default function ExportReceipts({
                   {editAddItemSearch.trim() !== '' && (
                     <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto divide-y divide-slate-50">
                       {equipment
-                        .filter(eq => {
-                          const q = editAddItemSearch.toLowerCase();
-                          return `${eq.brand} ${eq.model} ${eq.id}`.toLowerCase().includes(q);
-                        })
+                        .filter(eq => matchEquipment(eq, editAddItemSearch))
                         .map(eq => (
                           <div
                             key={eq.id}

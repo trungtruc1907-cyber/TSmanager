@@ -38,6 +38,7 @@ import {
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
+import { matchEquipment, guessEquipmentAttributes } from './searchUtils';
 import { 
   ResponsiveContainer, 
   AreaChart, 
@@ -199,6 +200,29 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
       supplier: 'Sơn KOVA miền Bắc',
       details: 'Thùng 20kg',
       type: 'other'
+    },
+    {
+      id: 'CADIVI-CXV-2X10',
+      brand: 'Cadivi',
+      model: 'Cáp CXV-2X10 (x16)',
+      name: 'Cadivi Cáp CXV-2X10 (x16)',
+      barcode: '8936100000074',
+      kho: 'Kho chính',
+      unit: 'm',
+      stock: 450,
+      holding: 50,
+      buying: 0,
+      available: 400,
+      minStock: 100,
+      maxStock: 1000,
+      unitPrice: 85000,
+      sellingPrice: 110000,
+      status: 'Bình thường' as const,
+      group: 'Thiết bị điện',
+      location: 'Kệ Cuộn Cáp C2',
+      supplier: 'Cáp điện Cadivi Việt Nam',
+      details: 'Cáp điện lực hạ thế Cu/XLPE/PVC 0.6/1kV 2x10mm² kèm dây đồng tiếp địa trần x16mm²',
+      type: 'other'
     }
   ];
 
@@ -338,10 +362,7 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
 
   // Filter items
   const filteredItems = allItems.filter(item => {
-    const searchMatch = 
-      (item.id || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
-      (item.name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
-      (item.barcode || '').toLowerCase().includes((searchTerm || '').toLowerCase());
+    const searchMatch = matchEquipment(item, searchTerm);
     
     const khoMatch = khoFilter === 'Tất cả kho' || item.kho === khoFilter;
     const groupMatch = groupFilter === 'Tất cả nhóm' || item.group === groupFilter;
@@ -1147,8 +1168,39 @@ export default function InventoryStock({ equipment, transactions, userRole, supp
                 <tbody className="divide-y divide-slate-50 text-slate-700">
                   {currentItems.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="text-center py-20 text-slate-400 italic text-xs font-semibold">
-                        Không tìm thấy vật tư nào khớp với điều kiện lọc.
+                      <td colSpan={12} className="text-center py-16 text-slate-500">
+                        <div className="flex flex-col items-center justify-center space-y-3 max-w-md mx-auto">
+                          <AlertTriangle className="h-8 w-8 text-amber-500" />
+                          <p className="text-xs font-bold text-slate-600">
+                            Không tìm thấy mã hoặc vật tư phù hợp với điều kiện tìm kiếm{searchTerm ? <> cho từ khóa <span className="font-extrabold text-blue-600">"{searchTerm}"</span></> : ''}.
+                          </p>
+                          {searchTerm.trim() && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const guessed = guessEquipmentAttributes(searchTerm);
+                                setFormId(guessed.id);
+                                setFormBrand(guessed.brand);
+                                setFormModel(guessed.model);
+                                setFormType(guessed.type);
+                                setFormUnit(guessed.unit);
+                                setFormSupplier(guessed.supplier);
+                                setFormUnitPrice(guessed.unitPrice);
+                                setFormSellingPrice(guessed.sellingPrice);
+                                setFormDetails(guessed.details);
+                                setFormStock(100);
+                                setFormMinStock(20);
+                                setFormLocation('Kệ Cuộn Cáp C2');
+                                setEditingItem(null);
+                                setShowAddModal(true);
+                              }}
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-[#0054a6] hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer transition-all active:scale-95"
+                            >
+                              <Plus className="h-4 w-4" />
+                              <span>Thêm nhanh mã hàng "{searchTerm}" vào cơ sở dữ liệu</span>
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ) : (

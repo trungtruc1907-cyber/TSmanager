@@ -25,6 +25,7 @@ import {
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, doc, setDoc, updateDoc, getDocs, onSnapshot, query, orderBy, getDoc, addDoc, increment, deleteDoc } from 'firebase/firestore';
 import { MaterialRequest, Equipment, WarehouseSupplier } from './types';
+import { matchEquipment, guessEquipmentAttributes } from './searchUtils';
 
 const getSafeISOString = (dateVal: any): string => {
   if (!dateVal) return '';
@@ -220,13 +221,7 @@ export default function MaterialRequests({ requests, equipment, suppliers = [], 
   });
 
   // Filter Equipment suggestions
-  const eqSuggestions = equipment.filter(eq => 
-    (eq.id || '').toLowerCase().includes(eqSearch.toLowerCase()) ||
-    (eq.brand || '').toLowerCase().includes(eqSearch.toLowerCase()) ||
-    (eq.model || '').toLowerCase().includes(eqSearch.toLowerCase()) ||
-    (eq.details || '').toLowerCase().includes(eqSearch.toLowerCase()) ||
-    (eq.type || '').toLowerCase().includes(eqSearch.toLowerCase())
-  );
+  const eqSuggestions = equipment.filter(eq => matchEquipment(eq, eqSearch));
 
   // Items handling for new request
   const handleAddFormItem = (equipmentId: string) => {
@@ -853,7 +848,23 @@ export default function MaterialRequests({ requests, equipment, suppliers = [], 
                   {eqSearch && (
                     <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg z-30 divide-y divide-slate-100">
                       {eqSuggestions.length === 0 ? (
-                        <div className="p-3 text-xs text-slate-400 italic">Không tìm thấy vật tư nào...</div>
+                        <div className="p-3 text-center space-y-2">
+                          <p className="text-xs text-slate-500 font-bold">Không tìm thấy vật tư phù hợp</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const guessed = guessEquipmentAttributes(eqSearch);
+                              setQuickBrand(guessed.brand);
+                              setQuickModel(guessed.model);
+                              setQuickType(guessed.type);
+                              setQuickUnit(guessed.unit);
+                              setShowQuickAddGoodsModal(true);
+                            }}
+                            className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            + Thêm nhanh "{eqSearch}" vào CSDL
+                          </button>
+                        </div>
                       ) : (
                         eqSuggestions.map(eq => (
                           <div 

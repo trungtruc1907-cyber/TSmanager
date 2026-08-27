@@ -23,6 +23,7 @@ import {
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, doc, setDoc, updateDoc, getDocs } from 'firebase/firestore';
 import { PurchaseProposal, Equipment, WarehouseSupplier } from './types';
+import { matchEquipment } from './searchUtils';
 
 const getSafeISOString = (dateVal: any): string => {
   if (!dateVal) return '';
@@ -104,13 +105,7 @@ export default function PurchaseProposals({
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
 
   // Filter equipment for the picker in modal
-  const filteredEquipment = equipment.filter(eq => 
-    (eq.id || '').toLowerCase().includes(eqSearch.toLowerCase()) ||
-    (eq.brand || '').toLowerCase().includes(eqSearch.toLowerCase()) ||
-    (eq.model || '').toLowerCase().includes(eqSearch.toLowerCase()) ||
-    (eq.details || '').toLowerCase().includes(eqSearch.toLowerCase()) ||
-    (eq.type || '').toLowerCase().includes(eqSearch.toLowerCase())
-  );
+  const filteredEquipment = equipment.filter(eq => matchEquipment(eq, eqSearch));
 
   // Filter and sort proposals (newest first)
   const filteredProposals = proposals
@@ -630,18 +625,10 @@ export default function PurchaseProposals({
                   {/* Autocomplete Dropdown */}
                   {showSearchDropdown && proposalSearchTerm && (
                     <div className="absolute left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-64 overflow-y-auto divide-y divide-slate-50">
-                      {equipment.filter(eq => 
-                        (eq.id || '').toLowerCase().includes(proposalSearchTerm.toLowerCase()) ||
-                        (eq.brand || '').toLowerCase().includes(proposalSearchTerm.toLowerCase()) ||
-                        (eq.model || '').toLowerCase().includes(proposalSearchTerm.toLowerCase())
-                      ).length === 0 ? (
+                      {equipment.filter(eq => matchEquipment(eq, proposalSearchTerm)).length === 0 ? (
                         <div className="p-4 text-xs text-slate-400 italic text-center">Không tìm thấy vật tư nào...</div>
                       ) : (
-                        equipment.filter(eq => 
-                          (eq.id || '').toLowerCase().includes(proposalSearchTerm.toLowerCase()) ||
-                          (eq.brand || '').toLowerCase().includes(proposalSearchTerm.toLowerCase()) ||
-                          (eq.model || '').toLowerCase().includes(proposalSearchTerm.toLowerCase())
-                        ).map(eq => (
+                        equipment.filter(eq => matchEquipment(eq, proposalSearchTerm)).map(eq => (
                           <button
                             key={eq.id}
                             type="button"

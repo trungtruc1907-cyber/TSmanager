@@ -32,6 +32,7 @@ import { doc, setDoc, updateDoc, increment, deleteDoc, collection, onSnapshot } 
 import { InventoryTransaction, Equipment, WarehouseSupplier } from './types';
 import { AppUser } from '../../types';
 import { openImportReceiptPrintWindow } from './printUtils';
+import { matchEquipment, guessEquipmentAttributes } from './searchUtils';
 
 interface ImportReceiptsProps {
   transactions: InventoryTransaction[];
@@ -1171,7 +1172,10 @@ export default function ImportReceipts({
             const qtyCandidate = parseInt(parts[1].trim());
             const priceCandidate = parts[2] ? parseInt(parts[2].trim()) : undefined;
 
-            const foundEq = equipment.find(eq => eq.id.toLowerCase() === idCandidate.toLowerCase());
+            const foundEq = equipment.find(eq => 
+              eq.id.toLowerCase() === idCandidate.toLowerCase() ||
+              matchEquipment(eq, idCandidate)
+            );
             if (foundEq && !isNaN(qtyCandidate) && qtyCandidate > 0) {
               if (!posItems.some(item => item.equipmentId === foundEq.id) && !itemsToImport.some(item => item.equipmentId === foundEq.id)) {
                 itemsToImport.push({
@@ -1405,14 +1409,32 @@ export default function ImportReceipts({
 
                     {/* Autocomplete Results Panel */}
                     {posSearchTerm.trim() !== '' && (
-                      <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-55 max-h-52 overflow-y-auto divide-y divide-slate-50">
-                        {equipment
-                          .filter(eq => {
-                            const keywords = posSearchTerm.toLowerCase().split(/\s+/).filter(Boolean);
-                            const searchableText = `${eq.brand || ''} ${eq.model || ''} ${eq.id || ''} ${eq.type || ''} ${eq.details || ''} ${eq.location || ''} ${eq.unit || ''} ${(eq as any).description || ''} ${eq.supplier || ''}`.toLowerCase();
-                            return keywords.every(kw => searchableText.includes(kw));
-                          })
-                          .map(eq => (
+                      <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-55 max-h-60 overflow-y-auto divide-y divide-slate-50">
+                        {(() => {
+                          const matched = equipment.filter(eq => matchEquipment(eq, posSearchTerm));
+                          if (matched.length === 0) {
+                            return (
+                              <div className="p-3 text-center space-y-2">
+                                <p className="text-xs text-slate-500 font-bold">Không tìm thấy mã hoặc vật tư phù hợp</p>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const guessed = guessEquipmentAttributes(posSearchTerm);
+                                    setQuickEquipBrand(guessed.brand);
+                                    setQuickEquipModel(guessed.model);
+                                    setQuickEquipType(guessed.type);
+                                    setQuickEquipUnit(guessed.unit);
+                                    setQuickEquipPrice(guessed.unitPrice);
+                                    setShowQuickAddEquipModal(true);
+                                  }}
+                                  className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                                >
+                                  + Thêm nhanh "{posSearchTerm}" vào CSDL
+                                </button>
+                              </div>
+                            );
+                          }
+                          return matched.map(eq => (
                             <div 
                               key={eq.id}
                               onClick={() => {
@@ -1424,7 +1446,7 @@ export default function ImportReceipts({
                                 }
                                 setPosSearchTerm('');
                               }}
-                              className="p-3 hover:bg-slate-50 cursor-pointer flex justify-between items-center text-xs"
+                              className="p-3 hover:bg-blue-50 cursor-pointer flex justify-between items-center text-xs"
                             >
                               <div>
                                 <span className="font-extrabold text-slate-800 block">{eq.brand} {eq.model}</span>
@@ -1432,8 +1454,8 @@ export default function ImportReceipts({
                               </div>
                               <span className="font-black text-blue-600">{formatCurrency(eq.unitPrice || 0)}</span>
                             </div>
-                          ))
-                        }
+                          ));
+                        })()}
                       </div>
                     )}
                   </div>
