@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
   Search, 
@@ -25,7 +25,12 @@ import {
   Trash,
   ArrowLeft,
   Info,
-  Upload
+  Upload,
+  AlertTriangle,
+  AlertCircle,
+  Loader2,
+  ShieldAlert,
+  Check
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { doc, setDoc, updateDoc, increment, deleteDoc, collection, onSnapshot } from 'firebase/firestore';
@@ -99,6 +104,12 @@ export default function ImportReceipts({
   // View, Print, Edit Modals
   const [selectedTxForView, setSelectedTxForView] = useState<InventoryTransaction | null>(null);
   const [selectedTxForPrint, setSelectedTxForPrint] = useState<InventoryTransaction | null>(null);
+
+  // Delete / Cancel Receipt States
+  const [deletingTx, setDeletingTx] = useState<InventoryTransaction | null>(null);
+  const [isDeletingReceipt, setIsDeletingReceipt] = useState(false);
+  const [confirmDeleteCheckbox, setConfirmDeleteCheckbox] = useState(false);
+  const [toastNotification, setToastNotification] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingTxId, setEditingTxId] = useState('');
@@ -178,6 +189,16 @@ export default function ImportReceipts({
   const [initialItems, setInitialItems] = useState<Array<{ equipmentId: string, quantity: number, unitPrice: number }>>([]);
 
   const [generalSettings, setGeneralSettings] = useState<any>(null);
+
+  // Auto-dismiss toast notification after 4.5 seconds
+  useEffect(() => {
+    if (toastNotification) {
+      const timer = setTimeout(() => {
+        setToastNotification(null);
+      }, 4500);
+      return () => clearTimeout(timer);
+    }
+  }, [toastNotification]);
 
   React.useEffect(() => {
     const unsubUsers = onSnapshot(collection(db, 'users'), (s) => {
@@ -821,40 +842,61 @@ export default function ImportReceipts({
     }
   };
 
-  // Cancel / Delete Receipt Handler
-  const handleCancelReceipt = async (tx: InventoryTransaction) => {
-    const isConfirmed = window.confirm(
-      `Bạn có chắc chắn muốn hủy phiếu nhập hàng #${tx.id} không?\nHành động này sẽ:\n1. GIẢM số lượng tồn kho của tất cả vật tư trong phiếu tương ứng.\n2. GIẢM số nợ của nhà cung cấp ${tx.partnerName} đi ${formatCurrency(tx.debtAmount || 0)}.\n\nLưu ý: Không thể hoàn tác hành động này!`
-    );
-    if (!isConfirmed) return;
+  // Cancel / Delete Receipt Handler - Open Confirmation Modal
+  const handleOpenDeleteModal = (tx: InventoryTransaction) => {
+    setDeletingTx(tx);
+    setConfirmDeleteCheckbox(false);
+  };
+
+  // Execute Permanent Deletion of Import Receipt
+  const handleExecuteDeleteReceipt = async () => {
+    if (!deletingTx) return;
+    setIsDeletingReceipt(true);
 
     try {
-      // 1. Revert stock
-      for (const item of tx.items) {
-        const eqRef = doc(db, 'equipment', item.equipmentId);
-        await updateDoc(eqRef, {
-          stock: increment(-item.quantity)
-        });
+      // 1. Revert stock for all items
+      for (const item of deletingTx.items) {
+        if (item.equipmentId) {
+          const eqRef = doc(db, 'equipment', item.equipmentId);
+          await updateDoc(eqRef, {
+            stock: increment(-item.quantity)
+          });
+        }
       }
 
       // 2. Revert supplier debt
-      if (tx.debtAmount && tx.debtAmount > 0 && tx.partnerId && tx.partnerId !== 'INITIAL_STOCK' && tx.partnerId !== 'TECH_RETURN') {
+      if (deletingTx.debtAmount && deletingTx.debtAmount > 0 && deletingTx.partnerId && deletingTx.partnerId !== 'INITIAL_STOCK' && deletingTx.partnerId !== 'TECH_RETURN') {
         try {
-          const supRef = doc(db, 'suppliers', tx.partnerId);
+          const supRef = doc(db, 'suppliers', deletingTx.partnerId);
           await updateDoc(supRef, {
-            debt: increment(-tx.debtAmount)
+            debt: increment(-deletingTx.debtAmount)
           });
         } catch (supErr) {
           console.error('Error reverting supplier debt:', supErr);
         }
       }
 
-      // 3. Delete document
-      await deleteDoc(doc(db, 'inventory_transactions', tx.id));
+      // 3. Delete document from Firestore
+      await deleteDoc(doc(db, 'inventory_transactions', deletingTx.id));
 
-      alert(`Đã hủy thành công phiếu nhập hàng #${tx.id}! Số lượng tồn kho và công nợ đã được điều chỉnh giảm.`);
+      // 4. Update UI states
+      const deletedId = deletingTx.id;
+      if (selectedTxForView?.id === deletedId) {
+        setSelectedTxForView(null);
+      }
+      setDeletingTx(null);
+      setToastNotification({
+        type: 'success',
+        message: `Đã xóa vĩnh viễn phiếu nhập kho #${deletedId}. Tồn kho và công nợ đã được hoàn tác chính xác!`
+      });
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'inventory_transactions');
+      setToastNotification({
+        type: 'error',
+        message: 'Lỗi khi xóa phiếu nhập kho. Vui lòng thử lại sau.'
+      });
+    } finally {
+      setIsDeletingReceipt(false);
     }
   };
 
@@ -2825,11 +2867,11 @@ export default function ImportReceipts({
                             <Printer className="h-4 w-4" />
                           </button>
 
-                          {/* Action: Hủy phiếu */}
+                          {/* Action: Hủy / Xóa phiếu */}
                           <button
-                            onClick={() => handleCancelReceipt(tx)}
+                            onClick={() => handleOpenDeleteModal(tx)}
                             className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 rounded-xl transition-all cursor-pointer shadow-xs hover:text-rose-800"
-                            title="Hủy phiếu nhập"
+                            title="Hủy / Xóa phiếu nhập"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -3238,15 +3280,25 @@ export default function ImportReceipts({
               </div>
             </div>
 
-            <div className="pt-6 border-t border-slate-100 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => handleOpenPrintReceipt(selectedTxForView)}
-                className="bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 shadow-xs"
-              >
-                <Printer className="h-4 w-4 text-sky-600" />
-                In phiếu (Cửa sổ mới)
-              </button>
+            <div className="pt-6 border-t border-slate-100 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenPrintReceipt(selectedTxForView)}
+                  className="bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 shadow-xs"
+                >
+                  <Printer className="h-4 w-4 text-sky-600" />
+                  In phiếu
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenDeleteModal(selectedTxForView)}
+                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 shadow-xs"
+                >
+                  <Trash2 className="h-4 w-4 text-rose-600" />
+                  Hủy / Xóa phiếu
+                </button>
+              </div>
               <button
                 onClick={() => setSelectedTxForView(null)}
                 className="bg-[#0054a6] hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
@@ -3829,6 +3881,233 @@ export default function ImportReceipts({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Xác nhận xóa / hủy phiếu nhập kho */}
+      {deletingTx && (
+        <div id="delete-receipt-modal" className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-2xl rounded-3xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
+            
+            {/* Modal Header */}
+            <div className="bg-rose-50 border-b border-rose-100 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-rose-500 text-white rounded-2xl shadow-sm">
+                  <ShieldAlert className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-rose-950 uppercase tracking-wide">
+                    Xác nhận xóa phiếu nhập kho
+                  </h3>
+                  <p className="text-xs font-bold text-rose-700 mt-0.5">
+                    Mã phiếu: <span className="font-mono font-black underline">{deletingTx.id}</span>
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => !isDeletingReceipt && setDeletingTx(null)}
+                disabled={isDeletingReceipt}
+                className="w-8 h-8 rounded-full bg-white/80 hover:bg-rose-200 text-rose-700 flex items-center justify-center transition-all cursor-pointer border border-rose-200 disabled:opacity-50"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-5 text-xs text-slate-700">
+              
+              {/* Alert Message Box */}
+              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="text-amber-900 leading-relaxed font-semibold">
+                  <strong className="block text-amber-950 font-black mb-0.5">Hành động này không thể hoàn tác!</strong>
+                  Hệ thống sẽ tự động trừ lùi số lượng tồn kho của các mặt hàng trong phiếu và giảm trừ phần công nợ đối tác đã ghi nhận.
+                </div>
+              </div>
+
+              {/* Receipt Summary Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 font-sans">
+                <div>
+                  <span className="text-[10px] text-slate-400 font-black uppercase block">Đối tác / NCC</span>
+                  <span className="font-extrabold text-slate-900 truncate block mt-0.5" title={deletingTx.partnerName}>
+                    {deletingTx.partnerName}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 font-black uppercase block">Ngày nhập</span>
+                  <span className="font-bold text-slate-900 block mt-0.5">{deletingTx.date}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 font-black uppercase block">Tổng tiền hàng</span>
+                  <span className="font-black text-blue-700 block mt-0.5">{formatCurrency(deletingTx.totalValue)}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 font-black uppercase block">Công nợ phiếu</span>
+                  <span className="font-black text-rose-600 block mt-0.5">{formatCurrency(deletingTx.debtAmount || 0)}</span>
+                </div>
+              </div>
+
+              {/* Stock Impact Table */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                    Chi tiết vật tư & Biến động tồn kho sau khi xóa
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-400">
+                    {deletingTx.items.length} mặt hàng
+                  </span>
+                </div>
+                <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100">
+                  <div className="grid grid-cols-12 gap-2 bg-slate-100/75 px-4 py-2.5 font-black text-[10px] text-slate-500 uppercase tracking-wider">
+                    <span className="col-span-5">Mặt hàng</span>
+                    <span className="col-span-2 text-right">Hiện có</span>
+                    <span className="col-span-2 text-right text-rose-600">Giảm trừ</span>
+                    <span className="col-span-3 text-right">Tồn sau xóa</span>
+                  </div>
+                  {deletingTx.items.map((item, idx) => {
+                    const eq = equipment.find(e => e.id === item.equipmentId);
+                    const currentStock = eq?.stock || 0;
+                    const afterStock = currentStock - item.quantity;
+                    const isNegative = afterStock < 0;
+                    const isLow = !isNegative && eq?.minStock !== undefined && afterStock <= eq.minStock;
+
+                    return (
+                      <div key={idx} className="grid grid-cols-12 gap-2 px-4 py-3 items-center bg-white hover:bg-slate-50/50">
+                        <div className="col-span-5">
+                          <span className="font-extrabold text-slate-900 block truncate">
+                            {item.brand} {item.model}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-bold">Mã: {item.equipmentId}</span>
+                        </div>
+                        <div className="col-span-2 text-right font-bold text-slate-700">
+                          {currentStock} {item.unit}
+                        </div>
+                        <div className="col-span-2 text-right font-black text-rose-600">
+                          -{item.quantity} {item.unit}
+                        </div>
+                        <div className="col-span-3 text-right">
+                          <div className="flex flex-col items-end">
+                            <span className={`font-black ${isNegative ? 'text-rose-600' : isLow ? 'text-amber-600' : 'text-emerald-700'}`}>
+                              {afterStock} {item.unit}
+                            </span>
+                            {isNegative ? (
+                              <span className="text-[9px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 mt-0.5">
+                                Cảnh báo tồn âm!
+                              </span>
+                            ) : isLow ? (
+                              <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 mt-0.5">
+                                Dưới định mức
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-bold text-emerald-600">
+                                An toàn
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Debt Impact Box */}
+              {deletingTx.debtAmount && deletingTx.debtAmount > 0 ? (
+                (() => {
+                  const supplier = suppliers.find(s => s.id === deletingTx.partnerId);
+                  const currentDebt = supplier?.debt || 0;
+                  const newDebt = Math.max(0, currentDebt - (deletingTx.debtAmount || 0));
+                  return (
+                    <div className="bg-rose-50/60 border border-rose-100 p-4 rounded-2xl">
+                      <span className="text-[10px] font-black text-rose-800 uppercase tracking-wider block mb-1">
+                        Điều chỉnh công nợ nhà cung cấp
+                      </span>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-bold text-slate-700">
+                        <span>Nhà cung cấp: <strong className="text-slate-900">{deletingTx.partnerName}</strong></span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-500">Nợ hiện tại: {formatCurrency(currentDebt)}</span>
+                          <span className="text-rose-600 font-black">→ Giảm: -{formatCurrency(deletingTx.debtAmount)}</span>
+                          <span className="text-emerald-700 font-black">→ Còn lại: {formatCurrency(newDebt)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : null}
+
+              {/* Confirmation Checkbox */}
+              <label className="flex items-start gap-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200 cursor-pointer hover:bg-slate-100/60 transition-colors select-none">
+                <input 
+                  type="checkbox"
+                  checked={confirmDeleteCheckbox}
+                  onChange={(e) => setConfirmDeleteCheckbox(e.target.checked)}
+                  disabled={isDeletingReceipt}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                />
+                <span className="text-xs font-bold text-slate-800 leading-snug">
+                  Tôi đã kiểm tra kỹ lưỡng và xác nhận xóa vĩnh viễn phiếu nhập kho <strong className="text-rose-600 font-black">#{deletingTx.id}</strong>.
+                </span>
+              </label>
+
+            </div>
+
+            {/* Modal Actions */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeletingTx(null)}
+                disabled={isDeletingReceipt}
+                className="px-5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs uppercase tracking-wider transition-all cursor-pointer disabled:opacity-50"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteDeleteReceipt}
+                disabled={!confirmDeleteCheckbox || isDeletingReceipt}
+                className="px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
+              >
+                {isDeletingReceipt ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Đang xử lý xóa...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" />
+                    <span>Xác nhận xóa phiếu</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* TOAST NOTIFICATION */}
+      {toastNotification && (
+        <div className="fixed bottom-6 right-6 z-[90] max-w-md animate-in slide-in-from-bottom-5 fade-in duration-300">
+          <div className={`p-4 rounded-2xl shadow-2xl border flex items-start gap-3 ${
+            toastNotification.type === 'success' 
+              ? 'bg-emerald-900 text-emerald-50 border-emerald-700' 
+              : 'bg-rose-900 text-rose-50 border-rose-700'
+          }`}>
+            {toastNotification.type === 'success' ? (
+              <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
+            ) : (
+              <AlertCircle className="h-5 w-5 text-rose-400 shrink-0 mt-0.5" />
+            )}
+            <div className="flex-1 text-xs font-bold leading-relaxed">
+              {toastNotification.message}
+            </div>
+            <button 
+              onClick={() => setToastNotification(null)}
+              className="text-white/60 hover:text-white cursor-pointer ml-1"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         </div>
       )}
